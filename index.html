@@ -3289,10 +3289,12 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
       </div>
 
       {/* Wellness vs Energy correlation */}
-      <CorrelationCard theme={theme} data={data} bucketLabel={bucket?.label} range={range}
-        setRange={setRange} setOffset={setOffset}
-        canGoBack={canGoBack} canGoForward={canGoForward}
-        offset={offset} exerciseLog={exerciseLog} />
+      {data.length > 0 && (
+        <CorrelationCard theme={theme} data={data} bucketLabel={bucket?.label || ''} range={range}
+          setRange={setRange} setOffset={setOffset}
+          canGoBack={canGoBack} canGoForward={canGoForward}
+          offset={offset} exerciseLog={exerciseLog} />
+      )}
 
       {/* Ask Claude */}
       <div style={{ margin: '0 16px 12px' }}>
@@ -4031,7 +4033,7 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
             background: theme.surfaceAlt, borderRadius: theme.radius.btn,
             fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, lineHeight: 1.4,
           }}>
-            No strong patterns yet for {bucketLabel.toLowerCase()}. Log more days to surface trends.
+            No strong patterns yet for {(bucketLabel || 'this range').toLowerCase()}. Log more days to surface trends.
           </div>
         );
         const top = strong[0];
