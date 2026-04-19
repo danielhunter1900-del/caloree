@@ -754,7 +754,7 @@ function TabBar({ active, setActive, theme, onLogTap }) {
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40,
-      paddingBottom: 28, paddingTop: 10,
+      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)', paddingTop: 10,
       background: bg, backdropFilter: 'blur(20px) saturate(180%)',
       WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderTop: `0.5px solid ${border}`,
@@ -2220,7 +2220,7 @@ function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood }) {
       `}</style>
 
       {/* Drag handle + header */}
-      <div style={{ padding: '8px 0 0', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 0 0', display: 'flex', justifyContent: 'center' }}>
         <div style={{
           width: 36, height: 5, borderRadius: 3,
           background: theme.inkMute, opacity: 0.4,
@@ -2234,7 +2234,7 @@ function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood }) {
         <button onClick={onClose} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           fontFamily: theme.font, fontSize: 16, color: theme.accent,
-          fontWeight: 500, padding: 0,
+          fontWeight: 500, padding: '8px 4px',
         }}>Cancel</button>
         <div style={{
           fontFamily: theme.titleFont, fontSize: 17, fontWeight: theme.titleWeight,
@@ -7284,7 +7284,6 @@ function App({ session }) {
         <div style={{
           width: '100%', minHeight: '100vh', position: 'relative',
           background: theme.bg, overflow: 'hidden',
-          paddingTop: 'env(safe-area-inset-top, 0px)',
         }}>
           {/* Main scrollable content */}
           <div style={{
