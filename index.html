@@ -178,7 +178,7 @@ const __TODAY_ISO = new Date().toISOString().slice(0, 10);
 const TODAY_LOG = [];
 
 // Daily targets — defaults; user can override in Settings
-const DEFAULT_TARGETS = { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30 };
+const DEFAULT_TARGETS = { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30, exKcal: 400, exMin: 45 };
 let TARGETS = { ...DEFAULT_TARGETS };
 
 // Generate historical daily data for ~2 years so the user can scroll back
@@ -1080,7 +1080,7 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
   const animKcal = useAnimatedNum(totals.kcal);
   const [drill, setDrill] = React.useState(null); // { key: 'c'|'p'|'f', label, unit, color }
   const [ringView, setRingView] = React.useState('kcal'); // 'kcal' | 'exercise'
-  const exGoalKcal = 400;
+  const exGoalKcal = targets.exKcal || 400;
   const isToday = selectedDate === todayIso;
   const [markedMap, setMarkedMap] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem('cal_marked_complete') || '{}'); }
@@ -1135,7 +1135,8 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
           </div>
           <StatusBadge theme={theme}
             kcal={ringView === 'exercise' ? dayExBurn : totals.kcal}
-            target={ringView === 'exercise' ? exGoalKcal : effectiveKcalGoal} />
+            target={ringView === 'exercise' ? exGoalKcal : effectiveKcalGoal}
+            kind={ringView === 'exercise' ? 'exercise' : 'food'} />
         </div>
 
         {/* Ring view toggle */}
@@ -1710,14 +1711,20 @@ function CalendarSheet({ theme, onClose, onPickDate }) {
   );
 }
 
-function StatusBadge({ theme, kcal, target }) {
+function StatusBadge({ theme, kcal, target, kind = 'food' }) {
   const pct = target > 0 ? kcal / target : 0;
   let label, bg, fg;
-  if (kcal <= 0) { label = 'No food yet'; bg = 'rgba(217,107,92,0.15)'; fg = '#B3261E'; }
-  else if (pct > 1.1)  { label = `Over by ${Math.round((pct - 1) * 100)}%`; bg = 'rgba(217,107,92,0.15)'; fg = '#B3261E'; }
+  const emptyMsg = kind === 'exercise' ? 'No exercise yet' : 'No food yet';
+  const startedMsg = kind === 'exercise' ? 'Just starting' : 'Just started';
+  if (kcal <= 0) { label = emptyMsg; bg = 'rgba(217,107,92,0.15)'; fg = '#B3261E'; }
+  else if (pct > 1.1)  {
+    label = kind === 'exercise' ? `Over goal by ${Math.round((pct - 1) * 100)}%` : `Over by ${Math.round((pct - 1) * 100)}%`;
+    bg = kind === 'exercise' ? 'rgba(79,138,112,0.15)' : 'rgba(217,107,92,0.15)';
+    fg = kind === 'exercise' ? '#2B7A5C' : '#B3261E';
+  }
   else if (pct >= 0.9) { label = 'On track'; bg = 'rgba(79,138,112,0.15)'; fg = '#2B7A5C'; }
   else if (pct >= 0.3) { label = `${Math.round(pct * 100)}% of goal`; bg = theme.chipBg; fg = theme.chipInk; }
-  else                 { label = 'Just started'; bg = theme.chipBg; fg = theme.chipInk; }
+  else                 { label = startedMsg; bg = theme.chipBg; fg = theme.chipInk; }
   return (
     <div style={{
       padding: '4px 10px', borderRadius: theme.radius.chip,
@@ -3043,8 +3050,8 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
     return d.kcal || 0;
   };
   const chartGoal = chartMetric === 'kcal' ? targets.kcal
-    : chartMetric === 'exKcal' ? 400  // default exercise kcal goal
-    : 30; // min
+    : chartMetric === 'exKcal' ? (targets.exKcal || 400)
+    : (targets.exMin || 30);
   const unitLabel = chartMetric === 'exMin' ? 'min' : 'kcal';
   const avg = data.length ? Math.round(data.reduce((s, d) => s + valueOf(d), 0) / data.length) : 0;
   const maxK = Math.max(...data.map(valueOf), chartGoal);
@@ -5219,6 +5226,8 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
       satFat: Math.max(0, +draft.satFat || 0),
       sugar:  Math.max(0, +draft.sugar  || 0),
       fibre:  Math.max(0, +draft.fibre  || 0),
+      exKcal: Math.max(0, +draft.exKcal || 0),
+      exMin:  Math.max(0, +draft.exMin  || 0),
     };
     setTargets(clean); setEditingGoals(false);
   };
@@ -5450,6 +5459,8 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
           ['Sat Fat', 'satFat', 'g', '#B8824A'],
           ['Sugar',   'sugar',  'g', '#C25A8E'],
           ['Fibre',   'fibre',  'g', '#5C9A6E'],
+          ['Exercise kcal', 'exKcal', 'kcal', '#4F8A70'],
+          ['Exercise time', 'exMin',  'min',  '#4F8A70'],
         ].map(([label, key, unit, color], i) => (
           <div key={key} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -5491,9 +5502,9 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
             }}>Suggested presets</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {[
-                ['Cut',      { kcal: 1800, c: 180, p: 160, f: 55, satFat: 18, sugar: 40, fibre: 30 }],
-                ['Maintain', { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30 }],
-                ['Bulk',     { kcal: 2600, c: 310, p: 180, f: 80, satFat: 25, sugar: 60, fibre: 35 }],
+                ['Cut',      { kcal: 1800, c: 180, p: 160, f: 55, satFat: 18, sugar: 40, fibre: 30, exKcal: 500, exMin: 45 }],
+                ['Maintain', { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30, exKcal: 400, exMin: 45 }],
+                ['Bulk',     { kcal: 2600, c: 310, p: 180, f: 80, satFat: 25, sugar: 60, fibre: 35, exKcal: 350, exMin: 45 }],
               ].map(([label, preset]) => (
                 <button key={label} onClick={() => setDraft(preset)} style={{
                   padding: '6px 12px', borderRadius: 999,
