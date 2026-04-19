@@ -2441,13 +2441,41 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
           fontFamily: theme.font, fontSize: 13, color: theme.inkSoft,
           textTransform: 'uppercase', letterSpacing: '0.08em',
         }}>Nutrition</div>
-        <button style={{
+        <button onClick={async () => {
+          food.isFavourite = !food.isFavourite;
+          setBump(b => b + 1);
+          // localStorage
+          try {
+            const favs = JSON.parse(localStorage.getItem('cal_favourite_ids') || '[]');
+            const set = new Set(favs);
+            if (food.isFavourite) set.add(food.id); else set.delete(food.id);
+            localStorage.setItem('cal_favourite_ids', JSON.stringify([...set]));
+          } catch {}
+          // Supabase upsert
+          const sb = window.sb;
+          if (sb) {
+            const uid = (await sb.auth.getUser()).data?.user?.id;
+            if (uid) {
+              await sb.from('foods').upsert([{
+                id: food.id, user_id: uid,
+                name: food.name, brand: food.brand || null,
+                serving_g: food.servingG || 100,
+                kcal: food.kcal || 0, c: food.c || 0, p: food.p || 0, f: food.f || 0,
+                sat_fat: food.satFat ?? null, sugar: food.sugar ?? null, fibre: food.fibre ?? null,
+                is_favourite: !!food.isFavourite,
+                photo_path: food.photoPath || null,
+              }], { onConflict: 'id' });
+            }
+          }
+          window.dispatchEvent(new Event('caloree:foodschanged'));
+        }} title={food.isFavourite ? 'Unfavourite' : 'Favourite'}
+        style={{
           background: 'none', border: 'none', cursor: 'pointer', padding: 4,
           color: theme.accent,
         }}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill={food.isFavourite ? '#E0A24A' : 'none'}>
             <path d="M10 2.5l1.5 5h5L12.5 11l1.5 5L10 13l-4 3 1.5-5L3 7.5h5L10 2.5z"
-              stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round" fill="none"/>
+              stroke={food.isFavourite ? '#E0A24A' : theme.accent} strokeWidth="1.8" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>
