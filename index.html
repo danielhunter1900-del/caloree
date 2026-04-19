@@ -1090,6 +1090,17 @@ function WellnessCard({ theme, wellness, setWellness }) {
 }
 
 function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise }) {
+  const [favBump, setFavBump] = React.useState(0);
+  const toggleFavourite = (foodId) => {
+    const f = FOODS.find(x => x.id === foodId);
+    if (!f) return;
+    f.isFavourite = !f.isFavourite;
+    setFavBump(b => b + 1);
+    if (window.sb && foodId.startsWith('ai_')) {
+      window.sb.from('foods').update({ is_favourite: !!f.isFavourite }).eq('id', foodId)
+        .then(r => r.error && console.warn('fav sync:', r.error.message));
+    }
+  };
   const todayIso = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = React.useState(todayIso);
   const dayLog = log.filter(e => (e.date || todayIso) === selectedDate);
@@ -1261,12 +1272,18 @@ function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerci
 
       {/* Meal sections */}
       {meals.map(m => (
-        <MealSection key={m} meal={m} theme={theme}
+        <MealSection key={m + favBump} meal={m} theme={theme}
           entries={dayLog.filter(e => e.meal === m)}
           onDelete={(id) => setLog(log.filter(e => e.id !== id))}
           onAdd={() => onAddMeal(m)}
           onOpen={onOpenFood}
           onMoveEntry={(id, newMeal) => setLog(log.map(e => e.id === id ? { ...e, meal: newMeal } : e))}
+          onToggleFav={toggleFavourite}
+          onCopyToDate={(id, date) => {
+            const e = log.find(x => x.id === id);
+            if (!e) return;
+            setLog([...log, { ...e, id: 'l_' + Date.now(), date }]);
+          }}
         />
       ))}
 
@@ -1705,6 +1722,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType }) {
   const ICONS = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️', Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡' };
   const TYPES = Object.keys(ICONS);
   const [editingId, setEditingId] = React.useState(null);
+  const [open, setOpen] = React.useState(true);
   const totalKcal = entries.reduce((s, e) => s + (+e.kcal || 0), 0);
   const totalMin = entries.reduce((s, e) => s + (+e.duration || 0), 0);
   return (
@@ -1714,10 +1732,11 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType }) {
       border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
       boxShadow: theme.name === 'Editorial' ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
     }}>
-      <div style={{
+      <button onClick={() => setOpen(!open)} style={{
+        width: '100%', padding: '14px 18px 10px', border: 'none', cursor: 'pointer',
+        background: 'transparent',
+        borderBottom: (open && entries.length) ? `0.5px solid ${theme.line}` : 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 18px 10px',
-        borderBottom: entries.length ? `0.5px solid ${theme.line}` : 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{
@@ -1731,16 +1750,27 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType }) {
               color: theme.inkSoft, letterSpacing: theme.letter,
             }}>{totalMin} min · {Math.round(totalKcal)} kcal</span>
           )}
+          {!open && entries.length > 0 && (
+            <span style={{ fontSize: 11, color: theme.inkMute }}>
+              ({entries.map(e => ICONS[e.type]).join(' ')})
+            </span>
+          )}
         </div>
-        <button onClick={onAdd} style={{
-          width: 26, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
-          background: theme.surfaceAlt,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: theme.ink, fontFamily: theme.font, fontSize: 18, lineHeight: 1,
-          paddingBottom: 2,
-        }}>+</button>
-      </div>
-      {entries.map((e, i) => (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span onClick={(ev) => { ev.stopPropagation(); onAdd(); }} style={{
+            width: 26, height: 26, borderRadius: 13,
+            background: theme.surfaceAlt, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: theme.ink, fontFamily: theme.font, fontSize: 18, lineHeight: 1,
+            paddingBottom: 2,
+          }}>+</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>
+            <path d="M2 4l4 4 4-4" stroke={theme.inkMute} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </button>
+      {open && entries.map((e, i) => (
         <div key={e.id} style={{
           padding: '10px 18px',
           display: 'flex', alignItems: 'center', gap: 12,
@@ -1791,7 +1821,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType }) {
   );
 }
 
-function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry }) {
+function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry, onToggleFav, onCopyToDate }) {
   const subtotal = sumMacros(entries);
   const hasItems = entries.length > 0;
   const [dragOver, setDragOver] = React.useState(false);
@@ -1846,6 +1876,8 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
           onTap={() => onOpen(e.foodId)}
           isLast={i === entries.length - 1}
           draggable={true}
+          onToggleFav={onToggleFav}
+          onCopyToDate={onCopyToDate}
         />
       ))}
     </div>
@@ -1855,7 +1887,8 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
 // ─────────────────────────────────────────────────────────────
 // SwipeRow — touch + mouse drag to reveal delete button
 // ─────────────────────────────────────────────────────────────
-function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable }) {
+function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onCopyToDate }) {
+  const [showCopy, setShowCopy] = React.useState(false);
   const [offset, setOffset] = useStateHome(0);
   const startX = useRefHome(null);
   const dragging = useRefHome(false);
@@ -1926,6 +1959,64 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable }) {
             fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
           }}>{Math.round(m.g)} g · {food.brand}</div>
         </div>
+        {onToggleFav && (
+          <button onClick={(e) => { e.stopPropagation(); onToggleFav(food.id); }}
+            title={food.isFavourite ? 'Remove favourite' : 'Favourite'}
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              padding: 4, fontSize: 16, lineHeight: 1,
+              color: food.isFavourite ? '#E0A24A' : theme.inkMute,
+            }}>
+            {food.isFavourite ? '★' : '☆'}
+          </button>
+        )}
+        {onCopyToDate && (
+          <button onClick={(e) => { e.stopPropagation(); setShowCopy(true); }}
+            title="Copy to another date"
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              padding: 4, fontSize: 14, lineHeight: 1, color: theme.inkMute,
+            }}>⎘</button>
+        )}
+        {showCopy && (
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 250,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}>
+            <div style={{
+              width: '100%', maxWidth: 320, background: theme.surface,
+              borderRadius: 14, padding: '18px 18px 20px',
+            }}>
+              <div style={{
+                fontFamily: theme.titleFont, fontSize: 16, fontWeight: theme.titleWeight,
+                color: theme.ink, marginBottom: 10,
+              }}>Copy {food.name} to…</div>
+              <input type="date" defaultValue={new Date().toISOString().slice(0, 10)}
+                id={`copydate-${entry.id}`}
+                style={{
+                  width: '100%', padding: '10px 12px', marginBottom: 12,
+                  border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
+                  fontSize: 14, outline: 'none',
+                }}/>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowCopy(false)} style={{
+                  flex: 1, padding: '10px 0', border: `1px solid ${theme.line}`,
+                  background: 'transparent', color: theme.inkSoft,
+                  borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}>Cancel</button>
+                <button onClick={() => {
+                  const d = document.getElementById(`copydate-${entry.id}`).value;
+                  if (d) onCopyToDate(entry.id, d);
+                  setShowCopy(false);
+                }} style={{
+                  flex: 1, padding: '10px 0', border: 'none',
+                  background: theme.accent, color: theme.accentInk,
+                  borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}>Copy</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ textAlign: 'right' }}>
           <div style={{
             fontFamily: theme.numFont, fontSize: 15, fontWeight: theme.numWeight,
@@ -2063,6 +2154,29 @@ function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood }) {
 
       {/* Results / recent */}
       <div style={{ flex: 1, overflow: 'auto', padding: '8px 0 100px' }}>
+        {!query && (() => {
+          const favs = FOODS.filter(f => f.isFavourite);
+          if (!favs.length) return null;
+          return (
+            <>
+              <SectionHeader theme={theme}>★ Favourites</SectionHeader>
+              <div style={{ margin: '0 16px 14px', background: theme.surface,
+                borderRadius: theme.radius.card, overflow: 'hidden',
+                border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+              }}>
+                {favs.map((f, i) => (
+                  <FoodResultRow key={f.id} food={f} theme={theme}
+                    onTap={() => onOpenFood(f.id, meal)}
+                    onAdd={() => onAdd({ foodId: f.id, qty: 1, meal })}
+                    isLast={i === favs.length - 1}
+                    query=""
+                  />
+                ))}
+              </div>
+            </>
+          );
+        })()}
+
         <SectionHeader theme={theme}>
           {query ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'Recent'}
         </SectionHeader>
@@ -2153,6 +2267,7 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
   const food = foodById(foodId);
   const [qty, setQty] = useStateDetail(1);
   const [meal, setMeal] = useStateDetail(defaultMeal || 'Snack');
+  const [showModify, setShowModify] = useStateDetail(false);
 
   const m = {
     kcal: food.kcal * qty,
@@ -2316,6 +2431,21 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
               }}>{q}×</button>
             ))}
           </div>
+          {/* Percent-of-original quick scale */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {[50, 75, 100, 125, 150, 200].map(p => (
+              <button key={p} onClick={() => setQty(p/100)} style={{
+                flex: 1, padding: '6px 0', border: `1px solid ${theme.line}`,
+                cursor: 'pointer', borderRadius: theme.radius.chip,
+                background: 'transparent', color: theme.inkSoft,
+                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+              }}>{p}%</button>
+            ))}
+          </div>
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, color: theme.inkMute,
+            marginTop: 6,
+          }}>% scales the original serving. E.g. 150% = "I had 1.5× this".</div>
         </div>
 
         {/* Detailed nutrition table */}
@@ -2382,7 +2512,23 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
         background: theme.bg + 'EE',
         backdropFilter: 'blur(20px)',
         borderTop: `0.5px solid ${theme.line}`,
+        display: 'flex', flexDirection: 'column', gap: 8,
       }}>
+        <button onClick={() => setShowModify(true)} style={{
+          width: '100%', padding: '10px 0', cursor: 'pointer',
+          background: 'transparent', color: theme.ink,
+          border: `1px solid ${theme.line}`,
+          borderRadius: theme.radius.btn,
+          fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z"
+              stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round"
+              fill={theme.accent} fillOpacity={0.12}/>
+          </svg>
+          Modify with Claude
+        </button>
         <button onClick={() => onAdd({ foodId, qty, meal })} style={{
           width: '100%', padding: '16px 0', border: 'none', cursor: 'pointer',
           background: theme.accent, color: theme.accentInk,
@@ -2391,6 +2537,161 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
           letterSpacing: theme.letter,
           textTransform: theme.name === 'Editorial' ? 'uppercase' : 'none',
         }}>Add to {meal} · {Math.round(m.kcal)} kcal</button>
+      </div>
+
+      {showModify && (
+        <ModifyWithClaudeSheet theme={theme} food={food} qty={qty}
+          onClose={() => setShowModify(false)}
+          onApply={(newFood) => {
+            Object.assign(food, newFood);
+            setShowModify(false);
+          }}/>
+      )}
+    </div>
+  );
+}
+
+function ModifyWithClaudeSheet({ theme, food, qty, onClose, onApply }) {
+  const [text, setText] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [preview, setPreview] = React.useState(null);
+
+  const run = async () => {
+    const key = localStorage.getItem('anthropic_api_key');
+    if (!key) { setError('Set your Anthropic API key in Profile → Settings first.'); return; }
+    if (!text.trim()) { setError('Describe what changed.'); return; }
+    setBusy(true); setError(null);
+    const prompt = `The user has this food logged:
+${JSON.stringify({
+  name: food.name, brand: food.brand || '',
+  kcal: food.kcal, c: food.c, p: food.p, f: food.f,
+  satFat: food.satFat, sugar: food.sugar, fibre: food.fibre,
+  servingG: food.servingG,
+}, null, 2)}
+
+They want to modify it: "${text.trim()}"
+
+Return ONLY JSON (no prose, no code fences):
+{
+  "name": "new name reflecting the change",
+  "brand": "short prep note",
+  "kcal": 0, "c": 0, "p": 0, "f": 0,
+  "satFat": 0, "sugar": 0, "fibre": 0,
+  "servingG": 0
+}
+
+Rules:
+- All values are per-serving totals. Recompute based on the described change.
+- Keep the same serving size concept unless the change implies otherwise.
+- Never omit satFat/sugar/fibre — estimate conservatively.
+- Keep the name concise and reflect the swap.`;
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6', max_tokens: 600,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const j = await res.json();
+      const textBlock = (j.content || []).find(b => b.type === 'text');
+      const raw = textBlock ? textBlock.text : '';
+      const clean = raw.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+      setPreview(JSON.parse(clean));
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300,
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '85vh', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        padding: '18px 18px 22px', overflowY: 'auto',
+      }}>
+        <div style={{
+          width: 40, height: 4, borderRadius: 2, background: theme.line,
+          margin: '0 auto 14px',
+        }}/>
+        <div style={{
+          fontFamily: theme.titleFont, fontSize: 18, fontWeight: theme.titleWeight,
+          color: theme.ink, marginBottom: 4,
+        }}>Modify with Claude</div>
+        <div style={{
+          fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginBottom: 12,
+        }}>Describe what's different. Claude will recompute the macros.</div>
+
+        <textarea value={text} onChange={(e) => setText(e.target.value)}
+          rows={3}
+          placeholder='e.g. "swap aubergine for tofu, rest same"'
+          style={{
+            width: '100%', padding: '10px 12px',
+            border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
+            fontFamily: theme.font, fontSize: 14, background: theme.surface,
+            color: theme.ink, outline: 'none', resize: 'vertical',
+          }}/>
+
+        {error && <div style={{
+          marginTop: 10, padding: '10px 12px', borderRadius: 8,
+          background: '#FDECEA', color: '#B3261E', fontSize: 13, fontFamily: theme.font,
+        }}>{error}</div>}
+
+        {preview && (
+          <div style={{
+            marginTop: 14, padding: '12px 14px',
+            background: theme.surface, borderRadius: theme.radius.card,
+            border: `1px solid ${theme.accent}`,
+          }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
+            }}>{preview.name}</div>
+            <div style={{
+              fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2,
+            }}>{preview.brand}</div>
+            <div style={{
+              fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, marginTop: 8,
+            }}>
+              {Math.round(preview.kcal)} kcal · C{Math.round(preview.c)} P{Math.round(preview.p)} F{Math.round(preview.f)}
+              {preview.satFat != null && ` · Sat${Math.round(preview.satFat)}`}
+              {preview.sugar  != null && ` · Sug${Math.round(preview.sugar)}`}
+              {preview.fibre  != null && ` · Fi${Math.round(preview.fibre)}`}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button onClick={onClose} style={{
+            padding: '11px 16px', border: `1px solid ${theme.line}`,
+            background: 'transparent', color: theme.inkSoft,
+            borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Cancel</button>
+          {!preview ? (
+            <button onClick={run} disabled={busy || !text.trim()} style={{
+              flex: 1, padding: '11px 0', border: 'none',
+              background: text.trim() && !busy ? theme.accent : theme.surfaceAlt,
+              color: theme.accentInk,
+              borderRadius: theme.radius.btn, fontSize: 14, fontWeight: 600,
+              cursor: busy || !text.trim() ? 'default' : 'pointer',
+            }}>{busy ? 'Thinking…' : 'Ask Claude'}</button>
+          ) : (
+            <button onClick={() => onApply(preview)} style={{
+              flex: 1, padding: '11px 0', border: 'none',
+              background: theme.accent, color: theme.accentInk,
+              borderRadius: theme.radius.btn, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}>Apply changes</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -3523,7 +3824,15 @@ Rules:
     }
     const kindNote = photoData
       ? (kind === 'label'
-        ? `\n\nThe image is a NUTRITION LABEL (packaging). Read the facts panel precisely. If values are per-100g or per-serving, scale to the amount the user says they ate (in the text below). If the user doesn't specify, assume one labelled serving. Use the product name from the label as "name".`
+        ? `\n\nThe image is a NUTRITION LABEL (packaging). Read the facts panel PRECISELY — do not estimate where the label gives exact numbers.
+Steps:
+1. Find the "Serving size" / "Per serving" / "Per 100g" reference on the label.
+2. Extract kcal, carbs, sugar, protein, fat, sat fat, fibre from the label.
+3. From the user's message, determine the amount they actually ate (e.g. "250ml", "1 slice", "½ pack", "2 biscuits"). If unclear, assume ONE labelled serving.
+4. SCALE the label values to that amount: (user_amount / label_reference) × label_value.
+5. Use the product name exactly as shown on the label for "name".
+6. Put the label's per-serving reference (e.g. "250ml serving") into "brand".
+Output a single item with the scaled values. If the label is illegible or missing a nutrient, estimate conservatively and say so in "note".`
         : `\n\nThe image is a PHOTO OF A MEAL. Identify each visible item, estimate realistic portion sizes, and return per-item macros. Be conservative.`)
       : '';
     userContent.push({
@@ -4305,28 +4614,90 @@ const { useState: useStateProfile } = React;
 function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
   weightLog, setWeightLog, settings, setSettings, log }) {
 
-  const exportCSV = () => {
-    const rows = [['Date','Time','Meal','Food','Brand','Qty','Kcal','Carbs (g)','Protein (g)','Fat (g)']];
-    const today = new Date('2026-04-18').toISOString().slice(0,10);
-    (log || []).forEach(e => {
-      const f = foodById(e.foodId);
-      if (!f) return;
-      const q = e.qty || 1;
-      rows.push([today, e.time || '', e.meal || '', f.name || '', f.brand || '',
-        q, Math.round((f.kcal||0)*q), +((f.c||0)*q).toFixed(1),
-        +((f.p||0)*q).toFixed(1), +((f.f||0)*q).toFixed(1)]);
-    });
-    const csv = rows.map(r => r.map(v => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-    }).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const [exportBusy, setExportBusy] = React.useState(false);
+
+  const exportAllJSON = async () => {
+    setExportBusy(true);
+    try {
+      const sb = window.sb;
+      const uid = (await sb.auth.getUser()).data?.user?.id;
+      if (!uid) throw new Error('Not signed in');
+      const [mealsR, foodsR, exR, weightR, wellnessR, profR] = await Promise.all([
+        sb.from('meal_logs').select('*').eq('user_id', uid).order('date'),
+        sb.from('foods').select('*').eq('user_id', uid),
+        sb.from('exercise_logs').select('*').eq('user_id', uid).order('date'),
+        sb.from('weight_logs').select('*').eq('user_id', uid).order('iso'),
+        sb.from('wellness_logs').select('*').eq('user_id', uid).order('date'),
+        sb.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
+      ]);
+      const bundle = {
+        exported_at: new Date().toISOString(),
+        user_id: uid,
+        profile: profR.data || null,
+        meal_logs: mealsR.data || [],
+        foods: foodsR.data || [],
+        exercise_logs: exR.data || [],
+        weight_logs: weightR.data || [],
+        wellness_logs: wellnessR.data || [],
+        display_name: localStorage.getItem('cal_display_name') || null,
+      };
+      const json = JSON.stringify(bundle, null, 2);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(json, `caloree-export-${stamp}.json`, 'application/json;charset=utf-8');
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    }
+    setExportBusy(false);
+  };
+
+  const exportCSV = async () => {
+    setExportBusy(true);
+    try {
+      const sb = window.sb;
+      const uid = (await sb.auth.getUser()).data?.user?.id;
+      if (!uid) throw new Error('Not signed in');
+      const [mealsR, foodsR] = await Promise.all([
+        sb.from('meal_logs').select('*').eq('user_id', uid).order('date'),
+        sb.from('foods').select('*').eq('user_id', uid),
+      ]);
+      const foodById = (id) => (foodsR.data || []).find(x => x.id === id);
+      const rows = [['Date','Time','Meal','Food','Brand','Qty','Kcal','Carbs (g)','Protein (g)','Fat (g)','SatFat (g)','Sugar (g)','Fibre (g)']];
+      (mealsR.data || []).forEach(e => {
+        const f = foodById(e.food_id);
+        if (!f) return;
+        const q = +e.qty || 1;
+        rows.push([
+          e.date, e.time || '', e.meal || '', f.name || '', f.brand || '',
+          q,
+          Math.round((+f.kcal||0) * q),
+          +((+f.c||0) * q).toFixed(1),
+          +((+f.p||0) * q).toFixed(1),
+          +((+f.f||0) * q).toFixed(1),
+          f.sat_fat != null ? +((+f.sat_fat) * q).toFixed(1) : '',
+          f.sugar   != null ? +((+f.sugar)   * q).toFixed(1) : '',
+          f.fibre   != null ? +((+f.fibre)   * q).toFixed(1) : '',
+        ]);
+      });
+      const csv = rows.map(r => r.map(v => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+      }).join(',')).join('\n');
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(csv, `caloree-meals-${stamp}.csv`, 'text/csv;charset=utf-8');
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    }
+    setExportBusy(false);
+  };
+
+  function downloadBlob(content, filename, type) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `caloree-diary-${today}.csv`;
+    a.href = url; a.download = filename;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
-  };
+  }
 
   const [editingGoals, setEditingGoals] = useStateProfile(false);
   const [draft, setDraft] = useStateProfile(targets);
@@ -4673,7 +5044,8 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         overflow: 'hidden',
       }}>
         {[
-          ['Export diary as CSV', null, exportCSV],
+          [exportBusy ? 'Exporting…' : 'Export all data (JSON)', null, exportAllJSON],
+          ['Export meals as CSV', null, exportCSV],
           ['Sign out', theme.accent, () => window.sb.auth.signOut()],
         ].map(([label, color, onClick], i, arr) => (
           <div key={label} onClick={onClick || undefined} style={{
@@ -5111,7 +5483,7 @@ Workout: ${aiText.trim()}`;
             <>
               <div style={{
                 fontFamily: theme.font, fontSize: 13, color: theme.inkSoft, marginBottom: 10, lineHeight: 1.4,
-              }}>Describe your workout freely. Claude will parse it into one or more entries.</div>
+              }}>Describe your workout freely. Claude will parse it into one or more entries. <b>Tip:</b> tap the mic on your keyboard and speak — voice-to-text works here.</div>
               <textarea value={aiText} onChange={e => setAiText(e.target.value)}
                 rows={8} placeholder={'e.g. "30 min run at 5:30 pace, then 4x10 pushups, 3x8 pullups, 10 min mobility"'}
                 style={{
@@ -5966,17 +6338,19 @@ function App({ session }) {
         });
       }
       (foodsR.data || []).forEach(f => {
-        if (!FOODS.some(x => x.id === f.id)) {
-          FOODS.push({
-            id: f.id, name: f.name, brand: f.brand, servingG: +f.serving_g,
-            kcal: +f.kcal, c: +f.c, p: +f.p, f: +f.f,
-            satFat: f.sat_fat != null ? +f.sat_fat : undefined,
-            sugar: f.sugar != null ? +f.sugar : undefined,
-            fibre: f.fibre != null ? +f.fibre : undefined,
-            photoPath: f.photo_path || null,
-            photo: f.photo_path ? (pathToUrl[f.photo_path] || null) : null,
-          });
-        }
+        const existing = FOODS.findIndex(x => x.id === f.id);
+        const rec = {
+          id: f.id, name: f.name, brand: f.brand, servingG: +f.serving_g,
+          kcal: +f.kcal, c: +f.c, p: +f.p, f: +f.f,
+          satFat: f.sat_fat != null ? +f.sat_fat : undefined,
+          sugar: f.sugar != null ? +f.sugar : undefined,
+          fibre: f.fibre != null ? +f.fibre : undefined,
+          photoPath: f.photo_path || null,
+          photo: f.photo_path ? (pathToUrl[f.photo_path] || null) : null,
+          isFavourite: !!f.is_favourite,
+        };
+        if (existing === -1) FOODS.push(rec);
+        else FOODS[existing] = { ...FOODS[existing], ...rec };
       });
       if (logsR.data) {
         setLog(logsR.data.map(l => ({
@@ -6052,6 +6426,7 @@ function App({ session }) {
       kcal: f.kcal || 0, c: f.c || 0, p: f.p || 0, f: f.f || 0,
       sat_fat: f.satFat ?? null, sugar: f.sugar ?? null, fibre: f.fibre ?? null,
       photo_path: f.photoPath || null,
+      is_favourite: !!f.isFavourite,
     }));
     const today = new Date().toISOString().slice(0, 10);
     const logRows = log.map(l => ({
