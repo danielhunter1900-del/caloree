@@ -754,7 +754,7 @@ function TabBar({ active, setActive, theme, onLogTap }) {
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40,
-      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)', paddingTop: 10,
+      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)', paddingTop: 4,
       background: bg, backdropFilter: 'blur(20px) saturate(180%)',
       WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderTop: `0.5px solid ${border}`,
@@ -4591,7 +4591,7 @@ Output a single item with the scaled values. If the label is illegible or missin
           border: `1px solid ${theme.line}`,
           boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
         }}>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment"
+          <input ref={fileRef} type="file" accept="image/*"
             style={{ display: 'none' }} onChange={onPickPhoto}/>
           <button onClick={() => fileRef.current && fileRef.current.click()}
             title="Attach photo"
