@@ -5282,8 +5282,8 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
   const [askWeight, setAskWeight] = useStateProfile(false);
 
   // Chart scaling
-  const wMin = Math.min(...weightLog.map(w => w.kg)) - 0.5;
-  const wMax = Math.max(...weightLog.map(w => w.kg)) + 0.5;
+  const wMin = weightLog.length ? Math.min(...weightLog.map(w => w.kg)) - 0.5 : 0;
+  const wMax = weightLog.length ? Math.max(...weightLog.map(w => w.kg)) + 0.5 : 1;
 
   const [displayName, setDisplayName] = useStateProfile(() =>
     localStorage.getItem('cal_display_name') || 'Alex Rivera'
@@ -5359,15 +5359,22 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
             <div style={{
               fontFamily: theme.numFont, fontSize: 36, fontWeight: theme.numWeight,
               color: theme.ink, letterSpacing: theme.letter, lineHeight: 1.1, marginTop: 4,
-            }}>{latest.kg.toFixed(1)}<span style={{
+            }}>{latest ? latest.kg.toFixed(1) : '—'}<span style={{
               fontSize: 14, color: theme.inkMute, marginLeft: 4, fontWeight: 400,
             }}>kg</span></div>
-            <div style={{
-              fontFamily: theme.font, fontSize: 12,
-              color: delta < 0 ? theme.macros.protein : theme.inkSoft, marginTop: 2,
-            }}>
-              {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg since Feb 15
-            </div>
+            {latest && first && (
+              <div style={{
+                fontFamily: theme.font, fontSize: 12,
+                color: delta < 0 ? theme.macros.protein : theme.inkSoft, marginTop: 2,
+              }}>
+                {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg since first entry
+              </div>
+            )}
+            {!latest && (
+              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkMute, marginTop: 2 }}>
+                Tap "Log weight" to start
+              </div>
+            )}
             {weightTrend && Math.abs(weightTrend.perWeek) > 0.02 && (
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -5637,7 +5644,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
             setWeightLog([...filtered, { iso, kg }]);
             setShowWeightEntry(false);
           }}
-          current={latest.kg}/>
+          current={latest ? latest.kg : 75}/>
       )}
     </div>
   );
