@@ -3732,13 +3732,13 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
   }, [exerciseLog]);
   // All metrics, each with color + min/max range + formatter
   const metrics = [
-    { k: 'energy',    label: 'Energy',   unit: '/5',   color: '#2B7A5C', min: 1, max: 5, fmt: v => v.toFixed(1), hero: true },
-    { k: 'sleepHrs',  label: 'Sleep',    unit: 'h',    color: '#7A8BD1', min: 4, max: 10, fmt: v => v.toFixed(1) },
-    { k: 'exerciseMin', label: 'Exercise', unit: 'min', color: '#4F8A70', min: 0, max: 90, fmt: v => Math.round(v) },
-    { k: 'coffees',   label: 'Coffee',   unit: '',     color: '#A0725A', min: 0, max: 6, fmt: v => v.toFixed(1) },
-    { k: 'water',     label: 'Water',    unit: 'cups', color: '#5FA8C9', min: 0, max: 3500, fmt: v => Math.round(v/250) },
-    { k: 'stress',    label: 'Stress',   unit: '/5',   color: '#D96B5C', min: 1, max: 5, fmt: v => v.toFixed(1) },
-    { k: 'kcal',      label: 'Calories', unit: '',     color: '#8A8A8A', min: 1400, max: 2700, fmt: v => Math.round(v) },
+    { k: 'energy',    label: 'Energy',   unit: '/5',   color: '#2B7A5C', min: 1, max: 5, fmt: v => (+v || 0).toFixed(1), hero: true },
+    { k: 'sleepHrs',  label: 'Sleep',    unit: 'h',    color: '#7A8BD1', min: 4, max: 10, fmt: v => (+v || 0).toFixed(1) },
+    { k: 'exerciseMin', label: 'Exercise', unit: 'min', color: '#4F8A70', min: 0, max: 90, fmt: v => Math.round(+v || 0) },
+    { k: 'coffees',   label: 'Coffee',   unit: '',     color: '#A0725A', min: 0, max: 6, fmt: v => (+v || 0).toFixed(1) },
+    { k: 'water',     label: 'Water',    unit: 'cups', color: '#5FA8C9', min: 0, max: 3500, fmt: v => Math.round((+v || 0)/250) },
+    { k: 'stress',    label: 'Stress',   unit: '/5',   color: '#D96B5C', min: 1, max: 5, fmt: v => (+v || 0).toFixed(1) },
+    { k: 'kcal',      label: 'Calories', unit: '',     color: '#8A8A8A', min: 1400, max: 2700, fmt: v => Math.round(+v || 0) },
   ];
 
   // Normalize data to row objects per day/bucket
@@ -5459,7 +5459,6 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
           ['Sat Fat', 'satFat', 'g', '#B8824A'],
           ['Sugar',   'sugar',  'g', '#C25A8E'],
           ['Fibre',   'fibre',  'g', '#5C9A6E'],
-          ['Exercise kcal', 'exKcal', 'kcal', '#4F8A70'],
           ['Exercise time', 'exMin',  'min',  '#4F8A70'],
         ].map(([label, key, unit, color], i) => (
           <div key={key} style={{
