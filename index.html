@@ -7162,26 +7162,18 @@ function App({ session }) {
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
-      padding: 40, background: '#E8E8E5',
+      minHeight: '100vh', background: theme.bg,
       fontFamily: '-apple-system, system-ui',
+      position: 'relative',
     }}>
-      <ThemeSwitcher theme={theme} themeKey={themeKey} setThemeKey={setThemeKey} />
-
-      <IOSDevice dark={theme.statusDark}>
         <div style={{
-          width: '100%', height: '100%', position: 'relative',
+          width: '100%', minHeight: '100vh', position: 'relative',
           background: theme.bg, overflow: 'hidden',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
         }}>
-          {/* Status bar */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }}>
-            <IOSStatusBar dark={theme.statusDark} />
-          </div>
-
           {/* Main scrollable content */}
           <div style={{
-            position: 'absolute', top: 56, left: 0, right: 0, bottom: 0,
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             overflow: 'auto',
           }}>
             {tab === 'home' && (
@@ -7249,7 +7241,6 @@ function App({ session }) {
               onClose={closeDetail} onAdd={addEntry} />
           )}
         </div>
-      </IOSDevice>
     </div>
   );
 }
