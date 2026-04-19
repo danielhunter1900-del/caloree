@@ -7000,6 +7000,50 @@ function App({ session }) {
           notes: r.notes || '', details: r.details || null,
         })));
       }
+
+      // Rebuild HISTORY from cloud data so Trends populates
+      const allWellness = await sb.from('wellness_logs').select('*').eq('user_id', uid);
+      const wellnessByDate = {};
+      (allWellness.data || []).forEach(w => { wellnessByDate[w.date] = w; });
+      const foodById = {};
+      (foodsR.data || []).forEach(f => { foodById[f.id] = f; });
+      const byDate = {};
+      (logsR.data || []).forEach(l => {
+        const f = foodById[l.food_id]; if (!f) return;
+        const q = +l.qty || 1;
+        if (!byDate[l.date]) byDate[l.date] = { kcal: 0, c: 0, p: 0, f: 0, satFat: 0, sugar: 0, fibre: 0 };
+        const d = byDate[l.date];
+        d.kcal += (+f.kcal || 0) * q;
+        d.c += (+f.c || 0) * q;
+        d.p += (+f.p || 0) * q;
+        d.f += (+f.f || 0) * q;
+        d.satFat += (+f.sat_fat || 0) * q;
+        d.sugar  += (+f.sugar  || 0) * q;
+        d.fibre  += (+f.fibre  || 0) * q;
+      });
+      // Combine all dates that have any signal
+      const allDates = new Set([...Object.keys(byDate), ...Object.keys(wellnessByDate)]);
+      HISTORY.length = 0;
+      [...allDates].sort().forEach(iso => {
+        const d = new Date(iso + 'T00:00:00');
+        const macros = byDate[iso] || { kcal:0, c:0, p:0, f:0, satFat:0, sugar:0, fibre:0 };
+        const w = wellnessByDate[iso] || {};
+        HISTORY.push({
+          y: d.getFullYear(), m: d.getMonth(), d: d.getDate(),
+          dow: d.getDay(), iso,
+          kcal: Math.round(macros.kcal),
+          c: Math.round(macros.c), p: Math.round(macros.p), f: Math.round(macros.f),
+          satFat: Math.round(macros.satFat),
+          sugar:  Math.round(macros.sugar),
+          fibre:  Math.round(macros.fibre),
+          coffees: w.coffees || 0,
+          water: w.water || 0,
+          sleepHrs: +w.sleep_hrs || 0,
+          stress: w.stress || 0,
+          energy: w.energy || 0,
+        });
+      });
+
       hydratingRef.current = false;
     })();
   }, [session]);
