@@ -1766,6 +1766,14 @@ function ThemeBadge({ theme }) {
 // ─────────────────────────────────────────────────────────────
 // Meal section — collapsible, swipe-to-delete entries
 // ─────────────────────────────────────────────────────────────
+// Shared exercise type → color map
+const EX_COLORS = {
+  Run: '#5FA8C9', Cycling: '#7A8BD1', Walk: '#A0725A',
+  Strength: '#D96B5C', Calisthenics: '#E0A24A',
+  HIIT: '#C25A8E', Mobility: '#5C9A6E', Other: '#8A8A8A',
+};
+window.EX_COLORS = EX_COLORS;
+
 function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate }) {
   const ICONS = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️', Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡' };
   const TYPES = Object.keys(ICONS);
@@ -3043,17 +3051,22 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const [trendDrill, setTrendDrill] = React.useState(null); // { key, label, unit, color }
   const [chartMetric, setChartMetric] = React.useState('kcal'); // 'kcal' | 'exKcal' | 'exMin'
 
-  // Exercise totals per ISO date
+  // Exercise totals per ISO date (overall + per-type breakdown)
   const exByDate = React.useMemo(() => {
     const m = {};
     (exerciseLog || []).forEach(e => {
       if (!e.date) return;
-      if (!m[e.date]) m[e.date] = { kcal: 0, min: 0 };
+      if (!m[e.date]) m[e.date] = { kcal: 0, min: 0, byType: {} };
       m[e.date].kcal += (+e.kcal || 0);
       m[e.date].min += (+e.duration || 0);
+      const t = e.type || 'Other';
+      if (!m[e.date].byType[t]) m[e.date].byType[t] = { kcal: 0, min: 0 };
+      m[e.date].byType[t].kcal += (+e.kcal || 0);
+      m[e.date].byType[t].min += (+e.duration || 0);
     });
     return m;
   }, [exerciseLog]);
+  const EX_COLOR_MAP = (typeof window !== 'undefined' && window.EX_COLORS) || {};
 
   const bucket = bucketFor(range, offset);
   const data = bucket ? bucket.bars : [];
@@ -3223,14 +3236,41 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           </div>
 
           {data.map((d, i) => {
-            const h = (valueOf(d) / maxK) * 100;
+            const total = valueOf(d);
+            const h = (total / maxK) * 100;
             const isSel = i === effSel;
+            const isExercise = chartMetric === 'exKcal' || chartMetric === 'exMin';
+            const exDay = exByDate[d.iso];
+            // Build stacked segments for exercise metric
+            const segments = isExercise && exDay
+              ? Object.entries(exDay.byType || {}).map(([type, vals]) => ({
+                  type,
+                  v: chartMetric === 'exKcal' ? vals.kcal : vals.min,
+                  color: EX_COLOR_MAP[type] || '#8A8A8A',
+                })).filter(s => s.v > 0)
+              : null;
             return (
               <div key={i} onClick={() => setSelIdx(i)} style={{
                 flex: 1, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', gap: 6, cursor: 'pointer', height: '100%',
                 justifyContent: 'flex-end', minWidth: 0,
               }}>
+                {segments && segments.length > 0 ? (
+                  <div style={{
+                    width: '100%', maxWidth: range === 'Month' ? 14 : 28, height: `${h}%`,
+                    display: 'flex', flexDirection: 'column-reverse',
+                    borderRadius: theme.name === 'Editorial' ? 0 : (theme.name === 'Warm' ? 6 : 3),
+                    overflow: 'hidden', opacity: isSel ? 1 : 0.85,
+                    border: isSel ? `1px solid ${theme.ink}` : 'none',
+                  }}>
+                    {segments.map((s, si) => (
+                      <div key={si} style={{
+                        height: `${(s.v / total) * 100}%`, background: s.color,
+                        transition: 'background 0.15s',
+                      }}/>
+                    ))}
+                  </div>
+                ) : (
                 <div style={{
                   width: '100%', maxWidth: range === 'Month' ? 14 : 28, height: `${h}%`,
                   background: isSel ? theme.accent : (d.isToday ? theme.ink : theme.surfaceAlt),
@@ -3239,6 +3279,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                   border: !isSel && !d.isToday ? `1px solid ${theme.line}` : 'none',
                   transition: 'background 0.2s',
                 }} />
+                )}
                 {(() => {
                   const showLabel = range !== 'Month' || i % 5 === 0 || i === data.length - 1;
                   return (
@@ -3256,6 +3297,30 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
             );
           })}
         </div>
+        {/* Exercise type legend */}
+        {(chartMetric === 'exKcal' || chartMetric === 'exMin') && (() => {
+          const types = new Set();
+          data.forEach(d => {
+            const ex = exByDate[d.iso];
+            if (ex && ex.byType) Object.keys(ex.byType).forEach(t => {
+              if ((chartMetric === 'exKcal' ? ex.byType[t].kcal : ex.byType[t].min) > 0) types.add(t);
+            });
+          });
+          if (types.size === 0) return null;
+          return (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12,
+              fontFamily: theme.font, fontSize: 11, color: theme.inkSoft,
+            }}>
+              {[...types].map(t => (
+                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: EX_COLOR_MAP[t] || '#8A8A8A' }}/>
+                  {t}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       </div>}
 
       {/* Macro averages */}
@@ -5997,50 +6062,50 @@ Workout: ${aiText.trim()}`;
           {mode === 'manual' && (
             <>
               <div style={{
-                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
-                color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
-                marginBottom: 8,
-              }}>Type</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
-                {TYPES.map(t => (
-                  <button key={t.k} onClick={() => setType(t.k)} style={{
-                    padding: '10px 4px', border: 'none',
-                    background: type === t.k ? theme.ink : theme.surface,
-                    color: type === t.k ? theme.bg : theme.ink,
-                    borderRadius: theme.radius.btn, cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  }}>
-                    <span style={{ fontSize: 18 }}>{t.icon}</span>
-                    <span style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 600 }}>{t.k}</span>
-                  </button>
-                ))}
+                display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6,
+                marginBottom: 14, scrollbarWidth: 'none',
+              }}>
+                {TYPES.map(t => {
+                  const COL = (window.EX_COLORS || {})[t.k] || theme.ink;
+                  const sel = type === t.k;
+                  return (
+                    <button key={t.k} onClick={() => setType(t.k)} style={{
+                      flex: '0 0 auto', padding: '8px 14px', border: `1.5px solid ${sel ? COL : theme.line}`,
+                      background: sel ? COL : 'transparent',
+                      color: sel ? '#fff' : theme.ink, cursor: 'pointer',
+                      borderRadius: 999, whiteSpace: 'nowrap',
+                      fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}>
+                      <span style={{ fontSize: 14 }}>{t.icon}</span>{t.k}
+                    </button>
+                  );
+                })}
               </div>
 
-              <Field label="Duration (min)" theme={theme}>
-                <input type="number" inputMode="numeric" value={duration}
-                  onChange={e => setDuration(e.target.value)} placeholder="30"
-                  style={fieldStyle(theme)}/>
-              </Field>
-
-              {['Run','Cycling','Walk'].includes(type) && (
-                <Field label="Distance (km)" theme={theme}>
-                  <input type="number" inputMode="decimal" value={distance}
-                    onChange={e => setDistance(e.target.value)} placeholder="5"
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <Field label="Min" theme={theme} style={{ flex: 1 }}>
+                  <input type="number" inputMode="numeric" value={duration}
+                    onChange={e => setDuration(e.target.value)} placeholder="30"
                     style={fieldStyle(theme)}/>
                 </Field>
-              )}
+                {['Run','Cycling','Walk'].includes(type) && (
+                  <Field label="km" theme={theme} style={{ flex: 1 }}>
+                    <input type="number" inputMode="decimal" value={distance}
+                      onChange={e => setDistance(e.target.value)} placeholder="5"
+                      style={fieldStyle(theme)}/>
+                  </Field>
+                )}
+                <Field label="kcal" theme={theme} style={{ flex: 1 }}>
+                  <input type="number" inputMode="numeric" value={kcal}
+                    onChange={e => setKcal(e.target.value)} placeholder="auto"
+                    style={fieldStyle(theme)}/>
+                </Field>
+              </div>
 
-              <Field label="Calories burned" theme={theme}>
-                <input type="number" inputMode="numeric" value={kcal}
-                  onChange={e => setKcal(e.target.value)} placeholder="auto"
-                  style={fieldStyle(theme)}/>
-              </Field>
-
-              <Field label="Notes (optional)" theme={theme}>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  rows={2} placeholder="How it felt, sets & reps, etc."
-                  style={{ ...fieldStyle(theme), resize: 'vertical' }}/>
-              </Field>
+              <input value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Notes (optional)"
+                style={{ ...fieldStyle(theme), marginBottom: 4 }}/>
             </>
           )}
 
@@ -6089,13 +6154,13 @@ Workout: ${aiText.trim()}`;
   );
 }
 
-function Field({ label, theme, children }) {
+function Field({ label, theme, children, style }) {
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12, ...(style || {}) }}>
       <div style={{
-        fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+        fontFamily: theme.font, fontSize: 10, fontWeight: 600,
         color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
-        marginBottom: 6,
+        marginBottom: 4,
       }}>{label}</div>
       {children}
     </div>
