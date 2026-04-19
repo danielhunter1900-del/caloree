@@ -1091,6 +1091,11 @@ function WellnessCard({ theme, wellness, setWellness }) {
 
 function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise }) {
   const [favBump, setFavBump] = React.useState(0);
+  React.useEffect(() => {
+    const h = () => setFavBump(b => b + 1);
+    window.addEventListener('caloree:foodschanged', h);
+    return () => window.removeEventListener('caloree:foodschanged', h);
+  }, []);
   const toggleFavourite = (foodId) => {
     const f = FOODS.find(x => x.id === foodId);
     if (!f) return;
@@ -2351,6 +2356,7 @@ window.LogScreen = LogScreen;
 const { useState: useStateDetail } = React;
 
 function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
+  const [bump, setBump] = useStateDetail(0); // force re-read food after mutation
   const food = foodById(foodId);
   const [qty, setQty] = useStateDetail(1);
   const [meal, setMeal] = useStateDetail(defaultMeal || 'Snack');
@@ -2630,7 +2636,36 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
         <ModifyWithClaudeSheet theme={theme} food={food} qty={qty}
           onClose={() => setShowModify(false)}
           onApply={(newFood) => {
-            Object.assign(food, newFood);
+            // Mutate the FOODS entry in place with the returned values
+            const target = FOODS.find(x => x.id === food.id);
+            if (target) {
+              Object.assign(target, {
+                name: newFood.name || target.name,
+                brand: newFood.brand || target.brand,
+                kcal: +newFood.kcal || target.kcal,
+                c: +newFood.c || 0,
+                p: +newFood.p || 0,
+                f: +newFood.f || 0,
+                satFat: newFood.satFat != null ? +newFood.satFat : target.satFat,
+                sugar:  newFood.sugar  != null ? +newFood.sugar  : target.sugar,
+                fibre:  newFood.fibre  != null ? +newFood.fibre  : target.fibre,
+                servingG: +newFood.servingG || target.servingG,
+              });
+              // Sync to Supabase if this is a synced food (ai_* id)
+              if (window.sb && typeof target.id === 'string' && target.id.startsWith('ai_')) {
+                window.sb.from('foods').update({
+                  name: target.name, brand: target.brand,
+                  kcal: target.kcal, c: target.c, p: target.p, f: target.f,
+                  sat_fat: target.satFat ?? null,
+                  sugar:   target.sugar  ?? null,
+                  fibre:   target.fibre  ?? null,
+                  serving_g: target.servingG,
+                }).eq('id', target.id)
+                  .then(r => r.error && console.warn('modify sync:', r.error.message));
+              }
+            }
+            setBump(b => b + 1);     // force re-render so detail shows new values
+            window.dispatchEvent(new Event('caloree:foodschanged'));
             setShowModify(false);
           }}/>
       )}
