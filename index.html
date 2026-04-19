@@ -2077,17 +2077,37 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
         {food.photo && (
-          <img src={food.photo} alt=""
-            onClick={(e) => {
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <img src={food.photo} alt=""
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent('caloree:showphoto', { detail: {
+                  url: food.photo, caption: `${food.name} · ${entry.meal}`
+                }}));
+              }}
+              style={{
+                width: 40, height: 40, borderRadius: 8, objectFit: 'cover', display: 'block',
+                cursor: 'pointer',
+              }}/>
+            <button onClick={async (e) => {
               e.stopPropagation();
-              window.dispatchEvent(new CustomEvent('caloree:showphoto', { detail: {
-                url: food.photo, caption: `${food.name} · ${entry.meal}`
-              }}));
-            }}
-            style={{
-              width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0,
-              cursor: 'pointer',
-            }}/>
+              if (!confirm('Remove the photo from this meal?')) return;
+              const path = food.photoPath;
+              food.photo = null; food.photoPath = null;
+              try {
+                if (window.sb) {
+                  await window.sb.from('foods').update({ photo_path: null }).eq('id', food.id);
+                  if (path) await window.sb.storage.from('meal-photos').remove([path]);
+                }
+              } catch {}
+              window.dispatchEvent(new Event('caloree:foodschanged'));
+            }} title="Remove photo" style={{
+              position: 'absolute', top: -6, right: -6,
+              width: 18, height: 18, borderRadius: 9, border: 'none',
+              background: 'rgba(20,20,20,0.85)', color: '#fff', cursor: 'pointer',
+              fontSize: 10, lineHeight: '18px', padding: 0,
+            }}>×</button>
+          </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -2644,6 +2664,31 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
           background: theme.surface, borderRadius: theme.radius.card,
           border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
         }}>
+          {Array.isArray(food.ingredients) && food.ingredients.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <SectionHeader theme={theme}>Ingredients</SectionHeader>
+              {food.ingredients.map((ing, i) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                  padding: '8px 0',
+                  borderBottom: i < food.ingredients.length - 1 ? `0.5px solid ${theme.line}` : 'none',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.ink }}>{ing.name}</div>
+                    {ing.g != null && (
+                      <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>{Math.round(+ing.g)}g</div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: theme.numFont, fontSize: 13, color: theme.ink }}>{Math.round((+ing.kcal || 0) * qty)} kcal</div>
+                    <div style={{ fontFamily: theme.numFont, fontSize: 10, color: theme.inkMute }}>
+                      C{Math.round((+ing.c||0)*qty)} P{Math.round((+ing.p||0)*qty)} F{Math.round((+ing.f||0)*qty)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <SectionHeader theme={theme}>Per serving</SectionHeader>
           {[
             ['Total Carbohydrate', `${m.c.toFixed(1)} g`, true],
@@ -4351,16 +4396,14 @@ Shape:
       "meal": "Breakfast" | "Lunch" | "Dinner" | "Snack",
       "items": [
         {
-          "name": "Food name",
+          "name": "Whole dish name (e.g. 'Chipotle bowl with chicken & guac')",
           "brand": "short source/prep note",
-          "kcal": 0,
-          "c": 0,
-          "p": 0,
-          "f": 0,
-          "satFat": 0,
-          "sugar": 0,
-          "fibre": 0,
-          "g": 0
+          "kcal": 0, "c": 0, "p": 0, "f": 0,
+          "satFat": 0, "sugar": 0, "fibre": 0, "g": 0,
+          "ingredients": [
+            { "name": "Chicken breast", "g": 120, "kcal": 200, "c": 0, "p": 38, "f": 5, "satFat": 1.5, "sugar": 0, "fibre": 0 },
+            { "name": "Brown rice",     "g": 150, "kcal": 220, "c": 45, "p": 5, "f": 2, "satFat": 0.3, "sugar": 0, "fibre": 3 }
+          ]
         }
       ]
     }
@@ -4369,10 +4412,16 @@ Shape:
 }
 
 Rules:
+- COMBINE everything the user describes for ONE meal into ONE single item with summed macros at the top level.
+- The "items" array should usually contain exactly one entry per meal section.
+- Break the components out as "ingredients" — each ingredient gets its own line in the sub-array (e.g. chicken, rice, beans, cheese, guac all become separate ingredients of the parent item).
+- Top-level kcal/c/p/f/satFat/sugar/fibre/g should equal the SUM of the ingredients (sanity check).
+- Only ever return multiple items in one meal if the user explicitly ate them as distinct dishes (e.g. "starter then main").
 - Values are per-item totals (not per 100g). c/p/f/satFat/sugar/fibre are grams.
-- "g" is total grams/ml of the item as eaten.
-- If the user describes multiple meals, return multiple entries in "meals". Otherwise return one.
+- "g" is total grams/ml of the meal as eaten.
+- If the user describes multiple meals (different times of day), return multiple entries in "meals". Otherwise return one.
 - If unsure of satFat, sugar, or fibre, estimate conservatively — never omit the keys.
+- Use a descriptive name that captures the whole dish.
 - Keep item names concise.`;
 
   const onPickPhoto = (e) => {
@@ -7058,6 +7107,7 @@ function App({ session }) {
           photoPath: f.photo_path || null,
           photo: f.photo_path ? (pathToUrl[f.photo_path] || null) : null,
           isFavourite: !!f.is_favourite,
+          ingredients: f.ingredients || null,
         };
         if (existing === -1) FOODS.push(rec);
         else FOODS[existing] = { ...FOODS[existing], ...rec };
@@ -7181,6 +7231,7 @@ function App({ session }) {
       sat_fat: f.satFat ?? null, sugar: f.sugar ?? null, fibre: f.fibre ?? null,
       photo_path: f.photoPath || null,
       is_favourite: !!f.isFavourite,
+      ingredients: f.ingredients || null,
     }));
     const today = new Date().toISOString().slice(0, 10);
     const logRows = log.map(l => ({
@@ -7290,8 +7341,10 @@ function App({ session }) {
           serving: 'serving', servingG: it.g || 100,
           kcal: it.kcal || 0, c: it.c || 0, p: it.p || 0, f: it.f || 0,
           satFat: it.satFat, sugar: it.sugar, fibre: it.fibre,
-          photo: g.photo || null,
-          photoPath: g.photoPath || null,
+          ingredients: Array.isArray(it.ingredients) ? it.ingredients : null,
+          // Photo only attaches to the FIRST item in a meal group (avoid duplicates)
+          photo: i === 0 ? (g.photo || null) : null,
+          photoPath: i === 0 ? (g.photoPath || null) : null,
         });
         newEntries.push({
           id: 'l_' + id, foodId: id, qty: 1, meal: g.meal || 'Snack', time: '14:00', date: today,
