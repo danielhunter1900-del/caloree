@@ -1319,11 +1319,26 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
         background: theme.surfaceAlt, borderRadius: theme.radius.card,
         display: 'flex', justifyContent: 'space-between',
       }}>
-        {[
-          ['Logged', `${dayLog.length} items`],
-          ['Weight', (typeof weightLog !== 'undefined' && weightLog.length > 0) ? `${weightLog[weightLog.length-1].kg} kg` : '— kg'],
-          ['Streak', '6 days'],
-        ].map(([k,v]) => (
+        {(() => {
+          // Compute streak: consecutive days ending today that have >=1 meal logged
+          const daysWithLogs = new Set(log.map(e => e.date || todayIso));
+          let streak = 0;
+          const cur = new Date(todayIso + 'T00:00:00');
+          while (true) {
+            const iso = cur.toISOString().slice(0, 10);
+            if (daysWithLogs.has(iso)) {
+              streak++;
+              cur.setDate(cur.getDate() - 1);
+            } else break;
+          }
+          const latestWeight = (weightLog && weightLog.length)
+            ? `${weightLog[weightLog.length - 1].kg} kg` : '— kg';
+          return [
+            ['Logged', `${dayLog.length} items`],
+            ['Weight', latestWeight],
+            ['Streak', `${streak} day${streak === 1 ? '' : 's'}`],
+          ];
+        })().map(([k,v]) => (
           <div key={k}>
             <div style={{
               fontFamily: theme.font, fontSize: 10, fontWeight: 600,
