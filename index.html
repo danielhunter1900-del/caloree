@@ -2431,6 +2431,60 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
   const [meal, setMeal] = useStateDetail(defaultMeal || 'Snack');
   const [showModify, setShowModify] = useStateDetail(false);
   const [showIngredients, setShowIngredients] = useStateDetail(false);
+  const [editingIng, setEditingIng] = useStateDetail(null); // index of ingredient being edited
+
+  const recomputeFoodTotals = (f) => {
+    const ings = f.ingredients || [];
+    if (!ings.length) return;
+    const sum = (k) => ings.reduce((s, i) => s + (+i[k] || 0), 0);
+    f.kcal = +sum('kcal').toFixed(1);
+    f.c = +sum('c').toFixed(1);
+    f.p = +sum('p').toFixed(1);
+    f.f = +sum('f').toFixed(1);
+    f.satFat = +sum('satFat').toFixed(1);
+    f.sugar = +sum('sugar').toFixed(1);
+    f.fibre = +sum('fibre').toFixed(1);
+    f.servingG = Math.max(1, Math.round(sum('g')));
+  };
+
+  const persistFood = async (f) => {
+    if (!window.sb) return;
+    const r = await window.sb.from('foods').update({
+      kcal: f.kcal, c: f.c, p: f.p, f: f.f,
+      sat_fat: f.satFat ?? null, sugar: f.sugar ?? null, fibre: f.fibre ?? null,
+      serving_g: f.servingG, ingredients: f.ingredients || null,
+    }).eq('id', f.id);
+    if (r.error) console.warn('ingredient sync:', r.error.message);
+  };
+
+  const deleteIngredient = (idx) => {
+    food.ingredients = (food.ingredients || []).filter((_, i) => i !== idx);
+    recomputeFoodTotals(food);
+    setBump(b => b + 1);
+    persistFood(food);
+    window.dispatchEvent(new Event('caloree:foodschanged'));
+  };
+
+  const updateIngredient = (idx, patch) => {
+    const ing = food.ingredients[idx];
+    if (!ing) return;
+    // If grams changed, scale macros proportionally to keep them per-amount-eaten
+    if (patch.g != null && +patch.g !== +ing.g) {
+      const oldG = +ing.g || 1;
+      const newG = Math.max(0, +patch.g);
+      const ratio = oldG > 0 ? newG / oldG : 1;
+      ing.g = newG;
+      ['kcal','c','p','f','satFat','sugar','fibre'].forEach(k => {
+        if (ing[k] != null) ing[k] = +(((+ing[k]) || 0) * ratio).toFixed(1);
+      });
+      delete patch.g;
+    }
+    Object.assign(ing, patch);
+    recomputeFoodTotals(food);
+    setBump(b => b + 1);
+    persistFood(food);
+    window.dispatchEvent(new Event('caloree:foodschanged'));
+  };
 
   const m = {
     kcal: food.kcal * qty,
@@ -2662,22 +2716,63 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
               </button>
               {showIngredients && food.ingredients.map((ing, i) => (
                 <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  padding: '8px 0', margin: '0 24px',
+                  margin: '0 16px',
                   borderBottom: i < food.ingredients.length - 1 ? `0.5px solid ${theme.line}` : 'none',
                 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.ink }}>{ing.name}</div>
-                    {ing.g != null && (
-                      <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>{Math.round(+ing.g)}g</div>
-                    )}
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: theme.numFont, fontSize: 13, color: theme.ink }}>{Math.round((+ing.kcal || 0) * qty)} kcal</div>
-                    <div style={{ fontFamily: theme.numFont, fontSize: 10, color: theme.inkMute }}>
-                      C{Math.round((+ing.c||0)*qty)} P{Math.round((+ing.p||0)*qty)} F{Math.round((+ing.f||0)*qty)}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 0', gap: 8,
+                  }}>
+                    <div onClick={() => setEditingIng(editingIng === i ? null : i)}
+                      style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                      <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.ink }}>
+                        {ing.name} <span style={{ color: theme.inkMute, fontSize: 10 }}>✎</span>
+                      </div>
+                      {ing.g != null && (
+                        <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>{Math.round(+ing.g)}g</div>
+                      )}
                     </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: theme.numFont, fontSize: 13, color: theme.ink }}>{Math.round((+ing.kcal || 0) * qty)} kcal</div>
+                      <div style={{ fontFamily: theme.numFont, fontSize: 10, color: theme.inkMute }}>
+                        C{Math.round((+ing.c||0)*qty)} P{Math.round((+ing.p||0)*qty)} F{Math.round((+ing.f||0)*qty)}
+                      </div>
+                    </div>
+                    <button onClick={() => {
+                      if (confirm(`Remove "${ing.name}" from this meal?`)) deleteIngredient(i);
+                    }} title="Delete ingredient" style={{
+                      width: 26, height: 26, borderRadius: 13, border: 'none',
+                      background: 'rgba(217,107,92,0.12)', color: '#B3261E',
+                      cursor: 'pointer', fontSize: 14, lineHeight: '26px', padding: 0,
+                    }}>×</button>
                   </div>
+                  {editingIng === i && (
+                    <div style={{
+                      padding: '8px 12px 12px', background: theme.surfaceAlt,
+                      borderRadius: theme.radius.btn, marginBottom: 6,
+                    }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                        <Field label="Name" theme={theme} style={{ flex: 2, marginBottom: 0 }}>
+                          <input value={ing.name || ''}
+                            onChange={(e) => updateIngredient(i, { name: e.target.value })}
+                            style={fieldStyle(theme)}/>
+                        </Field>
+                        <Field label="Grams" theme={theme} style={{ flex: 1, marginBottom: 0 }}>
+                          <input type="number" inputMode="numeric" value={ing.g != null ? +ing.g : ''}
+                            onChange={(e) => updateIngredient(i, { g: e.target.value })}
+                            style={fieldStyle(theme)}/>
+                        </Field>
+                      </div>
+                      <div style={{
+                        fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 6,
+                      }}>Changing grams scales kcal & macros proportionally.</div>
+                      <button onClick={() => setEditingIng(null)} style={{
+                        marginTop: 8, padding: '6px 12px', border: 'none',
+                        background: theme.ink, color: theme.bg, borderRadius: theme.radius.btn,
+                        fontFamily: theme.font, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}>Done</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
