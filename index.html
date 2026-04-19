@@ -6762,10 +6762,12 @@ function GlobalToast() {
   return (
     <div style={{
       position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
-      background: 'rgba(20,20,20,0.95)', color: '#fff',
-      padding: '10px 14px 10px 18px', borderRadius: 22,
-      display: 'flex', alignItems: 'center', gap: 14,
-      boxShadow: '0 8px 24px rgba(0,0,0,0.25)', zIndex: 400,
+      background: '#FFFFFF', color: '#1A1A1A',
+      padding: '10px 10px 10px 16px', borderRadius: 22,
+      display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.18)',
+      border: '1px solid rgba(0,0,0,0.06)',
+      zIndex: 400,
       fontFamily: '-apple-system, system-ui', fontSize: 14, fontWeight: 500,
       maxWidth: 'calc(100vw - 32px)',
     }}>
@@ -6776,14 +6778,14 @@ function GlobalToast() {
           if (timerRef.current) clearTimeout(timerRef.current);
           setToast(null);
         }} style={{
-          background: 'transparent', border: 'none', color: '#8FE26B',
-          cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
-          padding: '2px 6px',
+          background: '#1A1A1A', border: 'none', color: '#FFFFFF',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+          padding: '6px 12px', borderRadius: 14,
         }}>Undo</button>
       )}
       <button onClick={() => setToast(null)} style={{
-        background: 'transparent', border: 'none', color: '#aaa',
-        cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 2,
+        background: 'transparent', border: 'none', color: '#999',
+        cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px 4px',
       }}>×</button>
     </div>
   );
