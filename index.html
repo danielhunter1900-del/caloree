@@ -1273,16 +1273,37 @@ function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerci
           setExerciseLog && setExerciseLog(exerciseLog.map(e => e.id === updated.id ? updated : e));
         }}
         onDelete={(id) => {
+          const removed = exerciseLog.find(e => e.id === id);
           setExerciseLog && setExerciseLog(exerciseLog.filter(e => e.id !== id));
           if (window.sb) window.sb.from('exercise_logs').delete().eq('id', id)
             .then(r => r.error && console.warn('exercise delete:', r.error.message));
+          window.showToast(`Removed ${removed?.type || 'exercise'}`, () => {
+            if (!removed) return;
+            setExerciseLog(prev => prev.some(e => e.id === id) ? prev : [...prev, removed]);
+            // Re-upsert to Supabase (delete was already sent; reinsert)
+            if (window.sb && session) {
+              window.sb.from('exercise_logs').upsert([{
+                id: removed.id, user_id: session.user.id, date: removed.date,
+                type: removed.type, duration_min: removed.duration || null,
+                distance_km: removed.distance || null, kcal: removed.kcal || null,
+                notes: removed.notes || null, details: removed.details || null,
+              }]).then(r => r.error && console.warn('exercise undo:', r.error.message));
+            }
+          });
         }}/>
 
       {/* Meal sections */}
       {meals.map(m => (
         <MealSection key={m + favBump} meal={m} theme={theme}
           entries={dayLog.filter(e => e.meal === m)}
-          onDelete={(id) => setLog(log.filter(e => e.id !== id))}
+          onDelete={(id) => {
+            const removed = log.find(e => e.id === id);
+            setLog(log.filter(e => e.id !== id));
+            const food = removed && foodById(removed.foodId);
+            window.showToast(`Removed ${food?.name || 'item'}`, () => {
+              setLog(prev => prev.some(e => e.id === id) ? prev : [...prev, removed]);
+            });
+          }}
           onAdd={() => onAddMeal(m)}
           onOpen={onOpenFood}
           onMoveEntry={(id, newMeal) => setLog(log.map(e => e.id === id ? { ...e, meal: newMeal } : e))}
@@ -6677,6 +6698,56 @@ ${text.trim()}`;
   );
 }
 
+function GlobalToast() {
+  const [toast, setToast] = React.useState(null);
+  const timerRef = React.useRef(null);
+  React.useEffect(() => {
+    const h = (e) => {
+      const { message, undo, durationMs } = e.detail;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setToast({ message, undo });
+      timerRef.current = setTimeout(() => setToast(null), durationMs || 5000);
+    };
+    window.addEventListener('caloree:toast', h);
+    return () => window.removeEventListener('caloree:toast', h);
+  }, []);
+  if (!toast) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(20,20,20,0.95)', color: '#fff',
+      padding: '10px 14px 10px 18px', borderRadius: 22,
+      display: 'flex', alignItems: 'center', gap: 14,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.25)', zIndex: 400,
+      fontFamily: '-apple-system, system-ui', fontSize: 14, fontWeight: 500,
+      maxWidth: 'calc(100vw - 32px)',
+    }}>
+      <span>{toast.message}</span>
+      {toast.undo && (
+        <button onClick={() => {
+          try { toast.undo(); } catch (e) { console.warn(e); }
+          if (timerRef.current) clearTimeout(timerRef.current);
+          setToast(null);
+        }} style={{
+          background: 'transparent', border: 'none', color: '#8FE26B',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+          padding: '2px 6px',
+        }}>Undo</button>
+      )}
+      <button onClick={() => setToast(null)} style={{
+        background: 'transparent', border: 'none', color: '#aaa',
+        cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 2,
+      }}>×</button>
+    </div>
+  );
+}
+// Helper: window.showToast(msg, undoFn)
+window.showToast = (message, undo, durationMs) => {
+  window.dispatchEvent(new CustomEvent('caloree:toast', {
+    detail: { message, undo, durationMs }
+  }));
+};
+
 function PhotoViewer() {
   const [state, setState] = React.useState(null); // { url, caption }
   React.useEffect(() => {
@@ -6720,7 +6791,7 @@ function AppRoot() {
     }}>Loading…</div>
   );
   if (!session) return <LoginScreen/>;
-  return <><App session={session}/><PhotoViewer/></>;
+  return <><App session={session}/><PhotoViewer/><GlobalToast/></>;
 }
 
 function App({ session }) {
