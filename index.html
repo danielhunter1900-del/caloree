@@ -2777,7 +2777,7 @@ function ModifyWithClaudeSheet({ theme, food, qty, onClose, onApply }) {
   const [preview, setPreview] = React.useState(null);
 
   const run = async () => {
-    const key = localStorage.getItem('anthropic_api_key');
+    const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
     if (!key) { setError('Set your Anthropic API key in Profile → Settings first.'); return; }
     if (!text.trim()) { setError('Describe what changed.'); return; }
     setBusy(true); setError(null);
@@ -3662,7 +3662,7 @@ If — and only if — you are recommending a specific, concrete change that wou
     setMessages(m => [...m, { role: 'user', text: userText }]);
     setBusy(true);
     try {
-      const key = localStorage.getItem('anthropic_api_key');
+      const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
       if (!key) throw new Error('no-key');
       const apiMessages = messages
         .filter(m => m.role !== 'system')
@@ -4398,7 +4398,7 @@ Rules:
   };
 
   const callAnthropic = async (userText, photoData, kind) => {
-    const key = localStorage.getItem('anthropic_api_key');
+    const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
     if (!key) throw new Error('no-key');
     const userContent = [];
     if (photoData) {
@@ -5052,7 +5052,7 @@ Rules:
     setMessages(m => [...m, { role: 'user', text: userText }]);
     setBusy(true);
     try {
-      const key = localStorage.getItem('anthropic_api_key');
+      const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
       if (!key) throw new Error('Set your Anthropic API key in Profile → Settings first.');
       const apiMsgs = messages.concat({ role: 'user', text: userText })
         .map(m => ({ role: m.role, content: m.text }));
@@ -5163,8 +5163,15 @@ function ApiKeyCard({ theme }) {
   const [show, setShow] = React.useState(false);
   const masked = value ? value.slice(0, 8) + '…' + value.slice(-4) : '';
   const save = () => {
-    if (value.trim()) localStorage.setItem('anthropic_api_key', value.trim());
+    // Strip ALL whitespace (catches accidental newlines / spaces from copy-paste)
+    const cleaned = (value || '').replace(/\s+/g, '');
+    if (cleaned && !cleaned.startsWith('sk-ant-')) {
+      alert('Anthropic keys start with "sk-ant-". Double-check what you pasted.');
+      return;
+    }
+    if (cleaned) localStorage.setItem('anthropic_api_key', cleaned);
     else localStorage.removeItem('anthropic_api_key');
+    setValue(cleaned);
     setSaved(true); setTimeout(() => setSaved(false), 1500);
   };
   const clear = () => {
@@ -5976,7 +5983,7 @@ function ExerciseLogSheet({ theme, onClose, session, onSave }) {
   };
 
   const parseWithAI = async () => {
-    const key = localStorage.getItem('anthropic_api_key');
+    const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
     if (!key) { setError('Set your Anthropic API key in Profile → Settings first.'); return; }
     if (!aiText.trim()) { setError('Describe the workout first.'); return; }
     setBusy(true); setError(null);
@@ -6593,7 +6600,7 @@ Lunch: turkey sandwich
 Dinner: pasta bolognese, glass of red wine`;
 
   const parseNotes = async () => {
-    const key = localStorage.getItem('anthropic_api_key');
+    const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
     if (!key) { setError('Set your Anthropic API key in Profile → Settings first.'); return; }
     if (!text.trim()) { setError('Paste some notes first.'); return; }
     setBusy(true); setError(null);
