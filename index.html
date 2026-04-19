@@ -2430,6 +2430,7 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
   const [qty, setQty] = useStateDetail(1);
   const [meal, setMeal] = useStateDetail(defaultMeal || 'Snack');
   const [showModify, setShowModify] = useStateDetail(false);
+  const [showIngredients, setShowIngredients] = useStateDetail(false);
 
   const m = {
     kcal: food.kcal * qty,
@@ -2646,11 +2647,23 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd }) {
         }}>
           {Array.isArray(food.ingredients) && food.ingredients.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <SectionHeader theme={theme}>Ingredients</SectionHeader>
-              {food.ingredients.map((ing, i) => (
+              <button onClick={() => setShowIngredients(!showIngredients)} style={{
+                width: '100%', padding: '8px 24px', background: 'transparent', border: 'none',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <span style={{
+                  fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+                  color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+                }}>Ingredients <span style={{ color: theme.inkMute, fontWeight: 500 }}>· {food.ingredients.length}</span></span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                  style={{ transform: showIngredients ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>
+                  <path d="M2 4l4 4 4-4" stroke={theme.inkMute} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              {showIngredients && food.ingredients.map((ing, i) => (
                 <div key={i} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  padding: '8px 0',
+                  padding: '8px 0', margin: '0 24px',
                   borderBottom: i < food.ingredients.length - 1 ? `0.5px solid ${theme.line}` : 'none',
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
