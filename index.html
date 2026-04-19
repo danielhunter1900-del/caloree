@@ -1096,15 +1096,33 @@ function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerci
     window.addEventListener('caloree:foodschanged', h);
     return () => window.removeEventListener('caloree:foodschanged', h);
   }, []);
-  const toggleFavourite = (foodId) => {
+  const toggleFavourite = async (foodId) => {
     const f = FOODS.find(x => x.id === foodId);
     if (!f) return;
     f.isFavourite = !f.isFavourite;
     setFavBump(b => b + 1);
-    if (window.sb && foodId.startsWith('ai_')) {
-      window.sb.from('foods').update({ is_favourite: !!f.isFavourite }).eq('id', foodId)
-        .then(r => r.error && console.warn('fav sync:', r.error.message));
-    }
+    // Persist to localStorage so toggle survives reload even for seed foods
+    try {
+      const favs = JSON.parse(localStorage.getItem('cal_favourite_ids') || '[]');
+      const set = new Set(favs);
+      if (f.isFavourite) set.add(foodId); else set.delete(foodId);
+      localStorage.setItem('cal_favourite_ids', JSON.stringify([...set]));
+    } catch {}
+    // Sync to Supabase if signed in — upsert whole row so both ai_ and seed foods persist
+    const sb = window.sb;
+    if (!sb) return;
+    const uid = (await sb.auth.getUser()).data?.user?.id;
+    if (!uid) return;
+    const r = await sb.from('foods').upsert([{
+      id: f.id, user_id: uid,
+      name: f.name, brand: f.brand || null,
+      serving_g: f.servingG || 100,
+      kcal: f.kcal || 0, c: f.c || 0, p: f.p || 0, f: f.f || 0,
+      sat_fat: f.satFat ?? null, sugar: f.sugar ?? null, fibre: f.fibre ?? null,
+      is_favourite: !!f.isFavourite,
+      photo_path: f.photoPath || null,
+    }], { onConflict: 'id' });
+    if (r.error) console.warn('fav sync:', r.error.message);
   };
   const todayIso = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = React.useState(todayIso);
@@ -3143,7 +3161,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           display: 'flex', gap: 2, padding: 2, marginTop: 14,
           background: theme.surfaceAlt, borderRadius: theme.radius.btn,
         }}>
-          {[['kcal', 'Calories'], ['exKcal', 'Ex. kcal'], ['exMin', 'Ex. min']].map(([k, l]) => (
+          {[['kcal', 'Intake'], ['exKcal', 'Burned'], ['exMin', 'Ex. min']].map(([k, l]) => (
             <button key={k} onClick={() => setChartMetric(k)} style={{
               flex: 1, padding: '6px 0', border: 'none',
               background: chartMetric === k ? theme.surface : 'transparent',
@@ -6807,6 +6825,9 @@ function App({ session }) {
     try {
       const foods = JSON.parse(localStorage.getItem('cal_ai_foods') || '[]');
       foods.forEach(f => { if (!FOODS.some(x => x.id === f.id)) FOODS.push(f); });
+      // Apply locally saved favourites to FOODS
+      const favIds = new Set(JSON.parse(localStorage.getItem('cal_favourite_ids') || '[]'));
+      FOODS.forEach(f => { if (favIds.has(f.id)) f.isFavourite = true; });
       const saved = JSON.parse(localStorage.getItem('cal_log'));
       if (saved) return saved;
     } catch {}
