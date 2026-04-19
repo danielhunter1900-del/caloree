@@ -1331,8 +1331,9 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
               cur.setDate(cur.getDate() - 1);
             } else break;
           }
-          const latestWeight = (weightLog && weightLog.length)
-            ? `${weightLog[weightLog.length - 1].kg} kg` : '— kg';
+          const wl = (typeof weightLog !== 'undefined' && weightLog) || [];
+          const latestWeight = wl.length
+            ? `${wl[wl.length - 1].kg} kg` : '— kg';
           return [
             ['Logged', `${dayLog.length} items`],
             ['Weight', latestWeight],
