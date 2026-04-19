@@ -188,7 +188,7 @@ const TODAY_LOG = [
 ];
 
 // Daily targets — defaults; user can override in Settings
-const DEFAULT_TARGETS = { kcal: 2150, c: 240, p: 160, f: 70 };
+const DEFAULT_TARGETS = { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30 };
 let TARGETS = { ...DEFAULT_TARGETS };
 
 // Generate historical daily data for ~2 years so the user can scroll back
@@ -1195,9 +1195,9 @@ function HomeScreen({ theme, log, setLog, targets, wellness, setWellness, exerci
           display: 'flex', gap: 14, marginTop: 14, padding: '0 4px',
         }}>
           {[
-            ['Sat Fat', 'satFat', 20,  '#B8824A'],
-            ['Sugar',   'sugar',  50,  '#C25A8E'],
-            ['Fibre',   'fibre',  30,  '#5C9A6E'],
+            ['Sat Fat', 'satFat', targets.satFat || 20,  '#B8824A'],
+            ['Sugar',   'sugar',  targets.sugar  || 50,  '#C25A8E'],
+            ['Fibre',   'fibre',  targets.fibre  || 30,  '#5C9A6E'],
           ].map(([label, key, target, color]) => (
             <MacroBar key={key} label={label} value={totals[key]} target={target} color={color} theme={theme}
               onClick={() => setDrill({ key, label, unit: 'g', color })} />
@@ -2966,7 +2966,7 @@ function bucketFor(range, offset) {
 function monthShort(m) { return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]; }
 function monthLong(m) { return ['January','February','March','April','May','June','July','August','September','October','November','December'][m]; }
 
-function ProgressScreen({ theme, targets, exerciseLog = [], weightLog = [], log = [] }) {
+function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], log = [] }) {
   const [range, setRange] = useStateProg('Week');
   const [offset, setOffset] = useStateProg(0);
   const [selIdx, setSelIdx] = useStateProg(null); // index within bucket
@@ -3203,12 +3203,12 @@ function ProgressScreen({ theme, targets, exerciseLog = [], weightLog = [], log 
         {data.length > 0 && (() => {
           const avg = (key) => Math.round(data.reduce((s,d)=>s+(d[key]||0),0)/data.length);
           const rows = [
-            ['Carbs',   'c',      avg('c'),      targets.c,  theme.macros.carbs],
-            ['Protein', 'p',      avg('p'),      targets.p,  theme.macros.protein],
-            ['Fat',     'f',      avg('f'),      targets.f,  theme.macros.fat],
-            ['Sat Fat', 'satFat', avg('satFat'), 20,          '#B8824A'],
-            ['Sugar',   'sugar',  avg('sugar'),  50,          '#C25A8E'],
-            ['Fibre',   'fibre',  avg('fibre'),  30,          '#5C9A6E'],
+            ['Carbs',   'c',      avg('c'),      targets.c,                     theme.macros.carbs],
+            ['Protein', 'p',      avg('p'),      targets.p,                     theme.macros.protein],
+            ['Fat',     'f',      avg('f'),      targets.f,                     theme.macros.fat],
+            ['Sat Fat', 'satFat', avg('satFat'), targets.satFat || 20,          '#B8824A'],
+            ['Sugar',   'sugar',  avg('sugar'),  targets.sugar  || 50,          '#C25A8E'],
+            ['Fibre',   'fibre',  avg('fibre'),  targets.fibre  || 30,          '#5C9A6E'],
           ];
           return rows.map(([k, key, v, t, c], i) => (
             <div key={k} style={{ marginBottom: i < rows.length - 1 ? 14 : 0 }}>
@@ -3254,7 +3254,7 @@ function ProgressScreen({ theme, targets, exerciseLog = [], weightLog = [], log 
 
       {askOpen && (
         <AskCoachSheet theme={theme} range={range} bucketLabel={bucket?.label}
-          data={data} targets={targets}
+          data={data} targets={targets} setTargets={setTargets}
           onClose={() => setAskOpen(false)} />
       )}
 
@@ -3392,9 +3392,50 @@ function TrendsMacroDrillSheet({ theme, drill, bucket, range, onClose }) {
   );
 }
 
-function AskCoachSheet({ theme, range, bucketLabel, data, targets, onClose }) {
+function ProposalRow({ proposal, theme, labelFor, currentTargets, onApply }) {
+  const [applied, setApplied] = React.useState(false);
+  const currentValue = proposal.action === 'set_target' ? currentTargets[proposal.key] : null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 0', borderTop: `0.5px solid rgba(79,138,112,0.2)`,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
+        }}>
+          {proposal.action === 'set_target'
+            ? `Set ${labelFor(proposal.key)} to ${proposal.value}`
+            : proposal.action}
+        </div>
+        {proposal.action === 'set_target' && (
+          <div style={{
+            fontFamily: theme.numFont, fontSize: 11, color: theme.inkMute, marginTop: 2,
+          }}>Current: {currentValue ?? '—'} → {proposal.value}</div>
+        )}
+        {proposal.why && (
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2,
+          }}>{proposal.why}</div>
+        )}
+      </div>
+      <button onClick={() => { onApply(); setApplied(true); }}
+        disabled={applied}
+        style={{
+          padding: '6px 12px', border: 'none',
+          background: applied ? theme.surfaceAlt : '#2B7A5C',
+          color: applied ? theme.inkSoft : '#fff',
+          cursor: applied ? 'default' : 'pointer',
+          borderRadius: theme.radius.chip,
+          fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+        }}>{applied ? '✓ Applied' : 'Apply'}</button>
+    </div>
+  );
+}
+
+function AskCoachSheet({ theme, range, bucketLabel, data, targets, setTargets, onClose }) {
   const [messages, setMessages] = React.useState([
-    { role: 'assistant', text: `I can see your last ${data.length} ${range === 'Year' ? 'months' : 'days'} (${bucketLabel}). Ask me anything — patterns, anomalies, coaching, or just "recap".` },
+    { role: 'assistant', text: `I can see your last ${data.length} ${range === 'Year' ? 'months' : 'days'} (${bucketLabel}). Ask me anything — patterns, anomalies, coaching, or just "recap". If I suggest changes, you'll see an "Apply" button.` },
   ]);
   const [input, setInput] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -3411,7 +3452,7 @@ function AskCoachSheet({ theme, range, bucketLabel, data, targets, onClose }) {
 
   const systemPrompt = `You are a nutrition & wellness coach looking at a user's data.
 Range: ${range} · ${bucketLabel}
-Targets: kcal ${targets.kcal}, carbs ${targets.c}g, protein ${targets.p}g, fat ${targets.f}g
+Targets: kcal ${targets.kcal}, carbs ${targets.c}g, protein ${targets.p}g, fat ${targets.f}g, sat fat ${targets.satFat || 20}g, sugar ${targets.sugar || 50}g, fibre ${targets.fibre || 30}g
 Data (${data.length} rows): ${JSON.stringify(dataCtx)}
 
 Rules:
@@ -3420,7 +3461,35 @@ Rules:
 - If asked for a "recap" or "summary", give: kcal avg vs goal, protein adherence, notable streaks, and one suggestion.
 - If asked about patterns, use the data to compute correlations where plausible.
 - Never invent data. If uncertain, say so.
-- No disclaimers about not being a doctor.`;
+- No disclaimers about not being a doctor.
+
+ACTION PROPOSALS:
+If — and only if — you are recommending a specific, concrete change that would update the user's targets, end your reply with this marker on a new line:
+<<PROPOSALS>>
+[{"action":"set_target","key":"kcal|c|p|f|satFat|sugar|fibre","value":N,"why":"short reason"}]
+- Include 1-3 proposals at most.
+- Only include high-confidence recommendations; omit this block entirely if unsure.
+- The user will see each proposal with an "Apply" button — they decide.`;
+
+  const parseProposals = (text) => {
+    const idx = text.indexOf('<<PROPOSALS>>');
+    if (idx === -1) return { body: text, proposals: [] };
+    const body = text.slice(0, idx).trim();
+    const raw = text.slice(idx + '<<PROPOSALS>>'.length).trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+    try {
+      const p = JSON.parse(raw);
+      return { body, proposals: Array.isArray(p) ? p : [] };
+    } catch { return { body, proposals: [] }; }
+  };
+
+  const applyProposal = (prop) => {
+    if (prop.action === 'set_target' && prop.key && typeof prop.value === 'number') {
+      setTargets({ ...targets, [prop.key]: prop.value });
+      return true;
+    }
+    return false;
+  };
 
   const presets = [
     'Weekly recap',
@@ -3463,7 +3532,8 @@ Rules:
       }
       const j = await res.json();
       const text = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '(no reply)';
-      setMessages(m => [...m, { role: 'assistant', text }]);
+      const { body, proposals } = parseProposals(text);
+      setMessages(m => [...m, { role: 'assistant', text: body, proposals }]);
     } catch (e) {
       const msg = e.message === 'no-key'
         ? "Set your Anthropic API key in Profile → Settings first."
@@ -3508,14 +3578,36 @@ Rules:
         }}>
           {messages.map((m, i) => (
             <div key={i} style={{
-              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
-              padding: '10px 14px', borderRadius: 14,
-              background: m.role === 'user' ? theme.ink : theme.surface,
-              color: m.role === 'user' ? theme.bg : (m.error ? '#C0392B' : theme.ink),
-              fontFamily: theme.font, fontSize: 14, lineHeight: 1.45,
-              whiteSpace: 'pre-wrap',
-            }}>{m.text}</div>
+              alignSelf: m.role === 'user' ? 'flex-end' : 'stretch',
+              maxWidth: m.role === 'user' ? '85%' : '100%',
+              display: 'flex', flexDirection: 'column', gap: 6,
+            }}>
+              <div style={{
+                padding: '10px 14px', borderRadius: 14,
+                background: m.role === 'user' ? theme.ink : theme.surface,
+                color: m.role === 'user' ? theme.bg : (m.error ? '#C0392B' : theme.ink),
+                fontFamily: theme.font, fontSize: 14, lineHeight: 1.45,
+                whiteSpace: 'pre-wrap', alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '85%',
+              }}>{m.text}</div>
+              {m.proposals && m.proposals.length > 0 && (
+                <div style={{
+                  padding: '10px 12px', borderRadius: 12,
+                  background: 'rgba(79,138,112,0.10)', border: `1px solid rgba(79,138,112,0.35)`,
+                }}>
+                  <div style={{
+                    fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                    color: '#2B7A5C', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8,
+                  }}>Claude suggests</div>
+                  {m.proposals.map((p, pi) => (
+                    <ProposalRow key={pi} proposal={p} theme={theme}
+                      labelFor={(k)=>({kcal:'Calories',c:'Carbs',p:'Protein',f:'Fat',satFat:'Sat Fat',sugar:'Sugar',fibre:'Fibre'}[k]||k)}
+                      currentTargets={targets}
+                      onApply={() => applyProposal(p)}/>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
           {busy && (
             <div style={{ display: 'flex', gap: 4, padding: '4px 10px' }}>
@@ -3574,6 +3666,7 @@ Rules:
 // ── Wellness Strip Chart: all metrics on one synced timeline ──
 function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset, canGoBack, canGoForward, offset, exerciseLog = [] }) {
   const [drill, setDrill] = React.useState(null);
+  const [hidden, setHidden] = React.useState(() => new Set()); // keys of faded metrics
 
   // Index exercise minutes by date (YYYY-MM-DD)
   const exByDate = React.useMemo(() => {
@@ -3746,6 +3839,7 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
 
         {metrics.map((m, mi) => {
           const isHero = !!m.hero;
+          const isHidden = hidden.has(m.k);
           const stripH = isHero ? HERO_H : STRIP_H;
           const yTop = isHero ? 0 : HERO_H + 10 + (STRIP_H + 6) * (mi - 1);
           const yBottom = yTop + stripH;
@@ -3770,7 +3864,7 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
           const curVal = rows[curIdx]?.[m.k];
 
           return (
-            <g key={m.k}>
+            <g key={m.k} opacity={isHidden ? 0.2 : 1} style={{ transition: 'opacity 0.2s' }}>
               <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%"   stopColor={m.color} stopOpacity={isHero ? 0.28 : 0.18}/>
@@ -3803,8 +3897,17 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
                 {m.fmt(curVal)}{m.unit && <tspan fontSize={isHero ? 9 : 8} fill={theme.inkMute}> {m.unit}</tspan>}
               </text>
 
-              {/* Top-layer click target for drilldown (transparent) */}
-              <rect x={0} y={yTop} width={STRIP_W} height={stripH}
+              {/* Label-area click: toggle fade */}
+              <rect x={0} y={yTop} width={PAD_L} height={stripH}
+                fill="transparent" pointerEvents="all"
+                onClick={() => {
+                  const next = new Set(hidden);
+                  if (next.has(m.k)) next.delete(m.k); else next.add(m.k);
+                  setHidden(next);
+                }}
+                style={{ cursor: 'pointer' }}/>
+              {/* Plot-area click: open drilldown */}
+              <rect x={PAD_L} y={yTop} width={STRIP_W - PAD_L} height={stripH}
                 fill="transparent" pointerEvents="all"
                 onClick={() => setDrill(m)}
                 style={{ cursor: 'pointer' }}/>
@@ -5067,6 +5170,9 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
       c: Math.max(0, +draft.c || 0),
       p: Math.max(0, +draft.p || 0),
       f: Math.max(0, +draft.f || 0),
+      satFat: Math.max(0, +draft.satFat || 0),
+      sugar:  Math.max(0, +draft.sugar  || 0),
+      fibre:  Math.max(0, +draft.fibre  || 0),
     };
     setTargets(clean); setEditingGoals(false);
   };
@@ -5295,6 +5401,9 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
           ['Carbs', 'c', 'g', theme.macros.carbs],
           ['Protein', 'p', 'g', theme.macros.protein],
           ['Fat', 'f', 'g', theme.macros.fat],
+          ['Sat Fat', 'satFat', 'g', '#B8824A'],
+          ['Sugar',   'sugar',  'g', '#C25A8E'],
+          ['Fibre',   'fibre',  'g', '#5C9A6E'],
         ].map(([label, key, unit, color], i) => (
           <div key={key} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -5322,7 +5431,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
                 <span style={{
                   fontFamily: theme.numFont, fontSize: 16, fontWeight: theme.numWeight,
                   color: theme.ink, letterSpacing: theme.letter,
-                }}>{targets[key].toLocaleString()}</span>
+                }}>{(targets[key] ?? 0).toLocaleString()}</span>
                 <span style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkMute }}>{unit}</span>
               </div>
             )}
@@ -5336,9 +5445,9 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
             }}>Suggested presets</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {[
-                ['Cut', { kcal: 1800, c: 180, p: 160, f: 55 }],
-                ['Maintain', { kcal: 2150, c: 240, p: 160, f: 70 }],
-                ['Bulk', { kcal: 2600, c: 310, p: 180, f: 80 }],
+                ['Cut',      { kcal: 1800, c: 180, p: 160, f: 55, satFat: 18, sugar: 40, fibre: 30 }],
+                ['Maintain', { kcal: 2150, c: 240, p: 160, f: 70, satFat: 20, sugar: 50, fibre: 30 }],
+                ['Bulk',     { kcal: 2600, c: 310, p: 180, f: 80, satFat: 25, sugar: 60, fibre: 35 }],
               ].map(([label, preset]) => (
                 <button key={label} onClick={() => setDraft(preset)} style={{
                   padding: '6px 12px', borderRadius: 999,
@@ -6939,7 +7048,7 @@ function App({ session }) {
                 onAddExercise={() => setShowExercise(true)} />
             )}
             {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
-            {tab === 'progress' && <ProgressScreen theme={theme} targets={targets}
+            {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
               exerciseLog={exerciseLog} weightLog={weightLog} log={log} />}
             {tab === 'profile' && (
               <ProfileScreen theme={theme}
