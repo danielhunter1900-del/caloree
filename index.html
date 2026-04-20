@@ -1037,6 +1037,90 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
     window.addEventListener('caloree:foodschanged', h);
     return () => window.removeEventListener('caloree:foodschanged', h);
   }, []);
+
+  // Merge two meal entries into one combined entry
+  React.useEffect(() => {
+    const handler = async (e) => {
+      const { sourceId, targetId } = e.detail;
+      const src = log.find(x => x.id === sourceId);
+      const tgt = log.find(x => x.id === targetId);
+      if (!src || !tgt) return;
+      const fSrc = foodById(src.foodId);
+      const fTgt = foodById(tgt.foodId);
+      if (!fSrc || !fTgt) return;
+      const qS = src.qty || 1, qT = tgt.qty || 1;
+      const sum = (k) => (+(fSrc[k] || 0) * qS) + (+(fTgt[k] || 0) * qT);
+      const ingredients = [];
+      const ingsFrom = (food, qty) => {
+        if (Array.isArray(food.ingredients) && food.ingredients.length) {
+          food.ingredients.forEach(ing => ingredients.push({
+            ...ing,
+            kcal: (+ing.kcal || 0) * qty,
+            c: (+ing.c || 0) * qty,
+            p: (+ing.p || 0) * qty,
+            f: (+ing.f || 0) * qty,
+            satFat: (+ing.satFat || 0) * qty,
+            sugar: (+ing.sugar || 0) * qty,
+            fibre: (+ing.fibre || 0) * qty,
+            g: (+ing.g || 0) * qty,
+          }));
+        } else {
+          ingredients.push({
+            name: food.name, brand: food.brand,
+            kcal: (+food.kcal || 0) * qty,
+            c: (+food.c || 0) * qty,
+            p: (+food.p || 0) * qty,
+            f: (+food.f || 0) * qty,
+            satFat: (+food.satFat || 0) * qty,
+            sugar: (+food.sugar || 0) * qty,
+            fibre: (+food.fibre || 0) * qty,
+            g: (+food.servingG || 100) * qty,
+          });
+        }
+      };
+      ingsFrom(fTgt, qT);
+      ingsFrom(fSrc, qS);
+      const newId = 'ai_merge_' + Date.now();
+      const merged = {
+        id: newId,
+        name: `${fTgt.name} + ${fSrc.name}`,
+        brand: 'Combined',
+        servingG: (+(fTgt.servingG || 100) * qT) + (+(fSrc.servingG || 100) * qS),
+        kcal: sum('kcal'), c: sum('c'), p: sum('p'), f: sum('f'),
+        satFat: sum('satFat'), sugar: sum('sugar'), fibre: sum('fibre'),
+        ingredients,
+        photo: fTgt.photo || fSrc.photo || null,
+        photoPath: fTgt.photoPath || fSrc.photoPath || null,
+      };
+      FOODS.push(merged);
+      const newEntry = {
+        id: 'l_' + newId, foodId: newId, qty: 1,
+        meal: tgt.meal, time: tgt.time || src.time || '',
+        date: tgt.date || src.date,
+      };
+      setLog(prev => [...prev.filter(x => x.id !== sourceId && x.id !== targetId), newEntry]);
+      // Sync to Supabase
+      if (window.sb && session) {
+        const uid = session.user.id;
+        try {
+          await window.sb.from('foods').upsert([{
+            id: newId, user_id: uid,
+            name: merged.name, brand: merged.brand,
+            serving_g: merged.servingG,
+            kcal: merged.kcal, c: merged.c, p: merged.p, f: merged.f,
+            sat_fat: merged.satFat, sugar: merged.sugar, fibre: merged.fibre,
+            ingredients: merged.ingredients, photo_path: merged.photoPath,
+          }], { onConflict: 'id' });
+          // Delete old log rows
+          await window.sb.from('meal_logs').delete().in('id', [sourceId, targetId]);
+        } catch (err) { console.warn('merge sync:', err.message); }
+      }
+      window.dispatchEvent(new Event('caloree:foodschanged'));
+      window.showToast && window.showToast(`Merged into "${merged.name}"`);
+    };
+    window.addEventListener('caloree:merge-meals', handler);
+    return () => window.removeEventListener('caloree:merge-meals', handler);
+  }, [log, session]);
   const toggleFavourite = async (foodId) => {
     const f = FOODS.find(x => x.id === foodId);
     if (!f) return;
@@ -1967,34 +2051,27 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
   const [dragOver, setDragOver] = React.useState(false);
   const sectionRef = React.useRef(null);
 
-  // Touch drop detection — listen to global drag events
+  // Just for visual feedback during touch drag
   React.useEffect(() => {
     const handler = (e) => {
       if (!sectionRef.current) return;
       const r = sectionRef.current.getBoundingClientRect();
       const x = e.detail.x, y = e.detail.y;
       const inside = x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-      if (e.type === 'caloree:touchdrag-move') {
-        setDragOver(inside);
-      } else if (e.type === 'caloree:touchdrag-drop') {
-        if (inside && e.detail.id) onMoveEntry && onMoveEntry(e.detail.id, meal);
-        setDragOver(false);
-      } else if (e.type === 'caloree:touchdrag-end') {
-        setDragOver(false);
-      }
+      if (e.type === 'caloree:touchdrag-move') setDragOver(inside);
+      else setDragOver(false);
     };
     window.addEventListener('caloree:touchdrag-move', handler);
-    window.addEventListener('caloree:touchdrag-drop', handler);
     window.addEventListener('caloree:touchdrag-end', handler);
     return () => {
       window.removeEventListener('caloree:touchdrag-move', handler);
-      window.removeEventListener('caloree:touchdrag-drop', handler);
       window.removeEventListener('caloree:touchdrag-end', handler);
     };
-  }, [meal, onMoveEntry]);
+  }, [meal]);
 
   return (
     <div ref={sectionRef}
+      data-meal-section={meal}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
@@ -2122,11 +2199,26 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
     if (touchDragRef.current.active) {
       const t = e.changedTouches[0];
-      window.dispatchEvent(new CustomEvent('caloree:touchdrag-drop', {
-        detail: { x: t.clientX, y: t.clientY, id: entry.id }
-      }));
-      if (touchDragRef.current.ghost) {
-        document.body.removeChild(touchDragRef.current.ghost);
+      // Use elementFromPoint to decide between merge (drop on row) vs move (drop on section)
+      // Hide the ghost briefly so it doesn't intercept hit-test
+      if (touchDragRef.current.ghost) touchDragRef.current.ghost.style.display = 'none';
+      const target = document.elementFromPoint(t.clientX, t.clientY);
+      const targetRow = target?.closest('[data-meal-row-id]');
+      const targetSection = target?.closest('[data-meal-section]');
+      const targetRowId = targetRow?.getAttribute('data-meal-row-id');
+      const targetMeal = targetSection?.getAttribute('data-meal-section');
+      if (targetRowId && targetRowId !== entry.id) {
+        // Merge with that row
+        window.dispatchEvent(new CustomEvent('caloree:merge-meals', {
+          detail: { sourceId: entry.id, targetId: targetRowId }
+        }));
+      } else if (targetMeal && targetMeal !== entry.meal) {
+        // Move to that section
+        if (onMoveEntry) onMoveEntry(entry.id, targetMeal);
+      }
+      // Cleanup
+      if (touchDragRef.current.ghost && touchDragRef.current.ghost.parentNode) {
+        touchDragRef.current.ghost.parentNode.removeChild(touchDragRef.current.ghost);
       }
       window.dispatchEvent(new CustomEvent('caloree:touchdrag-end', { detail: {} }));
       touchDragRef.current = { active: false, ghost: null, startX: 0, startY: 0 };
@@ -2153,10 +2245,31 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
     setOffset(offset < -45 ? -80 : 0);
   };
 
+  // Highlight when another row hovers over this one
+  const [mergeHover, setMergeHover] = React.useState(false);
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (touchDragRef.current.active) { setMergeHover(false); return; }
+      const t = document.elementFromPoint(e.detail.x, e.detail.y);
+      const overRow = t?.closest(`[data-meal-row-id="${entry.id}"]`);
+      const sourceId = e.detail.id;
+      setMergeHover(!!overRow && sourceId && sourceId !== entry.id);
+    };
+    const reset = () => setMergeHover(false);
+    window.addEventListener('caloree:touchdrag-move', handler);
+    window.addEventListener('caloree:touchdrag-end', reset);
+    return () => {
+      window.removeEventListener('caloree:touchdrag-move', handler);
+      window.removeEventListener('caloree:touchdrag-end', reset);
+    };
+  }, [entry.id]);
+
   return (
-    <div style={{
+    <div data-meal-row-id={entry.id} style={{
       position: 'relative', overflow: 'hidden',
       borderBottom: isLast ? 'none' : `0.5px solid ${theme.line}`,
+      background: mergeHover ? 'rgba(79,138,112,0.20)' : 'transparent',
+      transition: 'background 0.15s',
     }}>
       <button onClick={onDelete} style={{
         position: 'absolute', right: 0, top: 0, bottom: 0, width: 80,
