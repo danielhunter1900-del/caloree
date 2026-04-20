@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1592,6 +1592,21 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
             fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
           }}>{selectedIds.size} selected</span>
           <div style={{ flex: 1 }}/>
+          <button onClick={() => {
+            const n = selectedIds.size;
+            if (!confirm(`Delete ${n} selected item${n === 1 ? '' : 's'}? This can be undone with the toast.`)) return;
+            const ids = [...selectedIds];
+            const removed = log.filter(e => ids.includes(e.id));
+            setLog(log.filter(e => !ids.includes(e.id)));
+            exitSelectMode();
+            window.showToast(`Removed ${n} item${n === 1 ? '' : 's'}`, () => {
+              setLog(prev => [...prev, ...removed]);
+            });
+          }} style={{
+            padding: '8px 14px', border: `1px solid #F3CFCA`,
+            background: 'transparent', color: '#B3261E', cursor: 'pointer',
+            borderRadius: 999, fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+          }}>Delete</button>
           <button onClick={() => { setPickAction('move'); setPickDate(todayIso); }} style={{
             padding: '8px 14px', border: `1px solid ${theme.line}`,
             background: theme.surfaceAlt, color: theme.ink, cursor: 'pointer',
