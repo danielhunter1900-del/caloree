@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1627,32 +1627,33 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            width: '100%', maxWidth: 320, background: theme.surface,
-            borderRadius: 16, padding: '18px 18px 20px',
+            width: '100%', maxWidth: 280, background: theme.surface,
+            borderRadius: 12, padding: '14px 14px 14px',
           }}>
             <div style={{
-              fontFamily: theme.titleFont, fontSize: 16, fontWeight: theme.titleWeight,
-              color: theme.ink, marginBottom: 4,
+              fontFamily: theme.titleFont, fontSize: 15, fontWeight: theme.titleWeight,
+              color: theme.ink, marginBottom: 2,
             }}>{pickAction === 'copy' ? 'Copy to' : 'Move to'}</div>
             <div style={{
-              fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginBottom: 12,
+              fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginBottom: 10,
             }}>{selectedIds.size} selected · {pickAction === 'copy' ? 'duplicates them on the new date' : 'moves them off this date'}</div>
             <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)}
               style={{
-                width: '100%', padding: '10px 12px', marginBottom: 12,
-                border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
-                fontSize: 14, outline: 'none', background: theme.bg, color: theme.ink,
+                width: '100%', padding: '7px 10px', marginBottom: 10,
+                border: `1px solid ${theme.line}`, borderRadius: 8,
+                fontSize: 13, outline: 'none', background: theme.bg, color: theme.ink,
+                boxSizing: 'border-box',
               }}/>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={() => setPickAction(null)} style={{
-                flex: 1, padding: '10px 0', border: `1px solid ${theme.line}`,
+                flex: 1, padding: '8px 0', border: `1px solid ${theme.line}`,
                 background: 'transparent', color: theme.inkSoft,
-                borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}>Cancel</button>
               <button onClick={performAction} style={{
-                flex: 1, padding: '10px 0', border: 'none',
+                flex: 1, padding: '8px 0', border: 'none',
                 background: theme.accent, color: theme.accentInk,
-                borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}>{pickAction === 'copy' ? 'Copy' : 'Move'}</button>
             </div>
           </div>
@@ -3322,22 +3323,30 @@ function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood, onUseAI }) 
 
       {/* Results / recent */}
       <div style={{ flex: 1, overflow: 'auto', padding: '8px 0 100px' }}>
-        {!query && (() => {
+        {(() => {
+          const q = query.trim().toLowerCase();
           const favs = FOODS.filter(f => f.isFavourite);
-          if (!favs.length) return null;
+          const matchingFavs = q
+            ? favs.filter(f =>
+                (f.name || '').toLowerCase().includes(q) ||
+                (f.brand || '').toLowerCase().includes(q))
+            : favs;
+          if (!matchingFavs.length) return null;
           return (
             <>
-              <SectionHeader theme={theme}>★ Favourites</SectionHeader>
+              <SectionHeader theme={theme}>
+                ★ Favourites{q ? ` · ${matchingFavs.length} match${matchingFavs.length === 1 ? '' : 'es'}` : ''}
+              </SectionHeader>
               <div style={{ margin: '0 16px 14px', background: theme.surface,
                 borderRadius: theme.radius.card, overflow: 'hidden',
                 border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
               }}>
-                {favs.map((f, i) => (
+                {matchingFavs.map((f, i) => (
                   <FoodResultRow key={f.id} food={f} theme={theme}
                     onTap={() => onOpenFood(f.id, meal)}
                     onAdd={() => onAdd({ foodId: f.id, qty: 1, meal })}
-                    isLast={i === favs.length - 1}
-                    query=""
+                    isLast={i === matchingFavs.length - 1}
+                    query={query}
                   />
                 ))}
               </div>
@@ -10586,6 +10595,26 @@ function App({ session }) {
       } catch (err) { console.warn('past-date sync:', err.message); }
     }
     setTab('home');
+    // One-tap undo of the last AI batch
+    if (newEntries.length && window.showToast) {
+      const entryIds = newEntries.map(e => e.id);
+      const foodIds  = newFoods.map(f => f.id);
+      window.showToast(
+        `Logged ${newEntries.length} AI item${newEntries.length === 1 ? '' : 's'}`,
+        async () => {
+          setLog(prev => prev.filter(e => !entryIds.includes(e.id)));
+          for (let i = FOODS.length - 1; i >= 0; i--) {
+            if (foodIds.includes(FOODS[i].id)) FOODS.splice(i, 1);
+          }
+          if (window.sb && session) {
+            try {
+              await window.sb.from('meal_logs').delete().in('id', entryIds);
+              await window.sb.from('foods').delete().in('id', foodIds);
+            } catch (e) { console.warn('undo sync:', e.message); }
+          }
+        },
+      );
+    }
   };
 
   return (
