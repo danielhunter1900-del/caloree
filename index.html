@@ -3633,7 +3633,174 @@ function bucketFor(range, offset) {
 function monthShort(m) { return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m]; }
 function monthLong(m) { return ['January','February','March','April','May','June','July','August','September','October','November','December'][m]; }
 
-function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], log = [] }) {
+function WeightCard({ theme, weightLog, setWeightLog, targets }) {
+  const [showWeightEntry, setShowWeightEntry] = React.useState(false);
+  const [askWeight, setAskWeight] = React.useState(false);
+
+  const latest = weightLog[weightLog.length - 1];
+  const first = weightLog[0];
+  const delta = latest && first ? (latest.kg - first.kg) : 0;
+  const todayMs = Date.now();
+  const lastDate = latest ? new Date(latest.iso) : null;
+  const daysSince = lastDate ? Math.floor((todayMs - lastDate.getTime()) / 86400000) : null;
+  const needsUpdate = daysSince != null && daysSince >= 10;
+
+  const weightTrend = (() => {
+    if (weightLog.length < 2) return null;
+    const cutoff = todayMs - 28 * 86400000;
+    const pts = weightLog
+      .map(w => ({ t: new Date(w.iso).getTime(), kg: +w.kg }))
+      .filter(p => p.t >= cutoff)
+      .sort((a, b) => a.t - b.t);
+    if (pts.length < 2) return null;
+    const n = pts.length;
+    const mx = pts.reduce((s, p) => s + p.t, 0) / n;
+    const my = pts.reduce((s, p) => s + p.kg, 0) / n;
+    let num = 0, den = 0;
+    pts.forEach(p => { num += (p.t - mx) * (p.kg - my); den += (p.t - mx) ** 2; });
+    const slope = den ? num / den : 0;
+    const perWeek = slope * 7 * 86400000;
+    const spanDays = Math.round((pts[pts.length - 1].t - pts[0].t) / 86400000);
+    return { perWeek, spanDays, count: pts.length };
+  })();
+
+  const wMin = weightLog.length ? Math.min(...weightLog.map(w => w.kg)) - 0.5 : 0;
+  const wMax = weightLog.length ? Math.max(...weightLog.map(w => w.kg)) + 0.5 : 1;
+
+  return (
+    <React.Fragment>
+      <div style={{
+        margin: '0 16px 12px', padding: '18px 20px',
+        background: theme.surface, borderRadius: theme.radius.card,
+        border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{
+              fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+            }}>Current weight</div>
+            <div style={{
+              fontFamily: theme.numFont, fontSize: 36, fontWeight: theme.numWeight,
+              color: theme.ink, letterSpacing: theme.letter, lineHeight: 1.1, marginTop: 4,
+            }}>{latest ? latest.kg.toFixed(1) : '—'}<span style={{
+              fontSize: 14, color: theme.inkMute, marginLeft: 4, fontWeight: 400,
+            }}>kg</span></div>
+            {latest && first && first !== latest && (
+              <div style={{
+                fontFamily: theme.font, fontSize: 12,
+                color: delta < 0 ? theme.macros.protein : theme.inkSoft, marginTop: 2,
+              }}>
+                {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg since first entry
+              </div>
+            )}
+            {!latest && (
+              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkMute, marginTop: 2 }}>
+                Tap "Log weight" to start
+              </div>
+            )}
+            {weightTrend && Math.abs(weightTrend.perWeek) > 0.02 && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                marginTop: 8, padding: '4px 10px',
+                background: Math.abs(weightTrend.perWeek) < 0.8 ? 'rgba(79,138,112,0.15)' : 'rgba(224,162,74,0.15)',
+                borderRadius: theme.radius.chip,
+                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+                color: Math.abs(weightTrend.perWeek) < 0.8 ? '#2B7A5C' : '#8A5A1F',
+                letterSpacing: '0.04em',
+              }}>
+                {weightTrend.perWeek < 0 ? '↓' : '↑'}
+                {' '}{Math.abs(weightTrend.perWeek).toFixed(2)} kg/wk
+                <span style={{ color: theme.inkMute, fontWeight: 500 }}>· {weightTrend.spanDays}d</span>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setShowWeightEntry(true)} style={{
+            padding: '10px 14px', borderRadius: theme.radius.btn,
+            background: theme.ink, color: theme.surface, border: 'none',
+            fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            letterSpacing: theme.letter,
+          }}>Log weight</button>
+        </div>
+
+        {weightLog.length > 0 && (
+          <div style={{
+            marginTop: 18, height: 80, position: 'relative',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 4,
+          }}>
+            {weightLog.map((w, i) => {
+              const h = wMax > wMin ? ((w.kg - wMin) / (wMax - wMin)) * 100 : 50;
+              const isLast = i === weightLog.length - 1;
+              return (
+                <div key={w.iso + '_' + i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+                  <div style={{
+                    width: 6, height: `${h}%`,
+                    background: isLast ? theme.accent : theme.surfaceAlt,
+                    border: isLast ? 'none' : `1px solid ${theme.line}`,
+                    borderRadius: theme.name === 'Editorial' ? 0 : 3,
+                  }}/>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {weightLog.length >= 2 && (
+          <button onClick={() => setAskWeight(true)} style={{
+            width: '100%', marginTop: 14, padding: '10px 14px',
+            border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+            color: theme.ink, cursor: 'pointer',
+            borderRadius: theme.radius.btn,
+            fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z"
+                stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round"
+                fill={theme.accent} fillOpacity={0.12}/>
+            </svg>
+            Ask Claude about my weight trend
+          </button>
+        )}
+
+        {needsUpdate && (
+          <div style={{
+            marginTop: 14, padding: '10px 12px',
+            background: theme.surfaceAlt, borderRadius: theme.radius.btn,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: 3, background: theme.accent, flexShrink: 0,
+            }}/>
+            <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, flex: 1 }}>
+              Last weigh-in was {daysSince} days ago. Log a new one to keep your trend accurate.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {askWeight && (
+        <AskWeightSheet theme={theme}
+          weightLog={weightLog} targets={targets}
+          onClose={() => setAskWeight(false)}/>
+      )}
+
+      {showWeightEntry && (
+        <WeightEntrySheet theme={theme}
+          onClose={() => setShowWeightEntry(false)}
+          onSave={kg => {
+            const iso = new Date().toISOString().slice(0, 10);
+            const filtered = weightLog.filter(w => w.iso !== iso);
+            setWeightLog([...filtered, { iso, kg }].sort((a, b) => a.iso.localeCompare(b.iso)));
+            setShowWeightEntry(false);
+          }}
+          current={latest ? latest.kg : 75}/>
+      )}
+    </React.Fragment>
+  );
+}
+
+function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], setWeightLog, log = [] }) {
   const [range, setRange] = useStateProg('Week');
   const [offset, setOffset] = useStateProg(0);
   const [selIdx, setSelIdx] = useStateProg(null); // index within bucket
@@ -3950,6 +4117,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           canGoBack={canGoBack} canGoForward={canGoForward}
           offset={offset} exerciseLog={exerciseLog} />
       )}
+
+      {/* Weight (moved from Profile) */}
+      <WeightCard theme={theme} weightLog={weightLog} setWeightLog={setWeightLog} targets={targets} />
 
       {/* Ask Claude */}
       <div style={{ margin: '0 16px 12px' }}>
@@ -5920,7 +6090,6 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
 
   const [editingGoals, setEditingGoals] = useStateProfile(false);
   const [draft, setDraft] = useStateProfile(targets);
-  const [showWeightEntry, setShowWeightEntry] = useStateProfile(false);
 
   React.useEffect(() => { if (!editingGoals) setDraft(targets); }, [targets, editingGoals]);
 
@@ -5938,41 +6107,6 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
     };
     setTargets(clean); setEditingGoals(false);
   };
-
-  // Derived: current weight trend
-  const latest = weightLog[weightLog.length - 1];
-  const first = weightLog[0];
-  const delta = latest && first ? (latest.kg - first.kg) : 0;
-  const lastDate = latest ? new Date(latest.iso) : null;
-  const daysSince = lastDate ? Math.floor((new Date('2026-04-18') - lastDate) / 86400000) : null;
-  const needsUpdate = daysSince != null && daysSince >= 10;
-
-  // Trend: linear regression over last 4 weeks
-  const weightTrend = (() => {
-    if (weightLog.length < 2) return null;
-    const todayMs = new Date('2026-04-18').getTime();
-    const cutoff = todayMs - 28 * 86400000;
-    const pts = weightLog
-      .map(w => ({ t: new Date(w.iso).getTime(), kg: +w.kg }))
-      .filter(p => p.t >= cutoff)
-      .sort((a, b) => a.t - b.t);
-    if (pts.length < 2) return null;
-    // Least-squares slope (kg per ms) → kg per week
-    const n = pts.length;
-    const mx = pts.reduce((s, p) => s + p.t, 0) / n;
-    const my = pts.reduce((s, p) => s + p.kg, 0) / n;
-    let num = 0, den = 0;
-    pts.forEach(p => { num += (p.t - mx) * (p.kg - my); den += (p.t - mx) ** 2; });
-    const slope = den ? num / den : 0;
-    const perWeek = slope * 7 * 86400000;
-    const spanDays = Math.round((pts[pts.length - 1].t - pts[0].t) / 86400000);
-    return { perWeek, spanDays, count: pts.length };
-  })();
-  const [askWeight, setAskWeight] = useStateProfile(false);
-
-  // Chart scaling
-  const wMin = weightLog.length ? Math.min(...weightLog.map(w => w.kg)) - 0.5 : 0;
-  const wMax = weightLog.length ? Math.max(...weightLog.map(w => w.kg)) + 0.5 : 1;
 
   const [displayName, setDisplayName] = useStateProfile(() =>
     localStorage.getItem('cal_display_name') || 'Alex Rivera'
@@ -6031,120 +6165,6 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
             </div>
           )}
         </div>
-      </div>
-
-      {/* Weight card */}
-      <div style={{
-        margin: '0 16px 12px', padding: '18px 20px',
-        background: theme.surface, borderRadius: theme.radius.card,
-        border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{
-              fontFamily: theme.font, fontSize: 11, fontWeight: 600,
-              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
-            }}>Current weight</div>
-            <div style={{
-              fontFamily: theme.numFont, fontSize: 36, fontWeight: theme.numWeight,
-              color: theme.ink, letterSpacing: theme.letter, lineHeight: 1.1, marginTop: 4,
-            }}>{latest ? latest.kg.toFixed(1) : '—'}<span style={{
-              fontSize: 14, color: theme.inkMute, marginLeft: 4, fontWeight: 400,
-            }}>kg</span></div>
-            {latest && first && (
-              <div style={{
-                fontFamily: theme.font, fontSize: 12,
-                color: delta < 0 ? theme.macros.protein : theme.inkSoft, marginTop: 2,
-              }}>
-                {delta > 0 ? '+' : ''}{delta.toFixed(1)} kg since first entry
-              </div>
-            )}
-            {!latest && (
-              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkMute, marginTop: 2 }}>
-                Tap "Log weight" to start
-              </div>
-            )}
-            {weightTrend && Math.abs(weightTrend.perWeek) > 0.02 && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                marginTop: 8, padding: '4px 10px',
-                background: Math.abs(weightTrend.perWeek) < 0.8 ? 'rgba(79,138,112,0.15)' : 'rgba(224,162,74,0.15)',
-                borderRadius: theme.radius.chip,
-                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
-                color: Math.abs(weightTrend.perWeek) < 0.8 ? '#2B7A5C' : '#8A5A1F',
-                letterSpacing: '0.04em',
-              }}>
-                {weightTrend.perWeek < 0 ? '↓' : '↑'}
-                {' '}{Math.abs(weightTrend.perWeek).toFixed(2)} kg/wk
-                <span style={{ color: theme.inkMute, fontWeight: 500 }}>· {weightTrend.spanDays}d</span>
-              </div>
-            )}
-          </div>
-          <button onClick={() => setShowWeightEntry(true)} style={{
-            padding: '10px 14px', borderRadius: theme.radius.btn,
-            background: theme.ink, color: theme.surface, border: 'none',
-            fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            letterSpacing: theme.letter,
-          }}>Log weight</button>
-        </div>
-
-        {/* Tiny weight chart */}
-        <div style={{
-          marginTop: 18, height: 80, position: 'relative',
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 4,
-        }}>
-          {weightLog.map((w, i) => {
-            const h = ((w.kg - wMin) / (wMax - wMin)) * 100;
-            const isLast = i === weightLog.length - 1;
-            return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
-                <div style={{
-                  width: 6, height: `${h}%`,
-                  background: isLast ? theme.accent : theme.surfaceAlt,
-                  border: isLast ? 'none' : `1px solid ${theme.line}`,
-                  borderRadius: theme.name === 'Editorial' ? 0 : 3,
-                }}/>
-              </div>
-            );
-          })}
-        </div>
-
-        <button onClick={() => setAskWeight(true)} style={{
-          width: '100%', marginTop: 14, padding: '10px 14px',
-          border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
-          color: theme.ink, cursor: 'pointer',
-          borderRadius: theme.radius.btn,
-          fontFamily: theme.font, fontSize: 12, fontWeight: 600,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z"
-              stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round"
-              fill={theme.accent} fillOpacity={0.12}/>
-          </svg>
-          Ask Claude about my weight trend
-        </button>
-
-        {askWeight && (
-          <AskWeightSheet theme={theme}
-            weightLog={weightLog} targets={targets}
-            onClose={() => setAskWeight(false)}/>
-        )}
-
-        {needsUpdate && (
-          <div style={{
-            marginTop: 14, padding: '10px 12px',
-            background: theme.surfaceAlt, borderRadius: theme.radius.btn,
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: 3, background: theme.accent, flexShrink: 0,
-            }}/>
-            <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, flex: 1 }}>
-              Last weigh-in was {daysSince} days ago. Log a new one to keep your trend accurate.
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Goals card */}
@@ -6300,7 +6320,15 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         {[
           [exportBusy ? 'Exporting…' : 'Export all data (JSON)', null, exportAllJSON],
           ['Export meals as CSV', null, exportCSV],
-          ['Sign out', theme.accent, () => window.sb.auth.signOut()],
+          ['Sign out', theme.accent, () => {
+            // Clear user-scoped caches so a different account can't inherit them
+            ['cal_log', 'cal_ai_foods', 'cal_weight', 'cal_exercise',
+             'cal_wellness_map', 'cal_wellness_open', 'cal_target_history',
+             'cal_targets', 'cal_settings', 'cal_marked_complete',
+             'cal_favourite_ids', 'cal_display_name', 'cal_bulk_draft']
+              .forEach(k => { try { localStorage.removeItem(k); } catch {} });
+            window.sb.auth.signOut();
+          }],
         ].map(([label, color, onClick], i, arr) => (
           <div key={label} onClick={onClick || undefined} style={{
             padding: '14px 18px',
@@ -6324,17 +6352,6 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         fontFamily: theme.font, fontSize: 11, color: theme.inkMute, letterSpacing: '0.1em',
       }}>CALOREE · v0.1.0</div>
 
-      {showWeightEntry && (
-        <WeightEntrySheet theme={theme}
-          onClose={() => setShowWeightEntry(false)}
-          onSave={kg => {
-            const iso = new Date('2026-04-18').toISOString().slice(0, 10);
-            const filtered = weightLog.filter(w => w.iso !== iso);
-            setWeightLog([...filtered, { iso, kg }]);
-            setShowWeightEntry(false);
-          }}
-          current={latest ? latest.kg : 75}/>
-      )}
     </div>
   );
 }
@@ -6386,7 +6403,7 @@ function WeightEntrySheet({ theme, onClose, onSave, current }) {
           textTransform: theme.name === 'Editorial' ? 'uppercase' : 'none',
         }}>Log weight</div>
         <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.inkSoft, marginBottom: 24 }}>
-          Today · April 18, 2026
+          Today · {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
         </div>
         <div style={{
           display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6,
@@ -8005,7 +8022,9 @@ function App({ session }) {
         if (profileR.data.theme) setThemeKey(profileR.data.theme);
         if (Array.isArray(profileR.data.target_history)) setTargetHistory(profileR.data.target_history);
       }
-      if (weightR.data && weightR.data.length) {
+      if (weightR.data) {
+        // Always replace local state with cloud (even empty), so a previous
+        // account's cal_weight cache can't bleed into a new session.
         setWeightLog(weightR.data.map(w => ({ iso: w.iso, kg: +w.kg })));
       }
       // (wellness map populated via allWellness query below)
@@ -8296,7 +8315,7 @@ function App({ session }) {
             )}
             {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
-              exerciseLog={exerciseLog} weightLog={weightLog} log={log} />}
+              exerciseLog={exerciseLog} weightLog={weightLog} setWeightLog={setWeightLog} log={log} />}
             {tab === 'profile' && (
               <ProfileScreen theme={theme}
                 themeKey={themeKey} setThemeKey={setThemeKey}

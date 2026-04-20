@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="420" height="560" fill="#F7F5F0"/>
+
+  <!-- Card -->
+  <g transform="translate(16 20)">
+    <rect width="388" height="310" rx="14" fill="#FFFFFF"/>
+    <text x="18" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">CADENCE · APR</text>
+    <text x="18" y="42" font-size="10" fill="#9A9A95">Tap a cell → open that day · Tap row → filter bars above</text>
+
+    <!-- Row labels -->
+    <g transform="translate(18 75)" font-size="11" font-weight="600" fill="#1A1A1A">
+      <text x="0" y="11">🏃 Run</text>
+      <text x="0" y="43" fill="#D96B5C" font-weight="700">🏋️ Strength</text>
+      <text x="0" y="75">🚴 Cycling</text>
+      <text x="0" y="107">🧘 Mobility</text>
+      <text x="0" y="139">🤸 Calis.</text>
+      <text x="0" y="171">🔥 HIIT</text>
+    </g>
+
+    <!-- Cells: Strength row highlighted (selected row), one cell highlighted further -->
+    <g transform="translate(82 66)">
+      <!-- Run -->
+      <g>
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="0.85"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="0.4"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="0.7"/>
+        <rect x="45"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="1"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="0.6"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#5FA8C9" opacity="0.4"/>
+      </g>
+      <!-- Strength row (selected — bold outline) -->
+      <g transform="translate(0 26)">
+        <rect x="-3" y="-3" width="284" height="20" rx="4" fill="none" stroke="#D96B5C" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.6"/>
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#D96B5C" opacity="0.85"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#D96B5C" opacity="0.7"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <!-- Selected cell — with darker outline -->
+        <rect x="43"  y="-2" width="12" height="18" rx="2" fill="#D96B5C" stroke="#1A1A1A" stroke-width="2"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#D96B5C" opacity="0.85"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+      </g>
+      <!-- Cycling -->
+      <g transform="translate(0 52)">
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#7A8BD1" opacity="0.85"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="45"  y="0" width="8" height="14" rx="1.5" fill="#7A8BD1" opacity="1"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#7A8BD1" opacity="0.6"/>
+      </g>
+      <!-- Mobility -->
+      <g transform="translate(0 78)">
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="45"  y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#5C9A6E" opacity="0.4"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+      </g>
+      <g transform="translate(0 104)">
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#E0A24A" opacity="0.5"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#E0A24A" opacity="0.7"/>
+        <rect x="45"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#E0A24A" opacity="0.6"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+      </g>
+      <g transform="translate(0 130)">
+        <rect x="0"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="9"   y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="18"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="27"  y="0" width="8" height="14" rx="1.5" fill="#C25A8E" opacity="0.85"/>
+        <rect x="36"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="45"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="54"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="63"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="72"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+        <rect x="81"  y="0" width="8" height="14" rx="1.5" fill="#ECECE8"/>
+      </g>
+    </g>
+
+    <!-- Tooltip / detail sheet anchored to selected cell -->
+    <g transform="translate(130 210)">
+      <path d="M 0 8 L 10 0 L 20 8 Z" fill="#1A1A1A"/>
+      <rect width="238" height="82" y="8" rx="10" fill="#1A1A1A"/>
+      <text x="16" y="30" font-size="11" font-weight="700" fill="#F7F5F0" letter-spacing="1">APR 10 · STRENGTH</text>
+      <text x="16" y="52" font-size="13" fill="#F7F5F0">Upper body · 45 min · 312 kcal</text>
+      <text x="16" y="70" font-size="11" fill="#9A9A95">Tap again → open this day on Home</text>
+      <text x="220" y="30" text-anchor="end" font-size="16" fill="#F7F5F0">×</text>
+    </g>
+  </g>
+
+  <!-- Callout explaining interactions -->
+  <g transform="translate(16 350)">
+    <rect width="388" height="160" rx="10" fill="#FFFFFF"/>
+    <text x="18" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">INTERACTIONS</text>
+
+    <g transform="translate(18 40)">
+      <circle cx="6" cy="10" r="3" fill="#1A1A1A"/>
+      <text x="18" y="14" font-size="12" fill="#1A1A1A" font-weight="600">Tap cell</text>
+      <text x="88" y="14" font-size="12" fill="#5C5C58">→ detail popover, tap again jumps to day</text>
+    </g>
+    <g transform="translate(18 66)">
+      <circle cx="6" cy="10" r="3" fill="#1A1A1A"/>
+      <text x="18" y="14" font-size="12" fill="#1A1A1A" font-weight="600">Tap row label</text>
+      <text x="116" y="14" font-size="12" fill="#5C5C58">→ filter stacked bars to that type</text>
+    </g>
+    <g transform="translate(18 92)">
+      <circle cx="6" cy="10" r="3" fill="#1A1A1A"/>
+      <text x="18" y="14" font-size="12" fill="#1A1A1A" font-weight="600">Empty-type rows</text>
+      <text x="140" y="14" font-size="12" fill="#5C5C58">→ hidden (only render types with data)</text>
+    </g>
+    <g transform="translate(18 118)">
+      <circle cx="6" cy="10" r="3" fill="#1A1A1A"/>
+      <text x="18" y="14" font-size="12" fill="#1A1A1A" font-weight="600">Intensity scale</text>
+      <text x="128" y="14" font-size="12" fill="#5C5C58">→ per-row (normalize by row max)</text>
+    </g>
+  </g>
+</svg>

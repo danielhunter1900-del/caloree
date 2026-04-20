@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 520" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="420" height="520" fill="#F7F5F0"/>
+  <text x="20" y="28" font-size="13" font-weight="600" fill="#1A1A1A">9:41</text>
+  <text x="20" y="72" font-size="32" font-weight="700" fill="#1A1A1A" letter-spacing="-0.5">Trends</text>
+
+  <!-- Range pills: Year selected -->
+  <g transform="translate(20 92)">
+    <rect width="60" height="32" rx="16" fill="transparent" stroke="#D8D4CB"/>
+    <text x="30" y="21" text-anchor="middle" font-size="13" font-weight="600" fill="#9A9A95">Week</text>
+    <rect x="68" width="66" height="32" rx="16" fill="transparent" stroke="#D8D4CB"/>
+    <text x="101" y="21" text-anchor="middle" font-size="13" font-weight="600" fill="#9A9A95">Month</text>
+    <rect x="142" width="56" height="32" rx="16" fill="#1A1A1A"/>
+    <text x="170" y="21" text-anchor="middle" font-size="13" font-weight="600" fill="#F7F5F0">Year</text>
+  </g>
+  <text x="20" y="146" font-size="13" fill="#9A9A95">2026</text>
+
+  <!-- Ribbon card -->
+  <g transform="translate(16 166)">
+    <rect width="388" height="200" rx="14" fill="#FFFFFF"/>
+    <text x="18" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">ACTIVITY · 2026</text>
+    <text x="18" y="42" font-size="10" fill="#9A9A95">Each cell = 1 day · darker = more total minutes</text>
+
+    <!-- Month labels -->
+    <g transform="translate(28 60)" font-size="9" fill="#9A9A95">
+      <text x="0">Jan</text><text x="30">Feb</text><text x="60">Mar</text><text x="90">Apr</text>
+      <text x="120">May</text><text x="150">Jun</text><text x="180">Jul</text><text x="210">Aug</text>
+      <text x="240">Sep</text><text x="270">Oct</text><text x="300">Nov</text><text x="330">Dec</text>
+    </g>
+
+    <!-- Day labels -->
+    <g transform="translate(14 76)" font-size="8" fill="#9A9A95">
+      <text y="8">M</text><text y="20">W</text><text y="32">F</text><text y="44">S</text>
+    </g>
+
+    <!-- Ribbon: 7 rows × 53 weeks. Procedural via rects in JS won't work in svg, so sample pattern. -->
+    <g transform="translate(28 70)">
+      <!-- Draw a "year" grid of 7 rows × 53 cols of small cells. Vary opacity pseudo-randomly. -->
+      <!-- Row 0 -->
+      <g id="r0">
+        <rect x="0" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.7"/><rect x="6" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="12" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.3"/><rect x="18" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.6"/><rect x="24" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="30" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.9"/><rect x="36" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.4"/><rect x="42" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="48" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.7"/><rect x="54" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="60" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.5"/><rect x="66" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.8"/><rect x="72" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="78" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.6"/><rect x="84" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="90" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="1"/><rect x="96" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.4"/><rect x="102" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="108" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.7"/><rect x="114" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.3"/><rect x="120" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="126" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.8"/><rect x="132" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.5"/><rect x="138" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="144" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.6"/><rect x="150" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="156" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.9"/><rect x="162" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="168" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.4"/><rect x="174" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.7"/><rect x="180" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="186" y="0" width="5" height="5" rx="1" fill="#5FA8C9" opacity="0.5"/><rect x="192" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="198" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="204" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="210" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="216" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="222" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="228" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="234" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="240" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="246" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="252" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="258" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="264" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="270" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="276" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="282" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="288" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="294" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="300" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="306" y="0" width="5" height="5" rx="1" fill="#ECECE8"/><rect x="312" y="0" width="5" height="5" rx="1" fill="#ECECE8"/>
+      </g>
+      <use href="#r0" y="6" opacity="0.9"/>
+      <use href="#r0" y="12" opacity="0.7"/>
+      <use href="#r0" y="18" opacity="0.85"/>
+      <use href="#r0" y="24" opacity="0.6"/>
+      <use href="#r0" y="30" opacity="0.75"/>
+      <use href="#r0" y="36" opacity="0.5"/>
+    </g>
+
+    <!-- Stats -->
+    <g transform="translate(18 136)" font-size="11" fill="#5C5C58">
+      <text x="0" y="0" font-weight="700" fill="#1A1A1A" font-size="22">14</text>
+      <text x="0" y="16" font-size="9" fill="#9A9A95" letter-spacing="1">DAY STREAK</text>
+
+      <text x="92" y="0" font-weight="700" fill="#1A1A1A" font-size="22">108</text>
+      <text x="92" y="16" font-size="9" fill="#9A9A95" letter-spacing="1">ACTIVE DAYS</text>
+
+      <text x="210" y="0" font-weight="700" fill="#1A1A1A" font-size="22">62%</text>
+      <text x="210" y="16" font-size="9" fill="#9A9A95" letter-spacing="1">OF YEAR</text>
+    </g>
+  </g>
+
+  <!-- Callout -->
+  <g transform="translate(16 386)">
+    <rect width="388" height="60" rx="10" fill="#FFF8E1" stroke="#E8DFC8"/>
+    <text x="14" y="22" font-size="11" font-weight="700" fill="#8A6B1A">YEAR RANGE</text>
+    <text x="14" y="40" font-size="11" fill="#5C5C58">GitHub-style ribbon works better than bars at this zoom —</text>
+    <text x="14" y="54" font-size="11" fill="#5C5C58">streaks, gaps, seasonal dips all jump out immediately.</text>
+  </g>
+
+  <!-- Tab bar -->
+  <g transform="translate(0 460)">
+    <rect width="420" height="60" fill="#FFFFFF"/>
+    <line x1="0" y1="0" x2="420" y2="0" stroke="#E8DFC8"/>
+    <text x="80" y="36" text-anchor="middle" font-size="11" fill="#9A9A95">Today</text>
+    <circle cx="210" cy="30" r="22" fill="#1A1A1A"/>
+    <text x="210" y="37" text-anchor="middle" font-size="22" fill="#F7F5F0">+</text>
+    <text x="340" y="36" text-anchor="middle" font-size="11" font-weight="700" fill="#1A1A1A">Trends</text>
+  </g>
+</svg>
