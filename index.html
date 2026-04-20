@@ -232,7 +232,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1634,57 +1634,36 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
 
   const total = contributors.reduce((s, r) => s + r.amount, 0);
 
-  // Fade-in trigger so the bars animate their width after mount
-  const [mounted, setMounted] = React.useState(false);
+  // State-driven slide-up so the animation is reliable across browsers.
+  // Start off-screen, commit the final state on the next frame so CSS
+  // transitions take effect.
+  const [visible, setVisible] = React.useState(false);
   React.useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
+    const id = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // iOS Safari scroll-trap fix: when a modal is open, iOS will scroll
-  // the page behind if touch-drag starts on the backdrop. Lock the body
-  // while the drill is visible and let only the sheet scroll.
+  // iOS Safari scroll-trap fix: lock body while the sheet is open.
   React.useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  // Prevent touch-scroll from bubbling when the inner panel is at its
-  // scroll extremes (iOS "rubber-band" drag would otherwise move the page).
   const panelRef = React.useRef(null);
-  const onPanelTouchMove = React.useCallback((e) => {
-    const el = panelRef.current;
-    if (!el) return;
-    const atTop = el.scrollTop <= 0;
-    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-    // If the panel can't scroll in the intended direction, don't let the
-    // page behind scroll either — but also don't preventDefault unless at
-    // the extreme, so normal inner scrolling still works.
-    if ((atTop || atBottom) && e.cancelable) {
-      // Let the browser decide unless we're at the extreme edge
-    }
-  }, []);
 
   return (
     <div onClick={onClose}
       onTouchMove={(e) => { if (e.target === e.currentTarget && e.cancelable) e.preventDefault(); }}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+        position: 'fixed', inset: 0,
+        background: `rgba(0,0,0,${visible ? 0.4 : 0})`,
         zIndex: 100, display: 'flex', alignItems: 'flex-end',
-        animation: 'caloreeFadeIn 0.2s ease-out',
+        transition: 'background 0.25s ease-out',
         touchAction: 'none',
       }}>
-      <style>{`
-        @keyframes caloreeFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes caloreeSlideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-      `}</style>
       <div ref={panelRef}
         onClick={(e) => e.stopPropagation()}
-        onTouchMove={onPanelTouchMove}
         style={{
           width: '100%', background: theme.surface,
           borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -1693,7 +1672,9 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain',
           touchAction: 'pan-y',
-          animation: 'caloreeSlideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1)',
+          transform: visible ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.36s cubic-bezier(0.32, 0.72, 0, 1)',
+          willChange: 'transform',
         }}>
         <div style={{
           width: 40, height: 4, borderRadius: 2, background: theme.line,
@@ -1726,8 +1707,8 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
             <div key={r.entry.id} onClick={() => { onClose(); onOpenFood && onOpenFood(r.food.id); }}
               style={{
                 padding: '10px 0', borderBottom: `1px solid ${theme.line}`, cursor: 'pointer',
-                opacity: mounted ? 1 : 0,
-                transform: mounted ? 'translateY(0)' : 'translateY(6px)',
+                opacity: visible ? 1 : 0,
+                transform: visible ? 'translateY(0)' : 'translateY(6px)',
                 transition: `opacity 0.28s ease-out ${i * 0.03}s, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1) ${i * 0.03}s`,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -1747,7 +1728,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
                   background: theme.ring.track, overflow: 'hidden',
                 }}>
                   <div style={{
-                    width: mounted ? `${pct}%` : '0%', height: '100%', background: drill.color,
+                    width: visible ? `${pct}%` : '0%', height: '100%', background: drill.color,
                     transition: `width 0.5s cubic-bezier(0.32, 0.72, 0, 1) ${0.05 + i * 0.03}s`,
                   }}/>
                 </div>
