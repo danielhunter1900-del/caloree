@@ -4424,23 +4424,48 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           </div>
         </div>
 
-        {/* Chart metric toggle */}
+        {/* Primary toggle: Eaten / Exercise */}
         <div style={{
           display: 'flex', gap: 2, padding: 2, marginTop: 14,
           background: theme.surfaceAlt, borderRadius: theme.radius.btn,
         }}>
-          {[['kcal', 'Calories eaten'], ['exKcal', 'Calories burned'], ['exMin', 'Minutes active']].map(([k, l]) => (
-            <button key={k} onClick={() => setChartMetric(k)} style={{
-              flex: 1, padding: '6px 0', border: 'none',
-              background: chartMetric === k ? theme.surface : 'transparent',
-              color: theme.ink, cursor: 'pointer',
-              borderRadius: theme.radius.btn - 2,
-              fontFamily: theme.font, fontSize: 11,
-              fontWeight: chartMetric === k ? 600 : 500,
-              boxShadow: chartMetric === k ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-            }}>{l}</button>
-          ))}
+          {[
+            { group: 'food',     label: 'Eaten',    activeWhen: 'kcal',  setTo: 'kcal' },
+            { group: 'exercise', label: 'Exercise', activeWhen: ['exKcal','exMin'], setTo: 'exMin' },
+          ].map(({ group, label, activeWhen, setTo }) => {
+            const isActive = Array.isArray(activeWhen)
+              ? activeWhen.includes(chartMetric)
+              : chartMetric === activeWhen;
+            return (
+              <button key={group} onClick={() => setChartMetric(setTo)} style={{
+                flex: 1, padding: '8px 0', border: 'none',
+                background: isActive ? theme.surface : 'transparent',
+                color: theme.ink, cursor: 'pointer',
+                borderRadius: theme.radius.btn - 2,
+                fontFamily: theme.font, fontSize: 12,
+                fontWeight: isActive ? 700 : 500,
+                boxShadow: isActive ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              }}>{label}</button>
+            );
+          })}
         </div>
+
+        {/* Secondary toggle: Exercise view — kcal vs min */}
+        {(chartMetric === 'exKcal' || chartMetric === 'exMin') && (
+          <div style={{
+            display: 'flex', gap: 4, marginTop: 10, justifyContent: 'center',
+          }}>
+            {[['exMin', 'Minutes'], ['exKcal', 'Calories']].map(([k, l]) => (
+              <button key={k} onClick={() => setChartMetric(k)} style={{
+                padding: '4px 12px', border: `1px solid ${chartMetric === k ? theme.ink : theme.line}`,
+                background: chartMetric === k ? theme.ink : 'transparent',
+                color: chartMetric === k ? theme.bg : theme.inkSoft,
+                borderRadius: 999, cursor: 'pointer',
+                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+              }}>{l}</button>
+            ))}
+          </div>
+        )}
 
         {/* Chart */}
         <div style={{
