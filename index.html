@@ -1030,7 +1030,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setWellness, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
+function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1341,7 +1341,9 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
       )}
 
       {/* Wellness quick-log */}
-      <WellnessCard theme={theme} wellness={wellness} setWellness={setWellness} />
+      <WellnessCard theme={theme}
+        wellness={wellnessMap[selectedDate] || { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0 }}
+        setWellness={(patch) => setWellness(selectedDate, patch)}/>
 
       {/* Exercise card */}
       <ExerciseCard theme={theme}
@@ -2324,17 +2326,6 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
             fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
           }}>{Math.round(m.g)} g · {food.brand}</div>
         </div>
-        {onToggleFav && (
-          <button onClick={(e) => { e.stopPropagation(); onToggleFav(food.id); }}
-            title={food.isFavourite ? 'Remove favourite' : 'Favourite'}
-            style={{
-              border: 'none', background: 'none', cursor: 'pointer',
-              padding: 4, fontSize: 16, lineHeight: 1,
-              color: food.isFavourite ? '#E0A24A' : theme.inkMute,
-            }}>
-            {food.isFavourite ? '★' : '☆'}
-          </button>
-        )}
         <div style={{ textAlign: 'right' }}>
           <div style={{
             fontFamily: theme.numFont, fontSize: 15, fontWeight: theme.numWeight,
@@ -7448,13 +7439,28 @@ function App({ session }) {
   const [exerciseLog, setExerciseLog] = useStateApp(() => {
     try { return JSON.parse(localStorage.getItem('cal_exercise') || '[]'); } catch { return []; }
   });
-  const [wellness, setWellness] = useStateApp(() => {
+  // Wellness map keyed by ISO date — each date has its own slot
+  const [wellnessMap, setWellnessMap] = useStateApp(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('cal_wellness'));
-      if (saved) return saved;
+      const saved = JSON.parse(localStorage.getItem('cal_wellness_map'));
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) return saved;
+      // Migrate from old single-object format if present
+      const old = JSON.parse(localStorage.getItem('cal_wellness') || 'null');
+      if (old && typeof old === 'object') {
+        const today = new Date().toISOString().slice(0, 10);
+        return { [today]: old };
+      }
     } catch {}
-    return { coffees: 0, sleepHrs: 7.5, stress: 3, water: 0, energy: 3 };
+    return {};
   });
+  const wellnessDefaults = { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0 };
+  const wellness = (date) => wellnessMap[date] || { ...wellnessDefaults };
+  const setWellness = (date, patch) => {
+    setWellnessMap(prev => ({
+      ...prev,
+      [date]: { ...wellnessDefaults, ...(prev[date] || {}), ...patch },
+    }));
+  };
 
   const theme = THEMES[themeKey];
 
@@ -7514,13 +7520,7 @@ function App({ session }) {
       if (weightR.data && weightR.data.length) {
         setWeightLog(weightR.data.map(w => ({ iso: w.iso, kg: +w.kg })));
       }
-      if (wellnessR.data && wellnessR.data.length) {
-        const w = wellnessR.data[0];
-        setWellness({
-          coffees: w.coffees || 0, water: w.water || 0,
-          sleepHrs: +w.sleep_hrs || 0, stress: w.stress || 3, energy: w.energy || 3,
-        });
-      }
+      // (wellness map populated via allWellness query below)
       if (exerciseR.data) {
         setExerciseLog(exerciseR.data.map(r => ({
           id: r.id, date: r.date, type: r.type,
@@ -7574,6 +7574,19 @@ function App({ session }) {
         });
       });
 
+      // Build wellness map from cloud
+      const map = {};
+      (allWellness.data || []).forEach(w => {
+        map[w.date] = {
+          coffees: w.coffees || 0,
+          water: w.water || 0,
+          sleepHrs: +w.sleep_hrs || 0,
+          stress: w.stress || 0,
+          energy: w.energy || 0,
+        };
+      });
+      setWellnessMap(map);
+
       hydratingRef.current = false;
     })();
   }, [session]);
@@ -7594,17 +7607,18 @@ function App({ session }) {
       .then(r => r.error && console.warn('weight sync:', r.error.message));
   }, [weightLog, session]);
 
-  // Push wellness (today's date)
+  // Push wellness map — upsert all dates that have entries
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
-    const today = new Date().toISOString().slice(0, 10);
-    window.sb.from('wellness_logs').upsert({
-      user_id: session.user.id, date: today,
-      coffees: wellness.coffees, water: wellness.water,
-      sleep_hrs: wellness.sleepHrs, stress: wellness.stress, energy: wellness.energy,
-    }, { onConflict: 'user_id,date' })
+    const rows = Object.entries(wellnessMap).map(([date, w]) => ({
+      user_id: session.user.id, date,
+      coffees: w.coffees || 0, water: w.water || 0,
+      sleep_hrs: w.sleepHrs || 0, stress: w.stress || 0, energy: w.energy || 0,
+    }));
+    if (!rows.length) return;
+    window.sb.from('wellness_logs').upsert(rows, { onConflict: 'user_id,date' })
       .then(r => r.error && console.warn('wellness sync:', r.error.message));
-  }, [wellness, session]);
+  }, [wellnessMap, session]);
 
   // Push log + synthetic foods
   React.useEffect(() => {
@@ -7681,11 +7695,8 @@ function App({ session }) {
   }, [exerciseLog, session]);
 
   React.useEffect(() => {
-    localStorage.setItem('cal_wellness', JSON.stringify(wellness));
-    // Mirror into today's HISTORY entry (if it exists) so Trends reflects today's state live
-    const t = HISTORY[HISTORY.length - 1];
-    if (t) Object.assign(t, wellness);
-  }, [wellness]);
+    localStorage.setItem('cal_wellness_map', JSON.stringify(wellnessMap));
+  }, [wellnessMap]);
 
   const openLog = (meal) => setLogScreenMeal(meal || 'Snack');
   const closeLog = () => setLogScreenMeal(null);
@@ -7763,6 +7774,7 @@ function App({ session }) {
               <HomeScreen theme={theme} log={log} setLog={setLog}
                 targets={targets} settings={settings}
                 wellness={wellness} setWellness={setWellness}
+                wellnessMap={wellnessMap}
                 exerciseLog={exerciseLog} setExerciseLog={setExerciseLog}
                 onAddMeal={openLog} onOpenFood={openDetail}
                 onOpenProfile={() => setTab('profile')}
