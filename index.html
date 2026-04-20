@@ -1192,9 +1192,9 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
           display: 'flex', gap: 14, marginTop: 14, padding: '0 4px',
         }}>
           {[
-            ['Sat Fat', 'satFat', targets.satFat || 20,  '#B8824A'],
-            ['Sugar',   'sugar',  targets.sugar  || 50,  '#C25A8E'],
-            ['Fibre',   'fibre',  targets.fibre  || 30,  '#5C9A6E'],
+            ['Sat Fat', 'satFat', targets.satFat ?? 20,  '#B8824A'],
+            ['Sugar',   'sugar',  targets.sugar  ?? 50,  '#C25A8E'],
+            ['Fibre',   'fibre',  targets.fibre  ?? 30,  '#5C9A6E'],
           ].map(([label, key, target, color]) => (
             <MacroBar key={key} label={label} value={totals[key]} target={target} color={color} theme={theme}
               onClick={() => setDrill({ key, label, unit: 'g', color })} />
@@ -2018,6 +2018,7 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
           draggable={true}
           onToggleFav={onToggleFav}
           onCopyToDate={onCopyToDate}
+          onMoveEntry={onMoveEntry}
         />
       ))}
     </div>
@@ -2027,8 +2028,10 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
 // ─────────────────────────────────────────────────────────────
 // SwipeRow — touch + mouse drag to reveal delete button
 // ─────────────────────────────────────────────────────────────
-function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onCopyToDate }) {
+function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onCopyToDate, onMoveEntry }) {
   const [showCopy, setShowCopy] = React.useState(false);
+  const [showMove, setShowMove] = React.useState(false);
+  const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
   const [offset, setOffset] = useStateHome(0);
   const startX = useRefHome(null);
   const dragging = useRefHome(false);
@@ -2110,6 +2113,14 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
             {food.isFavourite ? '★' : '☆'}
           </button>
         )}
+        {onMoveEntry && (
+          <button onClick={(e) => { e.stopPropagation(); setShowMove(true); }}
+            title="Move to another meal"
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              padding: 4, fontSize: 14, lineHeight: 1, color: theme.inkMute,
+            }}>⇄</button>
+        )}
         {onCopyToDate && (
           <button onClick={(e) => { e.stopPropagation(); setShowCopy(true); }}
             title="Copy to another date"
@@ -2117,6 +2128,37 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
               border: 'none', background: 'none', cursor: 'pointer',
               padding: 4, fontSize: 14, lineHeight: 1, color: theme.inkMute,
             }}>⎘</button>
+        )}
+        {showMove && (
+          <div onClick={(ev) => ev.stopPropagation()} style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 250,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}>
+            <div style={{
+              width: '100%', maxWidth: 320, background: theme.surface,
+              borderRadius: 14, padding: '18px 18px 20px',
+            }}>
+              <div style={{
+                fontFamily: theme.titleFont, fontSize: 16, fontWeight: theme.titleWeight,
+                color: theme.ink, marginBottom: 10,
+              }}>Move {food.name} to…</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginBottom: 12 }}>
+                {MEALS.filter(m => m !== entry.meal).map(m => (
+                  <button key={m} onClick={() => { onMoveEntry(entry.id, m); setShowMove(false); }}
+                    style={{
+                      padding: '12px 0', border: `1px solid ${theme.line}`,
+                      background: theme.surfaceAlt, color: theme.ink, cursor: 'pointer',
+                      borderRadius: theme.radius.btn, fontSize: 14, fontWeight: 600,
+                    }}>{m}</button>
+                ))}
+              </div>
+              <button onClick={() => setShowMove(false)} style={{
+                width: '100%', padding: '10px 0', border: `1px solid ${theme.line}`,
+                background: 'transparent', color: theme.inkSoft,
+                borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>Cancel</button>
+            </div>
+          </div>
         )}
         {showCopy && (
           <div onClick={(ev) => ev.stopPropagation()} style={{
@@ -3494,9 +3536,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
             ['Carbs',   'c',      avg('c'),      targets.c,                     theme.macros.carbs],
             ['Protein', 'p',      avg('p'),      targets.p,                     theme.macros.protein],
             ['Fat',     'f',      avg('f'),      targets.f,                     theme.macros.fat],
-            ['Sat Fat', 'satFat', avg('satFat'), targets.satFat || 20,          '#B8824A'],
-            ['Sugar',   'sugar',  avg('sugar'),  targets.sugar  || 50,          '#C25A8E'],
-            ['Fibre',   'fibre',  avg('fibre'),  targets.fibre  || 30,          '#5C9A6E'],
+            ['Sat Fat', 'satFat', avg('satFat'), targets.satFat ?? 20,          '#B8824A'],
+            ['Sugar',   'sugar',  avg('sugar'),  targets.sugar  ?? 50,          '#C25A8E'],
+            ['Fibre',   'fibre',  avg('fibre'),  targets.fibre  ?? 30,          '#5C9A6E'],
           ];
           return rows.map(([k, key, v, t, c], i) => (
             <div key={k} style={{ marginBottom: i < rows.length - 1 ? 14 : 0 }}>
@@ -6801,7 +6843,7 @@ Return ONLY this JSON (no prose, no markdown, no code fences):
         {
           "meal": "Breakfast" | "Lunch" | "Dinner" | "Snack",
           "items": [
-            { "name": "", "brand": "", "kcal": 0, "c": 0, "p": 0, "f": 0, "satFat": 0, "sugar": 0, "fibre": 0, "g": 0 }
+            { "name": "", "brand": "", "kcal": 0, "c": 0, "p": 0, "f": 0, "satFat": 0, "sugar": 0, "fibre": 0, "g": 0, "photo_index": null }
           ]
         }
       ]
@@ -6815,7 +6857,9 @@ Rules:
 - Estimate macros conservatively. Never omit satFat/sugar/fibre.
 - kcal/c/p/f/satFat/sugar/fibre are per-item totals. g = total grams.
 - Keep item names concise.
-- If photos are included alongside the notes, treat them as extra evidence for what the user ate (combine information from text + photos when ambiguous).
+- COMBINE everything in one meal into ONE item (don't split a "burrito bowl" into chicken + rice + beans as separate items).
+- If photos are included, they appear in the same order they were attached. Match each photo to the meal it depicts and set "photo_index" on that item to the 0-based photo number (0 for the first attached photo, 1 for second, etc). If a photo doesn't match any meal, ignore it. If a meal has no photo, leave photo_index as null.
+- Use info from text + photos together to determine date/meal/contents.
 
 Notes:
 ${text.trim() || '(see attached photos)'}`;
@@ -6867,16 +6911,31 @@ ${text.trim() || '(see attached photos)'}`;
     const sb = window.sb;
     const foodRows = [];
     const logRows = [];
+    // Upload all attached photos first; map photo index → storage path + signed URL
+    const photoPaths = []; // index → { path, url }
+    for (let pi = 0; pi < photos.length; pi++) {
+      try {
+        const path = await window.uploadMealPhoto(photos[pi].dataUrl, uid);
+        let url = null;
+        if (path) url = await window.signedPhotoUrl(path);
+        photoPaths.push({ path, url, dataUrl: photos[pi].dataUrl });
+      } catch (e) { photoPaths.push(null); }
+    }
     preview.days.forEach((day, di) => {
       (day.meals || []).forEach((g, gi) => {
         (g.items || []).forEach((it, i) => {
           const id = 'ai_' + Date.now() + '_' + di + '_' + gi + '_' + i;
+          const pi = (typeof it.photo_index === 'number' && it.photo_index >= 0 && it.photo_index < photoPaths.length)
+            ? it.photo_index : null;
+          const pInfo = pi != null ? photoPaths[pi] : null;
           foodRows.push({
             id, user_id: uid,
             name: it.name || 'Item', brand: it.brand || 'AI notes',
             serving_g: it.g || 100,
             kcal: it.kcal || 0, c: it.c || 0, p: it.p || 0, f: it.f || 0,
             sat_fat: it.satFat ?? null, sugar: it.sugar ?? null, fibre: it.fibre ?? null,
+            ingredients: Array.isArray(it.ingredients) ? it.ingredients : null,
+            photo_path: pInfo?.path || null,
           });
           logRows.push({
             id: 'l_' + id, user_id: uid, date: day.date,
@@ -6888,7 +6947,9 @@ ${text.trim() || '(see attached photos)'}`;
             servingG: it.g || 100,
             kcal: it.kcal || 0, c: it.c || 0, p: it.p || 0, f: it.f || 0,
             satFat: it.satFat, sugar: it.sugar, fibre: it.fibre,
-            photo: null,
+            ingredients: Array.isArray(it.ingredients) ? it.ingredients : null,
+            photo: pInfo?.url || pInfo?.dataUrl || null,
+            photoPath: pInfo?.path || null,
           });
         });
       });
