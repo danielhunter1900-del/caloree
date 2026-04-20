@@ -3592,7 +3592,7 @@ function bucketFor(range, offset) {
   }
   if (range === 'Month') {
     // buckets by week within the current month, going backwards by month
-    const today = new Date(2026, 3, 18);
+    const today = new Date();
     const targetMonth = new Date(today.getFullYear(), today.getMonth() - offset, 1);
     const y = targetMonth.getFullYear(), m = targetMonth.getMonth();
     const daysInMonth = all.filter(d => d.y === y && d.m === m);
@@ -3608,7 +3608,7 @@ function bucketFor(range, offset) {
     };
   }
   // Year — group by month
-  const today = new Date(2026, 3, 18);
+  const today = new Date();
   const targetYear = today.getFullYear() - offset;
   const months = [];
   for (let mi = 0; mi < 12; mi++) {
@@ -3821,13 +3821,202 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
   );
 }
 
-function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], setWeightLog, log = [] }) {
+// ─────────────────────────────────────────────────────────────
+// Exercise calendar — month grid with type filter chips
+// ─────────────────────────────────────────────────────────────
+function ExerciseCalendar({ theme, bucket, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate, chartMetric }) {
+  if (!bucket || !bucket.bars || !bucket.bars.length) return null;
+  const first = bucket.bars[0];
+  const y = first.y, m = first.m;
+  const monthStart = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  // JS getDay: 0=Sun..6=Sat. We want Mon-first: M T W T F S S
+  const firstDowJs = monthStart.getDay();
+  const firstDowMon = (firstDowJs + 6) % 7; // 0=Mon..6=Sun
+  const cells = firstDowMon + daysInMonth;
+  const rows = Math.ceil(cells / 7);
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Types actually logged this month + per-type total minutes for chip counts
+  const typeTotals = {};
+  bucket.bars.forEach(b => {
+    const ex = exByDate[b.iso];
+    if (!ex || !ex.byType) return;
+    Object.entries(ex.byType).forEach(([t, v]) => {
+      const val = chartMetric === 'exKcal' ? v.kcal : v.min;
+      if (val > 0) typeTotals[t] = (typeTotals[t] || 0) + val;
+    });
+  });
+  const types = Object.keys(typeTotals).sort((a, b) => typeTotals[b] - typeTotals[a]);
+  const unit = chartMetric === 'exKcal' ? 'kcal' : 'min';
+
+  const cellSize = 42;
+  const gap = 4;
+  const gridW = cellSize * 7 + gap * 6;
+
+  const buildIso = (day) => {
+    const mm = String(m + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${y}-${mm}-${dd}`;
+  };
+
+  return (
+    <div style={{
+      margin: '0 16px 12px', padding: '18px 20px',
+      background: theme.surface, borderRadius: theme.radius.card,
+      border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <div style={{
+          fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+          color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>Exercise · {bucket.label}</div>
+        {selectedType && (
+          <button onClick={() => setSelectedType(null)} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: theme.accent, fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+            letterSpacing: '0.04em', padding: 0,
+          }}>× Clear filter</button>
+        )}
+      </div>
+      <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginBottom: 12 }}>
+        {selectedType ? `Showing ${selectedType} only` : 'Tap a type to filter · tap a day to open it'}
+      </div>
+
+      {/* Weekday header */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+        gap: `${gap}px`, marginBottom: 6, maxWidth: gridW,
+      }}>
+        {['M','T','W','T','F','S','S'].map((d, i) => (
+          <div key={i} style={{
+            textAlign: 'center', fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+            color: theme.inkMute, letterSpacing: '0.04em',
+          }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+        gap: `${gap}px`, maxWidth: gridW,
+      }}>
+        {Array.from({ length: rows * 7 }).map((_, i) => {
+          const dayNum = i - firstDowMon + 1;
+          if (dayNum < 1 || dayNum > daysInMonth) {
+            return <div key={i} style={{ width: cellSize, height: cellSize }} />;
+          }
+          const iso = buildIso(dayNum);
+          const ex = exByDate[iso];
+          const dayTypes = ex && ex.byType
+            ? Object.entries(ex.byType)
+                .filter(([, v]) => (chartMetric === 'exKcal' ? v.kcal : v.min) > 0)
+                .map(([t]) => t)
+            : [];
+          const isToday = iso === todayIso;
+          const isFuture = iso > todayIso;
+          const hasSelected = selectedType && dayTypes.includes(selectedType);
+          const anyLogged = dayTypes.length > 0;
+          const dimCell = selectedType && anyLogged && !hasSelected;
+          const borderColor = hasSelected
+            ? (EX_COLOR_MAP[selectedType] || theme.accent)
+            : (isToday ? theme.ink : theme.line);
+          const borderWidth = hasSelected || isToday ? 1.5 : 1;
+          return (
+            <div
+              key={i}
+              onClick={() => !isFuture && onOpenDate && onOpenDate(iso)}
+              style={{
+                width: cellSize, height: cellSize,
+                background: isFuture ? theme.bg : theme.surface,
+                border: `${borderWidth}px ${isToday ? 'dashed' : 'solid'} ${borderColor}`,
+                borderRadius: 8, position: 'relative',
+                cursor: isFuture ? 'default' : 'pointer',
+                opacity: isFuture ? 0.5 : (dimCell ? 0.5 : 1),
+                transition: 'opacity 0.15s, border 0.15s',
+              }}
+              title={anyLogged ? `${iso} · ${dayTypes.join(', ')}` : iso}
+            >
+              <div style={{
+                position: 'absolute', top: 3, left: 5,
+                fontFamily: theme.font, fontSize: 10,
+                fontWeight: isToday ? 700 : (anyLogged ? 600 : 400),
+                color: isFuture ? theme.inkMute : theme.ink,
+              }}>{dayNum}</div>
+              {anyLogged && (
+                <div style={{
+                  position: 'absolute', bottom: 4, left: 0, right: 0,
+                  display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap',
+                }}>
+                  {dayTypes.slice(0, 4).map((t, di) => {
+                    const faded = selectedType && t !== selectedType;
+                    return (
+                      <div key={di} style={{
+                        width: 6, height: 6, borderRadius: 3,
+                        background: faded ? '#E6E3DC' : (EX_COLOR_MAP[t] || '#8A8A8A'),
+                      }}/>
+                    );
+                  })}
+                  {dayTypes.length > 4 && (
+                    <div style={{
+                      fontSize: 8, color: theme.inkMute, lineHeight: 1,
+                    }}>+{dayTypes.length - 4}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Type filter chips */}
+      {types.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{
+            fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+            color: theme.inkMute, letterSpacing: '0.1em', marginBottom: 8,
+          }}>TAP TO FILTER</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {types.map(t => {
+              const active = selectedType === t;
+              const color = EX_COLOR_MAP[t] || '#8A8A8A';
+              return (
+                <button key={t}
+                  onClick={() => setSelectedType(active ? null : t)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 14,
+                    background: active ? color : 'transparent',
+                    border: `1px solid ${active ? color : theme.line}`,
+                    cursor: 'pointer',
+                    fontFamily: theme.font, fontSize: 12,
+                    fontWeight: active ? 700 : 600,
+                    color: active ? '#FFFFFF' : theme.inkSoft,
+                    letterSpacing: '0.02em',
+                  }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: 4,
+                    background: active ? '#FFFFFF' : color,
+                  }}/>
+                  {t} · {Math.round(typeTotals[t])}{unit === 'min' ? 'm' : 'k'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], setWeightLog, log = [], setTab, setLogDate }) {
   const [range, setRange] = useStateProg('Week');
   const [offset, setOffset] = useStateProg(0);
   const [selIdx, setSelIdx] = useStateProg(null); // index within bucket
   const [askOpen, setAskOpen] = React.useState(false);
   const [trendDrill, setTrendDrill] = React.useState(null); // { key, label, unit, color }
   const [chartMetric, setChartMetric] = React.useState('kcal'); // 'kcal' | 'exKcal' | 'exMin'
+  const [selectedExType, setSelectedExType] = React.useState(null);
 
   // Exercise totals per ISO date (overall + per-type breakdown)
   const exByDate = React.useMemo(() => {
@@ -4024,7 +4213,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
               ? Object.entries(exDay.byType || {}).map(([type, vals]) => ({
                   type,
                   v: chartMetric === 'exKcal' ? vals.kcal : vals.min,
-                  color: EX_COLOR_MAP[type] || '#8A8A8A',
+                  color: selectedExType && type !== selectedExType
+                    ? '#E6E3DC'
+                    : (EX_COLOR_MAP[type] || '#8A8A8A'),
                 })).filter(s => s.v > 0)
               : null;
             return (
@@ -4100,6 +4291,20 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           );
         })()}
       </div>}
+
+      {/* Exercise calendar (Month range, exercise metric) */}
+      {range === 'Month' && (chartMetric === 'exKcal' || chartMetric === 'exMin') && (
+        <ExerciseCalendar theme={theme} bucket={bucket}
+          exByDate={exByDate}
+          selectedType={selectedExType}
+          setSelectedType={setSelectedExType}
+          EX_COLOR_MAP={EX_COLOR_MAP}
+          chartMetric={chartMetric}
+          onOpenDate={(iso) => {
+            if (setLogDate) setLogDate(iso);
+            if (setTab) setTab('home');
+          }}/>
+      )}
 
       {/* Macro averages */}
       <div style={{
@@ -8336,7 +8541,8 @@ function App({ session }) {
             )}
             {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
-              exerciseLog={exerciseLog} weightLog={weightLog} setWeightLog={setWeightLog} log={log} />}
+              exerciseLog={exerciseLog} weightLog={weightLog} setWeightLog={setWeightLog} log={log}
+              setTab={setTab} setLogDate={setLogDate} />}
             {tab === 'profile' && (
               <ProfileScreen theme={theme}
                 themeKey={themeKey} setThemeKey={setThemeKey}
