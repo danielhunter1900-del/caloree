@@ -2136,9 +2136,76 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
 // ─────────────────────────────────────────────────────────────
 function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onMoveEntry }) {
 
-  // Long-press touch drag (works on iOS where HTML5 drag is broken)
+  // Touch drag — initiated immediately by tapping the drag handle
   const longPressTimer = React.useRef(null);
   const touchDragRef = React.useRef({ active: false, ghost: null, startX: 0, startY: 0 });
+  const startTouchDrag = (e) => {
+    if (!onMoveEntry) return;
+    e.preventDefault(); e.stopPropagation();
+    const t = e.touches ? e.touches[0] : e;
+    // Cancel any swipe in progress
+    dragging.current = false;
+    setOffset(0);
+    // Cleanup any orphan ghosts
+    document.querySelectorAll('.caloree-drag-ghost').forEach(el => el.remove());
+    // Build ghost
+    const ghost = document.createElement('div');
+    ghost.className = 'caloree-drag-ghost';
+    ghost.style.cssText = `position:fixed; pointer-events:none; z-index:9999;
+      left:${t.clientX - 100}px; top:${t.clientY - 24}px;
+      width:200px; padding:10px 14px; background:${theme.surface};
+      border:1px solid ${theme.line}; border-radius:10px;
+      box-shadow:0 12px 32px rgba(0,0,0,0.25);
+      font-family:${theme.font}; font-size:13px; color:${theme.ink};
+      opacity:0.95; transform:rotate(-2deg);`;
+      ghost.textContent = `Move ${food.name}`;
+    document.body.appendChild(ghost);
+    touchDragRef.current = { active: true, ghost, startX: t.clientX, startY: t.clientY };
+    if (navigator.vibrate) navigator.vibrate(15);
+    // Document-level move/end so we don't depend on the row receiving the events
+    const move = (ev) => {
+      const tt = ev.touches ? ev.touches[0] : ev;
+      ev.preventDefault();
+      ghost.style.left = (tt.clientX - 100) + 'px';
+      ghost.style.top = (tt.clientY - 24) + 'px';
+      window.dispatchEvent(new CustomEvent('caloree:touchdrag-move', {
+        detail: { x: tt.clientX, y: tt.clientY, id: entry.id }
+      }));
+    };
+    const end = (ev) => {
+      const tt = (ev.changedTouches && ev.changedTouches[0]) || ev;
+      ghost.style.display = 'none';
+      const target = document.elementFromPoint(tt.clientX, tt.clientY);
+      const targetRow = target?.closest('[data-meal-row-id]');
+      const targetSection = target?.closest('[data-meal-section]');
+      const targetRowId = targetRow?.getAttribute('data-meal-row-id');
+      const targetMeal = targetSection?.getAttribute('data-meal-section');
+      if (targetRowId && targetRowId !== entry.id) {
+        window.dispatchEvent(new CustomEvent('caloree:merge-meals', {
+          detail: { sourceId: entry.id, targetId: targetRowId }
+        }));
+      } else if (targetMeal && targetMeal !== entry.meal) {
+        if (onMoveEntry) onMoveEntry(entry.id, targetMeal);
+      }
+      if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      window.dispatchEvent(new CustomEvent('caloree:touchdrag-end', { detail: {} }));
+      touchDragRef.current = { active: false, ghost: null, startX: 0, startY: 0 };
+      document.removeEventListener('touchmove', move, { passive: false, capture: true });
+      document.removeEventListener('touchend', end, true);
+      document.removeEventListener('touchcancel', end, true);
+      document.removeEventListener('mousemove', move, true);
+      document.removeEventListener('mouseup', end, true);
+    };
+    if (e.touches) {
+      document.addEventListener('touchmove', move, { passive: false, capture: true });
+      document.addEventListener('touchend', end, true);
+      document.addEventListener('touchcancel', end, true);
+    } else {
+      document.addEventListener('mousemove', move, true);
+      document.addEventListener('mouseup', end, true);
+    }
+  };
+  // Keep the legacy long-press handlers available but make them no-ops since the handle is the primary path
   const onTouchStartDrag = (e) => {
     if (!onMoveEntry) return;
     const t = e.touches[0];
@@ -2303,6 +2370,17 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
           cursor: 'pointer', userSelect: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
+        {onMoveEntry && (
+          <div
+            onTouchStart={startTouchDrag}
+            onMouseDown={startTouchDrag}
+            title="Hold and drag to move/merge"
+            style={{
+              padding: '8px 4px', cursor: 'grab', flexShrink: 0,
+              touchAction: 'none', userSelect: 'none', color: theme.inkMute,
+              fontSize: 18, lineHeight: 1, fontFamily: 'monospace',
+            }}>⋮⋮</div>
+        )}
         {food.photo && (
           <img src={food.photo} alt=""
             onClick={(e) => {
