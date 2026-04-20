@@ -2069,7 +2069,10 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
     touchDragRef.current.startX = t.clientX;
     touchDragRef.current.startY = t.clientY;
     longPressTimer.current = setTimeout(() => {
-      // Begin drag: create ghost
+      // Begin drag: cancel any in-progress swipe, reset offset
+      dragging.current = false;
+      setOffset(0);
+      // Build ghost
       const ghost = document.createElement('div');
       ghost.style.cssText = `position:fixed; pointer-events:none; z-index:9999;
         left:${t.clientX - 100}px; top:${t.clientY - 24}px;
@@ -2155,9 +2158,16 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
           e.dataTransfer.effectAllowed = 'move';
         }}
         onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-        onTouchStart={(e) => { onDown(e); onTouchStartDrag(e); }}
-        onTouchMove={(e) => { onMove(e); onTouchMoveDrag(e); }}
-        onTouchEnd={(e) => { onUp(e); onTouchEndDrag(e); }}
+        onTouchStart={(e) => { onTouchStartDrag(e); if (!touchDragRef.current.active) onDown(e); }}
+        onTouchMove={(e) => {
+          if (touchDragRef.current.active) { onTouchMoveDrag(e); return; }
+          onMove(e); onTouchMoveDrag(e);
+        }}
+        onTouchEnd={(e) => {
+          const wasDragging = touchDragRef.current.active;
+          onTouchEndDrag(e);
+          if (!wasDragging) onUp(e); else setOffset(0);
+        }}
         onClick={() => offset === 0 && !touchDragRef.current.active && onTap()}
         style={{
           background: theme.surface, padding: '12px 18px',
