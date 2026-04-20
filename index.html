@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1708,7 +1708,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           overscrollBehavior: 'contain',
           touchAction: 'pan-y',
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.36s cubic-bezier(0.32, 0.72, 0, 1)',
+          transition: 'transform 0.52s cubic-bezier(0.34, 1.56, 0.64, 1)',
           willChange: 'transform',
         }}>
         <div style={{
@@ -1743,8 +1743,8 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
               style={{
                 padding: '10px 0', borderBottom: `1px solid ${theme.line}`, cursor: 'pointer',
                 opacity: visible ? 1 : 0,
-                transform: visible ? 'translateY(0)' : 'translateY(6px)',
-                transition: `opacity 0.28s ease-out ${i * 0.03}s, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1) ${i * 0.03}s`,
+                transform: visible ? 'translateY(0)' : 'translateY(14px)',
+                transition: `opacity 0.32s ease-out ${0.08 + i * 0.045}s, transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.08 + i * 0.045}s`,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{
@@ -1764,7 +1764,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
                 }}>
                   <div style={{
                     width: visible ? `${pct}%` : '0%', height: '100%', background: drill.color,
-                    transition: `width 0.5s cubic-bezier(0.32, 0.72, 0, 1) ${0.05 + i * 0.03}s`,
+                    transition: `width 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.2 + i * 0.045}s`,
                   }}/>
                 </div>
                 <div style={{
