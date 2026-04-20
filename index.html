@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1665,20 +1665,20 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
 
   const panelRef = React.useRef(null);
 
-  // iOS Safari scroll lock. The page behind the sheet uses an inner
-  // `overflow: auto` container (not document.body), so toggling
-  // body.style.overflow does nothing there. Intercept touchmove at
-  // document level and preventDefault everything that isn't inside
-  // the panel; inside the panel, let native scroll work.
+  // iOS Safari scroll lock. The background uses an inner overflow:auto
+  // container, so toggling body.style.overflow is not enough. We also
+  // need to swallow touchmoves when the panel itself isn't scrollable,
+  // otherwise iOS falls back to scrolling the nearest scrollable
+  // ancestor (the page behind).
   React.useEffect(() => {
     const onTouchMove = (e) => {
       const panel = panelRef.current;
       if (panel && panel.contains(e.target)) {
-        // Inside the panel — allow iOS to scroll the list.
-        return;
+        // Only allow native scroll when the panel actually has
+        // overflow — otherwise iOS bubbles the drag to the page.
+        const scrollable = panel.scrollHeight > panel.clientHeight + 1;
+        if (scrollable) return;
       }
-      // Backdrop or anything else — swallow the gesture so the page
-      // behind can't scroll.
       if (e.cancelable) e.preventDefault();
     };
     document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -6669,6 +6669,8 @@ function StravaCard({ theme, session }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [lastResult, setLastResult] = React.useState(null);
+  const [pendingCount, setPendingCount] = React.useState(0);
+  const [showReview, setShowReview] = React.useState(false);
 
   const loadConn = React.useCallback(async () => {
     try {
@@ -6677,23 +6679,29 @@ function StravaCard({ theme, session }) {
         .select('athlete_id, athlete_firstname, athlete_lastname, athlete_username, last_sync_at')
         .maybeSingle();
       setConn(data || null);
+      // Also count pending activities for the review badge.
+      const { count } = await window.sb
+        .from('strava_activities')
+        .select('activity_id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      setPendingCount(count || 0);
     } catch {}
     setLoading(false);
   }, []);
 
   React.useEffect(() => { loadConn(); }, [loadConn]);
 
-  // Listen for the post-OAuth exchange completing elsewhere in the app,
-  // so this card re-fetches its status.
   React.useEffect(() => {
     const h = () => loadConn();
     window.addEventListener('caloree:strava-connected', h);
-    return () => window.removeEventListener('caloree:strava-connected', h);
+    window.addEventListener('caloree:strava-synced', h);
+    return () => {
+      window.removeEventListener('caloree:strava-connected', h);
+      window.removeEventListener('caloree:strava-synced', h);
+    };
   }, [loadConn]);
 
-  const connect = () => {
-    window.location.href = stravaAuthUrl();
-  };
+  const connect = () => { window.location.href = stravaAuthUrl(); };
 
   const runFunction = async (slug, body = {}) => {
     setBusy(true); setError(null);
@@ -6711,22 +6719,20 @@ function StravaCard({ theme, session }) {
     const res = await runFunction('strava-sync', { full, weightKg: 75 });
     if (res) {
       setLastResult(res);
-      // The sync upserts into exercise_logs — prompt App to re-pull so the
-      // new rows appear without a full page reload.
       window.dispatchEvent(new CustomEvent('caloree:strava-synced', { detail: res }));
-      loadConn();
     }
   };
 
   const disconnect = async () => {
-    if (!confirm('Disconnect Strava? Existing imported activities will remain in your log.')) return;
+    if (!confirm('Disconnect Strava? Existing imported activities stay in your log; pending/declined records will be removed.')) return;
     setBusy(true); setError(null);
     try {
+      // Delete pending/declined review queue and the connection itself.
+      await window.sb.from('strava_activities').delete().neq('activity_id', -1);
       const { error: delErr } = await window.sb
         .from('strava_connections').delete().neq('user_id', '00000000-0000-0000-0000-000000000000');
       if (delErr) throw delErr;
-      setConn(null);
-      setLastResult(null);
+      setConn(null); setLastResult(null); setPendingCount(0);
     } catch (e) { setError(e.message || String(e)); }
     setBusy(false);
   };
@@ -6762,6 +6768,15 @@ function StravaCard({ theme, session }) {
           <div style={{ fontFamily: theme.font, fontSize: 14, color: theme.ink, marginBottom: 10 }}>
             Connected as <b>{[conn.athlete_firstname, conn.athlete_lastname].filter(Boolean).join(' ') || conn.athlete_username || conn.athlete_id}</b>
           </div>
+          {pendingCount > 0 && (
+            <button onClick={() => setShowReview(true)} style={{
+              display: 'block', width: '100%', marginBottom: 10,
+              padding: '10px 14px', borderRadius: theme.radius.btn,
+              background: '#FC4C02', color: '#FFFFFF', border: 'none',
+              fontFamily: theme.font, fontSize: 13, fontWeight: 700,
+              cursor: 'pointer',
+            }}>Review {pendingCount} new {pendingCount === 1 ? 'activity' : 'activities'}</button>
+          )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => sync(false)} disabled={busy} style={{
               padding: '10px 14px', borderRadius: theme.radius.btn,
@@ -6786,10 +6801,14 @@ function StravaCard({ theme, session }) {
           </div>
           {lastResult && (
             <div style={{ ...subtle, marginTop: 10 }}>
-              Last sync: {lastResult.upserted} activities updated
+              Sync found {lastResult.newly_pending} new activity{lastResult.newly_pending === 1 ? '' : 'ies'}
               {lastResult.details_fetched ? ` · ${lastResult.details_fetched} detailed pulls` : ''}
               {lastResult.rate_limited ? ' · rate-limited, run again later to finish' : ''}
             </div>
+          )}
+          {showReview && (
+            <StravaReviewSheet theme={theme}
+              onClose={() => { setShowReview(false); loadConn(); }}/>
           )}
         </React.Fragment>
       ) : (
@@ -6812,6 +6831,231 @@ function StravaCard({ theme, session }) {
         }}>{error}</div>
       )}
     </div>
+  );
+}
+
+// Review + approve/decline pending Strava activities before they hit
+// the exercise log.
+function StravaReviewSheet({ theme, onClose }) {
+  const [items, setItems] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
+
+  const load = React.useCallback(async () => {
+    try {
+      const { data, error: qErr } = await window.sb
+        .from('strava_activities')
+        .select('activity_id, type, data, status')
+        .eq('status', 'pending')
+        .order('activity_id', { ascending: false });
+      if (qErr) throw qErr;
+      setItems(data || []);
+    } catch (e) { setError(e.message || String(e)); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const uid = () => (window.sb.auth.getSession()
+    .then(r => r.data?.session?.user?.id));
+
+  const approve = async (row) => {
+    setBusy(true); setError(null);
+    try {
+      const u = await uid();
+      if (!u) throw new Error('not signed in');
+      const d = row.data || {};
+      const logId = 'strava_' + row.activity_id;
+      // Upsert into exercise_logs
+      const { error: logErr } = await window.sb.from('exercise_logs').upsert([{
+        id: logId, user_id: u,
+        date: (d.start_date_local || d.start_date || new Date().toISOString()).slice(0, 10),
+        type: d.mapped_type || row.type || 'Other',
+        duration_min: d.duration_min || null,
+        distance_km: d.distance_km || null,
+        kcal: d.kcal ?? null,
+        notes: [d.name, d.description].filter(Boolean).join(' — ') || null,
+        details: d,
+      }], { onConflict: 'id' });
+      if (logErr) throw logErr;
+      // Mark approved
+      const { error: updErr } = await window.sb.from('strava_activities')
+        .update({ status: 'approved', exercise_log_id: logId, reviewed_at: new Date().toISOString() })
+        .eq('activity_id', row.activity_id);
+      if (updErr) throw updErr;
+      setItems(prev => (prev || []).filter(i => i.activity_id !== row.activity_id));
+      window.dispatchEvent(new CustomEvent('caloree:strava-synced'));
+    } catch (e) { setError(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  const decline = async (row) => {
+    setBusy(true); setError(null);
+    try {
+      const { error: updErr } = await window.sb.from('strava_activities')
+        .update({ status: 'declined', reviewed_at: new Date().toISOString() })
+        .eq('activity_id', row.activity_id);
+      if (updErr) throw updErr;
+      setItems(prev => (prev || []).filter(i => i.activity_id !== row.activity_id));
+    } catch (e) { setError(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  const approveAll = async () => {
+    if (!items || !items.length) return;
+    if (!confirm(`Approve all ${items.length} activities? They'll be imported to your exercise log.`)) return;
+    for (const row of items) {
+      // eslint-disable-next-line no-await-in-loop
+      await approve(row);
+    }
+    window.dispatchEvent(new CustomEvent('caloree:strava-approved'));
+  };
+  const declineAll = async () => {
+    if (!items || !items.length) return;
+    if (!confirm(`Decline all ${items.length} activities? They won't be imported.`)) return;
+    for (const row of items) {
+      // eslint-disable-next-line no-await-in-loop
+      await decline(row);
+    }
+  };
+
+  const fmtDuration = (min) => {
+    if (!min) return '';
+    const h = Math.floor(min / 60); const m = min % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  };
+  const fmtPace = (s) => {
+    if (!s) return '';
+    const m = Math.floor(s / 60); const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}/km`;
+  };
+
+  return ReactDOM.createPortal(
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0,
+      background: `rgba(0,0,0,${visible ? 0.45 : 0})`,
+      zIndex: 10001, display: 'flex', alignItems: 'flex-end',
+      transition: 'background 0.25s ease-out',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        maxHeight: '90vh', overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
+        transform: visible ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'transform 0.36s cubic-bezier(0.32, 0.72, 0, 1)',
+      }}>
+        <div style={{ padding: '18px 18px 10px' }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 14px' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{
+              fontFamily: theme.titleFont, fontSize: 20, fontWeight: theme.titleWeight,
+              color: theme.ink, letterSpacing: theme.letter,
+            }}>Review Strava imports</div>
+            <button onClick={onClose} style={{
+              background: 'none', border: 'none', color: theme.inkSoft, cursor: 'pointer',
+              fontSize: 20, padding: 4, lineHeight: 1,
+            }}>×</button>
+          </div>
+          <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2 }}>
+            Approve each activity to add it to your exercise log, or decline to skip.
+          </div>
+          {items && items.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={approveAll} disabled={busy} style={{
+                flex: 1, padding: '9px 12px', borderRadius: theme.radius.btn,
+                background: '#2B7A5C', color: '#fff', border: 'none',
+                fontFamily: theme.font, fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.5 : 1,
+              }}>Approve all</button>
+              <button onClick={declineAll} disabled={busy} style={{
+                flex: 1, padding: '9px 12px', borderRadius: theme.radius.btn,
+                background: 'transparent', color: theme.inkSoft, border: `1px solid ${theme.line}`,
+                fontFamily: theme.font, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>Decline all</button>
+            </div>
+          )}
+        </div>
+        {error && (
+          <div style={{
+            margin: '0 18px 10px', padding: '10px 12px', borderRadius: 8,
+            background: '#FDECEA', color: '#B3261E', fontSize: 13, fontFamily: theme.font,
+          }}>{error}</div>
+        )}
+        <div style={{ padding: '0 14px 28px' }}>
+          {items === null ? (
+            <div style={{ padding: 20, fontFamily: theme.font, fontSize: 13, color: theme.inkMute, textAlign: 'center' }}>Loading…</div>
+          ) : items.length === 0 ? (
+            <div style={{ padding: 24, fontFamily: theme.font, fontSize: 13, color: theme.inkMute, textAlign: 'center' }}>
+              No pending activities. Hit "Sync now" on Profile to check Strava again.
+            </div>
+          ) : (
+            items.map((row) => {
+              const d = row.data || {};
+              const date = (d.start_date_local || d.start_date || '').slice(0, 10);
+              const icon = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Swim: '🏊', Strength: '🏋️', HIIT: '🔥', Mobility: '🧘', Other: '⚡' }[d.mapped_type] || '⚡';
+              return (
+                <div key={row.activity_id} style={{
+                  margin: '8px 4px', padding: '14px 14px',
+                  background: theme.surface, borderRadius: theme.radius.card,
+                  border: `1px solid ${theme.line}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ fontSize: 18 }}>{icon}</span>
+                      <div>
+                        <div style={{ fontFamily: theme.font, fontSize: 14, fontWeight: 600, color: theme.ink }}>
+                          {d.name || (d.mapped_type || 'Activity')}
+                        </div>
+                        <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute }}>
+                          {date} · {d.strava_type}{d.runType ? ` · ${d.runType}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: 14,
+                    fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 4,
+                  }}>
+                    {d.duration_min ? <span><b>{fmtDuration(d.duration_min)}</b></span> : null}
+                    {d.distance_km ? <span>{d.distance_km.toFixed(2)} km</span> : null}
+                    {d.pace_sec_per_km ? <span>{fmtPace(d.pace_sec_per_km)}</span> : null}
+                    {d.average_heartrate ? <span>{Math.round(d.average_heartrate)} bpm{d.max_heartrate ? ` (max ${Math.round(d.max_heartrate)})` : ''}</span> : null}
+                    {d.average_cadence ? <span>{Math.round(d.average_cadence)} cad</span> : null}
+                    {d.average_watts ? <span>{Math.round(d.average_watts)} W</span> : null}
+                    {d.elevation_gain_m ? <span>↑ {Math.round(d.elevation_gain_m)} m</span> : null}
+                    {typeof d.kcal === 'number' ? <span>{d.kcal} kcal</span> : null}
+                  </div>
+                  {Array.isArray(d.splits_km) && d.splits_km.length > 0 && (
+                    <div style={{
+                      marginTop: 8, padding: '8px 10px', borderRadius: 8,
+                      background: theme.surfaceAlt,
+                      fontFamily: theme.font, fontSize: 11, color: theme.inkSoft,
+                    }}>
+                      {d.splits_km.length} splits · fastest {fmtPace(Math.min(...d.splits_km.map(s => s.pace_sec_per_km || 999999)))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => approve(row)} disabled={busy} style={{
+                      flex: 1, padding: '10px 0', borderRadius: theme.radius.btn,
+                      background: '#2B7A5C', color: '#fff', border: 'none',
+                      fontFamily: theme.font, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.5 : 1,
+                    }}>Approve</button>
+                    <button onClick={() => decline(row)} disabled={busy} style={{
+                      flex: 1, padding: '10px 0', borderRadius: theme.radius.btn,
+                      background: 'transparent', color: theme.inkSoft,
+                      border: `1px solid ${theme.line}`,
+                      fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    }}>Decline</button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

@@ -1,15 +1,8 @@
 // Supabase Edge Function: strava-exchange
 //
-// Called once after the user returns from Strava's OAuth consent screen
-// with a `code` query param. Exchanges the code for an access + refresh
-// token and stores the connection in `strava_connections`.
-//
-// Required secrets (set via `supabase secrets set ...`):
-//   STRAVA_CLIENT_ID
-//   STRAVA_CLIENT_SECRET
-
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Uses the REST API directly (PostgREST + auth) so we don't need the
+// @supabase/supabase-js package — its ESM bundle keeps failing to boot
+// in the edge runtime environment.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,13 +10,48 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const STRAVA_ID = Deno.env.get("STRAVA_CLIENT_ID") || "";
+const STRAVA_SECRET = Deno.env.get("STRAVA_CLIENT_SECRET") || "";
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, "content-type": "application/json" },
   });
 
-serve(async (req) => {
+async function verifyUser(jwt: string): Promise<string | null> {
+  // Hit the auth /user endpoint with the user's JWT to get their id.
+  const r = await fetch(`${SB_URL}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      apikey: SB_SERVICE,
+    },
+  });
+  if (!r.ok) return null;
+  const u = await r.json();
+  return u?.id || null;
+}
+
+async function upsertConnection(uid: string, row: Record<string, unknown>) {
+  const r = await fetch(
+    `${SB_URL}/rest/v1/strava_connections?on_conflict=user_id`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE,
+        Authorization: `Bearer ${SB_SERVICE}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({ user_id: uid, ...row }),
+    },
+  );
+  if (!r.ok) throw new Error(`upsert failed: ${r.status} ${await r.text()}`);
+}
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
@@ -32,21 +60,16 @@ serve(async (req) => {
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
     if (!jwt) return json({ error: "missing auth" }, 401);
 
-    const supa = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data: userData, error: userErr } = await supa.auth.getUser(jwt);
-    if (userErr || !userData.user) return json({ error: "invalid jwt" }, 401);
-    const uid = userData.user.id;
+    const uid = await verifyUser(jwt);
+    if (!uid) return json({ error: "invalid jwt" }, 401);
 
     const body = await req.json().catch(() => ({}));
     const code: string | undefined = body.code;
     if (!code) return json({ error: "missing code" }, 400);
 
     const form = new URLSearchParams();
-    form.append("client_id", Deno.env.get("STRAVA_CLIENT_ID")!);
-    form.append("client_secret", Deno.env.get("STRAVA_CLIENT_SECRET")!);
+    form.append("client_id", STRAVA_ID);
+    form.append("client_secret", STRAVA_SECRET);
     form.append("code", code);
     form.append("grant_type", "authorization_code");
 
@@ -60,10 +83,8 @@ serve(async (req) => {
       return json({ error: "strava exchange failed", detail: txt }, 502);
     }
     const t = await sres.json();
-    // t = { access_token, refresh_token, expires_at (unix seconds), athlete: {...}, scope (optional) }
 
-    const row = {
-      user_id: uid,
+    await upsertConnection(uid, {
       athlete_id: t.athlete?.id,
       athlete_firstname: t.athlete?.firstname ?? null,
       athlete_lastname: t.athlete?.lastname ?? null,
@@ -72,20 +93,15 @@ serve(async (req) => {
       refresh_token: t.refresh_token,
       expires_at: new Date(t.expires_at * 1000).toISOString(),
       scope: body.scope ?? null,
-    };
-
-    const { error: upErr } = await supa
-      .from("strava_connections")
-      .upsert(row, { onConflict: "user_id" });
-    if (upErr) return json({ error: upErr.message }, 500);
+    });
 
     return json({
       ok: true,
       athlete: {
-        id: row.athlete_id,
-        firstname: row.athlete_firstname,
-        lastname: row.athlete_lastname,
-        username: row.athlete_username,
+        id: t.athlete?.id,
+        firstname: t.athlete?.firstname,
+        lastname: t.athlete?.lastname,
+        username: t.athlete?.username,
       },
     });
   } catch (e) {

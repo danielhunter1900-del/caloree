@@ -1,22 +1,12 @@
 // Supabase Edge Function: strava-sync
 //
-// Pulls the athlete's activities from Strava and upserts them into
-// `exercise_logs`. Each exercise row gets a deterministic id of
-// `strava_<activityId>` so re-syncs don't duplicate and the client
-// can tell Strava-sourced rows apart from manual/AI ones.
+// Pulls the athlete's Strava activities and stores them as PENDING rows
+// in strava_activities. The client then shows a review panel letting
+// the user approve or decline each activity individually before it
+// lands in exercise_logs. No auto-upsert.
 //
-// Rich data (HR, splits, laps, best efforts, cadence, power) comes
-// from the detailed `/activities/{id}` endpoint, called once per
-// activity and cached in `details` JSONB. We refresh details for
-// activities we've already seen only when last_sync_at is stale,
-// since Strava activities are effectively immutable.
-//
-// Rate limits: 100 read req/15min, 1000/day. We cap each invocation
-// to ~80 detailed fetches to leave headroom and bail politely if
-// Strava returns 429.
-
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Uses PostgREST + auth REST API directly (the supabase-js ESM bundle
+// fails to boot in the edge runtime).
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -24,71 +14,86 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+const SB_SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const STRAVA_ID = Deno.env.get("STRAVA_CLIENT_ID") || "";
+const STRAVA_SECRET = Deno.env.get("STRAVA_CLIENT_SECRET") || "";
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, "content-type": "application/json" },
   });
 
-// Map Strava type/sport_type -> our exercise types.
-// Strava's `sport_type` (newer) is more granular than `type` (legacy).
+// --- Strava type mapping ---
 const TYPE_MAP: Record<string, string> = {
-  Run: "Run",
-  TrailRun: "Run",
-  VirtualRun: "Run",
-  Ride: "Cycling",
-  VirtualRide: "Cycling",
-  MountainBikeRide: "Cycling",
-  GravelRide: "Cycling",
-  EBikeRide: "Cycling",
-  EMountainBikeRide: "Cycling",
-  Walk: "Walk",
-  Hike: "Walk",
+  Run: "Run", TrailRun: "Run", VirtualRun: "Run",
+  Ride: "Cycling", VirtualRide: "Cycling",
+  MountainBikeRide: "Cycling", GravelRide: "Cycling",
+  EBikeRide: "Cycling", EMountainBikeRide: "Cycling",
+  Handcycle: "Cycling", Velomobile: "Cycling",
+  Walk: "Walk", Hike: "Walk",
   Swim: "Swim",
   Workout: "Other",
   WeightTraining: "Strength",
   Crossfit: "HIIT",
   HighIntensityIntervalTraining: "HIIT",
-  Yoga: "Mobility",
-  Pilates: "Mobility",
-  Elliptical: "Other",
-  StairStepper: "Other",
-  Rowing: "Other",
-  Kayaking: "Other",
-  Canoeing: "Other",
-  StandUpPaddling: "Other",
-  Surfing: "Other",
-  Kitesurf: "Other",
-  Windsurf: "Other",
-  Snowboard: "Other",
-  AlpineSki: "Other",
-  BackcountrySki: "Other",
-  NordicSki: "Other",
-  IceSkate: "Other",
-  InlineSkate: "Other",
-  RockClimbing: "Other",
-  Golf: "Other",
-  Handcycle: "Cycling",
-  Velomobile: "Cycling",
-  Wheelchair: "Other",
-  Badminton: "Other",
-  Tennis: "Other",
-  TableTennis: "Other",
-  Pickleball: "Other",
-  Squash: "Other",
-  Soccer: "Other",
+  Yoga: "Mobility", Pilates: "Mobility",
 };
-
-// Rough METs for kcal fallback when Strava doesn't send calories/kilojoules.
 const METS: Record<string, number> = {
   Run: 9.8, Cycling: 7.5, Walk: 3.8, Strength: 5.0,
   Calisthenics: 6.0, HIIT: 8.0, Mobility: 2.5, Swim: 8.0, Other: 5.0,
 };
-
-// workout_type (for runs): 0 default, 1 race, 2 long run, 3 workout
 const RUN_SUBTYPE: Record<number, string> = { 1: "Speed", 2: "Long", 3: "Speed" };
 
-serve(async (req) => {
+// --- REST helpers ---
+async function verifyUser(jwt: string): Promise<string | null> {
+  const r = await fetch(`${SB_URL}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${jwt}`, apikey: SB_SERVICE },
+  });
+  if (!r.ok) return null;
+  const u = await r.json();
+  return u?.id || null;
+}
+async function pgGet(path: string) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    headers: { apikey: SB_SERVICE, Authorization: `Bearer ${SB_SERVICE}` },
+  });
+  if (!r.ok) throw new Error(`pgGet ${path}: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function pgPatch(path: string, body: unknown) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method: "PATCH",
+    headers: {
+      apikey: SB_SERVICE,
+      Authorization: `Bearer ${SB_SERVICE}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`pgPatch ${path}: ${r.status} ${await r.text()}`);
+}
+async function pgUpsert(table: string, rows: unknown[], onConflict: string) {
+  if (!rows.length) return;
+  const r = await fetch(
+    `${SB_URL}/rest/v1/${table}?on_conflict=${onConflict}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE,
+        Authorization: `Bearer ${SB_SERVICE}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates,return=minimal",
+      },
+      body: JSON.stringify(rows),
+    },
+  );
+  if (!r.ok) throw new Error(`pgUpsert ${table}: ${r.status} ${await r.text()}`);
+}
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
@@ -96,36 +101,29 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
     if (!jwt) return json({ error: "missing auth" }, 401);
-
-    const supa = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data: userData, error: userErr } = await supa.auth.getUser(jwt);
-    if (userErr || !userData.user) return json({ error: "invalid jwt" }, 401);
-    const uid = userData.user.id;
+    const uid = await verifyUser(jwt);
+    if (!uid) return json({ error: "invalid jwt" }, 401);
 
     const body = await req.json().catch(() => ({}));
     const fullResync: boolean = !!body.full;
     const weightKg: number = +body.weightKg || 75;
 
-    const { data: conn, error: connErr } = await supa
-      .from("strava_connections")
-      .select("*")
-      .eq("user_id", uid)
-      .maybeSingle();
-    if (connErr) return json({ error: connErr.message }, 500);
+    // Load connection
+    const conns = await pgGet(
+      `strava_connections?user_id=eq.${uid}&select=*`,
+    ) as Array<Record<string, unknown>>;
+    const conn = conns[0];
     if (!conn) return json({ error: "not connected" }, 400);
 
-    // Refresh access token if expired (or within 60s of expiring).
-    let accessToken = conn.access_token;
-    const exp = new Date(conn.expires_at).getTime();
+    // Refresh access token if expired
+    let accessToken = conn.access_token as string;
+    const exp = new Date(conn.expires_at as string).getTime();
     if (Date.now() + 60_000 >= exp) {
       const rform = new URLSearchParams();
-      rform.append("client_id", Deno.env.get("STRAVA_CLIENT_ID")!);
-      rform.append("client_secret", Deno.env.get("STRAVA_CLIENT_SECRET")!);
+      rform.append("client_id", STRAVA_ID);
+      rform.append("client_secret", STRAVA_SECRET);
       rform.append("grant_type", "refresh_token");
-      rform.append("refresh_token", conn.refresh_token);
+      rform.append("refresh_token", conn.refresh_token as string);
       const rres = await fetch("https://www.strava.com/api/v3/oauth/token", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -134,108 +132,99 @@ serve(async (req) => {
       if (!rres.ok) return json({ error: "refresh failed", detail: await rres.text() }, 502);
       const t = await rres.json();
       accessToken = t.access_token;
-      await supa.from("strava_connections").update({
+      await pgPatch(`strava_connections?user_id=eq.${uid}`, {
         access_token: t.access_token,
         refresh_token: t.refresh_token,
         expires_at: new Date(t.expires_at * 1000).toISOString(),
-      }).eq("user_id", uid);
+      });
     }
 
-    // Decide time window.
+    // Decide time window
     const nowSec = Math.floor(Date.now() / 1000);
-    const defaultLookback = 180 * 86400; // 180 days on first sync
+    const defaultLookback = 180 * 86400;
     const afterSec = fullResync
-      ? nowSec - 365 * 86400 // 1 year when explicitly asked
+      ? nowSec - 365 * 86400
       : (conn.last_sync_at
-          ? Math.max(0, Math.floor(new Date(conn.last_sync_at).getTime() / 1000) - 3600)
+          ? Math.max(0, Math.floor(new Date(conn.last_sync_at as string).getTime() / 1000) - 3600)
           : nowSec - defaultLookback);
 
-    // Fetch list pages until we exhaust.
-    const listed: any[] = [];
+    // Fetch list pages
+    const listed: Array<Record<string, unknown>> = [];
     let page = 1;
     while (true) {
       const lres = await fetch(
         `https://www.strava.com/api/v3/athlete/activities?after=${afterSec}&per_page=100&page=${page}`,
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
-      if (lres.status === 429) {
-        return json({ error: "strava rate limited, try again later" }, 429);
-      }
-      if (!lres.ok) return json({ error: "list fetch failed", detail: await lres.text() }, 502);
+      if (lres.status === 429) return json({ error: "strava rate limited" }, 429);
+      if (!lres.ok) return json({ error: "list fetch", detail: await lres.text() }, 502);
       const batch = await lres.json();
       if (!Array.isArray(batch) || batch.length === 0) break;
       listed.push(...batch);
       if (batch.length < 100) break;
       page += 1;
-      if (page > 10) break; // safety
+      if (page > 10) break;
     }
 
-    // Which activities do we already have detailed? Skip re-fetching them
-    // unless fullResync is true.
-    const existingIds = new Set<string>();
-    if (!fullResync && listed.length) {
-      const ids = listed.map((a) => "strava_" + a.id);
-      const { data: existing } = await supa
-        .from("exercise_logs")
-        .select("id, details")
-        .eq("user_id", uid)
-        .in("id", ids);
-      (existing || []).forEach((r) => {
-        if (r?.details?.has_details) existingIds.add(r.id);
-      });
+    // Skip activities already in strava_activities (any status)
+    let skipIds = new Set<number>();
+    if (listed.length) {
+      const ids = listed.map((a) => a.id as number).join(",");
+      const existing = await pgGet(
+        `strava_activities?user_id=eq.${uid}&activity_id=in.(${ids})&select=activity_id,status`,
+      ) as Array<{ activity_id: number; status: string }>;
+      if (!fullResync) {
+        skipIds = new Set(existing.map((e) => e.activity_id));
+      }
     }
 
-    // Detailed fetch budget. 80 keeps us well under 100/15min.
     const DETAIL_BUDGET = 80;
     let detailsFetched = 0;
     let rateLimited = false;
+    const toInsert: Array<Record<string, unknown>> = [];
 
-    const rows: any[] = [];
     for (const a of listed) {
-      const rowId = "strava_" + a.id;
-      let detailed: any = null;
-      if (!rateLimited && !existingIds.has(rowId) && detailsFetched < DETAIL_BUDGET) {
+      if (skipIds.has(a.id as number)) continue;
+      let detailed: Record<string, unknown> | null = null;
+      if (!rateLimited && detailsFetched < DETAIL_BUDGET) {
         const dres = await fetch(
           `https://www.strava.com/api/v3/activities/${a.id}?include_all_efforts=true`,
           { headers: { Authorization: `Bearer ${accessToken}` } },
         );
-        if (dres.status === 429) {
-          rateLimited = true;
-        } else if (dres.ok) {
+        if (dres.status === 429) rateLimited = true;
+        else if (dres.ok) {
           detailed = await dres.json();
           detailsFetched += 1;
         }
       }
       const src = detailed ?? a;
-
-      const stravaType = src.sport_type || src.type || "Workout";
+      const stravaType = (src.sport_type || src.type || "Workout") as string;
       const mapped = TYPE_MAP[stravaType] ?? "Other";
-      const durationMin = Math.round((src.moving_time || 0) / 60);
-      const distanceKm = (src.distance || 0) / 1000;
+      const durationMin = Math.round(((src.moving_time as number) || 0) / 60);
+      const distanceKm = ((src.distance as number) || 0) / 1000;
 
-      // kcal: prefer Strava's own, then kilojoules (rides w/ power), else MET estimate.
       let kcal: number | null = null;
       if (typeof src.calories === "number") kcal = Math.round(src.calories);
-      else if (typeof src.kilojoules === "number") kcal = Math.round(src.kilojoules * 0.239);
+      else if (typeof src.kilojoules === "number") kcal = Math.round((src.kilojoules as number) * 0.239);
       else if (durationMin > 0) kcal = Math.round((METS[mapped] || 5.0) * weightKg * (durationMin / 60));
 
-      // Pace / speed for foot + cycling activities.
-      const avgSpeed = src.average_speed || null; // m/s
-      const maxSpeed = src.max_speed || null;
-      const paceSecPerKm = avgSpeed && distanceKm > 0
-        ? Math.round(1000 / avgSpeed)
-        : null;
+      const avgSpeed = (src.average_speed as number) || null;
+      const paceSecPerKm = avgSpeed && distanceKm > 0 ? Math.round(1000 / avgSpeed) : null;
 
       const details: Record<string, unknown> = {
         source: "strava",
         strava_id: src.id,
         strava_type: stravaType,
+        mapped_type: mapped,
         has_details: !!detailed,
         name: src.name,
         description: src.description || null,
         start_date: src.start_date,
         start_date_local: src.start_date_local,
         timezone: src.timezone || null,
+        duration_min: durationMin || null,
+        distance_km: distanceKm || null,
+        kcal,
         elapsed_time_s: src.elapsed_time || null,
         moving_time_s: src.moving_time || null,
         distance_m: src.distance || null,
@@ -245,10 +234,9 @@ serve(async (req) => {
         trainer: !!src.trainer,
         commute: !!src.commute,
         manual: !!src.manual,
-        private: !!src.private,
         workout_type: src.workout_type ?? null,
         average_speed_mps: avgSpeed,
-        max_speed_mps: maxSpeed,
+        max_speed_mps: src.max_speed || null,
         pace_sec_per_km: paceSecPerKm,
         has_heartrate: !!src.has_heartrate,
         average_heartrate: src.average_heartrate ?? null,
@@ -261,19 +249,15 @@ serve(async (req) => {
         device_watts: !!src.device_watts,
         kilojoules: src.kilojoules ?? null,
         gear_id: src.gear_id || null,
-        map_polyline: src.map?.summary_polyline || null,
+        map_polyline: (src.map as any)?.summary_polyline || null,
         photos_count: src.total_photo_count ?? 0,
       };
-
-      // Run subtype from workout_type.
       if (mapped === "Run" && RUN_SUBTYPE[src.workout_type as number]) {
         details.runType = RUN_SUBTYPE[src.workout_type as number];
       }
-
-      // Rich structures only present on detailed fetches.
       if (detailed) {
         if (Array.isArray(detailed.splits_metric)) {
-          details.splits_km = detailed.splits_metric.map((s: any) => ({
+          details.splits_km = (detailed.splits_metric as any[]).map((s) => ({
             km: s.split,
             seconds: s.moving_time,
             pace_sec_per_km: s.moving_time && s.distance
@@ -284,73 +268,46 @@ serve(async (req) => {
           }));
         }
         if (Array.isArray(detailed.laps)) {
-          details.laps = detailed.laps.map((l: any) => ({
+          details.laps = (detailed.laps as any[]).map((l) => ({
             name: l.name,
             moving_time: l.moving_time,
             distance_m: l.distance,
             avg_speed_mps: l.average_speed,
-            max_speed_mps: l.max_speed,
             avg_hr: l.average_heartrate ?? null,
-            max_hr: l.max_heartrate ?? null,
             avg_cadence: l.average_cadence ?? null,
             avg_watts: l.average_watts ?? null,
           }));
         }
         if (Array.isArray(detailed.best_efforts)) {
-          details.best_efforts = detailed.best_efforts.map((b: any) => ({
-            name: b.name,
-            distance_m: b.distance,
-            moving_time: b.moving_time,
-            pr_rank: b.pr_rank ?? null,
-          }));
-        }
-        if (Array.isArray(detailed.segment_efforts)) {
-          // Too large to store all; keep a compact summary of the top 5.
-          details.segments_sample = detailed.segment_efforts.slice(0, 5).map((s: any) => ({
-            name: s.name,
-            distance_m: s.distance,
-            moving_time: s.moving_time,
-            pr_rank: s.pr_rank ?? null,
-            kom_rank: s.kom_rank ?? null,
+          details.best_efforts = (detailed.best_efforts as any[]).map((b) => ({
+            name: b.name, distance_m: b.distance, moving_time: b.moving_time, pr_rank: b.pr_rank ?? null,
           }));
         }
       }
 
-      rows.push({
-        id: rowId,
+      toInsert.push({
         user_id: uid,
-        date: (src.start_date_local || src.start_date || new Date().toISOString()).slice(0, 10),
+        activity_id: src.id,
+        status: "pending",
         type: mapped,
-        duration_min: durationMin || null,
-        distance_km: distanceKm || null,
-        kcal,
-        notes: [src.name, src.description].filter(Boolean).join(" — ") || null,
-        details,
+        data: details,
       });
     }
 
-    let upserted = 0;
-    if (rows.length) {
-      // Upsert in chunks to avoid big requests.
-      const CHUNK = 50;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const slice = rows.slice(i, i + CHUNK);
-        const { error: upErr } = await supa
-          .from("exercise_logs")
-          .upsert(slice, { onConflict: "id" });
-        if (upErr) return json({ error: upErr.message, upsertedSoFar: upserted }, 500);
-        upserted += slice.length;
-      }
+    // Chunked insert with ignore-duplicates resolution (won't overwrite existing)
+    const CHUNK = 50;
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      await pgUpsert("strava_activities", toInsert.slice(i, i + CHUNK), "user_id,activity_id");
     }
 
-    await supa.from("strava_connections").update({
+    await pgPatch(`strava_connections?user_id=eq.${uid}`, {
       last_sync_at: new Date().toISOString(),
-    }).eq("user_id", uid);
+    });
 
     return json({
       ok: true,
       listed: listed.length,
-      upserted,
+      newly_pending: toInsert.length,
       details_fetched: detailsFetched,
       rate_limited: rateLimited,
     });
