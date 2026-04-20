@@ -232,7 +232,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -3794,12 +3794,16 @@ function bucketFor(range, offset) {
     const monthDays = all.filter(d => d.y === targetYear && d.m === mi);
     if (monthDays.length === 0) continue;
     const avg = monthDays.reduce((s, d) => s + d.kcal, 0) / monthDays.length;
+    const avgKey = (k) => Math.round(monthDays.reduce((s, d) => s + (+d[k] || 0), 0) / monthDays.length);
     months.push({
       y: targetYear, m: mi, d: 1,
-      kcal: Math.round(avg),
-      c: Math.round(monthDays.reduce((s,d)=>s+d.c,0)/monthDays.length),
-      p: Math.round(monthDays.reduce((s,d)=>s+d.p,0)/monthDays.length),
-      f: Math.round(monthDays.reduce((s,d)=>s+d.f,0)/monthDays.length),
+      kcal:   Math.round(avg),
+      c:      avgKey('c'),
+      p:      avgKey('p'),
+      f:      avgKey('f'),
+      satFat: avgKey('satFat'),
+      sugar:  avgKey('sugar'),
+      fibre:  avgKey('fibre'),
       barLabel: monthShort(mi)[0],
       dateLabel: `${monthLong(mi)} ${targetYear}`,
       isToday: offset === 0 && mi === today.getMonth(),
