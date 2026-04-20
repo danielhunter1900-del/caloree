@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1665,25 +1665,82 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
 
   const panelRef = React.useRef(null);
 
-  // iOS Safari scroll lock. The background uses an inner overflow:auto
-  // container, so toggling body.style.overflow is not enough. We also
-  // need to swallow touchmoves when the panel itself isn't scrollable,
-  // otherwise iOS falls back to scrolling the nearest scrollable
-  // ancestor (the page behind).
+  // iOS scroll lock that preserves native rubber-band inside the panel.
   React.useEffect(() => {
-    const onTouchMove = (e) => {
-      const panel = panelRef.current;
-      if (panel && panel.contains(e.target)) {
-        // Only allow native scroll when the panel actually has
-        // overflow — otherwise iOS bubbles the drag to the page.
-        const scrollable = panel.scrollHeight > panel.clientHeight + 1;
-        if (scrollable) return;
-      }
-      if (e.cancelable) e.preventDefault();
+    const scroller = document.querySelector('[data-app-scroller]');
+    if (!scroller) return;
+    const prevOverflow = scroller.style.overflow;
+    const prevY = scroller.scrollTop;
+    scroller.style.overflow = 'hidden';
+    const bodyPrev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      scroller.style.overflow = prevOverflow;
+      scroller.scrollTop = prevY;
+      document.body.style.overflow = bodyPrev;
     };
-    document.addEventListener('touchmove', onTouchMove, { passive: false });
-    return () => document.removeEventListener('touchmove', onTouchMove);
   }, []);
+
+  // iOS-style swipe-to-dismiss with rubber-band resistance. The panel
+  // tracks the finger from the drag handle or when the list is
+  // scrolled to the top and the user keeps pulling down.
+  const [dragY, setDragY] = React.useState(0);
+  const dragState = React.useRef({ startY: 0, active: false, startedAtTop: false });
+  const onPanelTouchStart = (e) => {
+    const t = e.touches[0];
+    const panel = panelRef.current;
+    const handle = e.target.closest('[data-drag-handle]');
+    const atTop = !panel || panel.scrollTop <= 0;
+    dragState.current = {
+      startY: t.clientY,
+      active: !!handle || atTop,
+      startedAtTop: atTop,
+      startedOnHandle: !!handle,
+    };
+  };
+  const onPanelTouchMove = (e) => {
+    const s = dragState.current;
+    if (!s.active) return;
+    const t = e.touches[0];
+    let dy = t.clientY - s.startY;
+    const panel = panelRef.current;
+    if (dy < 0) {
+      // Dragging up — let native scroll take over if there's content to scroll
+      if (!s.startedOnHandle && panel && panel.scrollHeight > panel.clientHeight) {
+        s.active = false;
+        setDragY(0);
+        return;
+      }
+      // Otherwise rubber-band upward (but not far)
+      dy = -Math.pow(-dy, 0.55);
+    } else {
+      // Dragging down. If user is not at scroll top and didn't start on
+      // the handle, native scroll wins.
+      if (!s.startedOnHandle && panel && panel.scrollTop > 0) {
+        s.active = false;
+        setDragY(0);
+        return;
+      }
+      // Rubber-band when past the "natural" drag — give some slight
+      // resistance after 40px.
+      if (dy > 40) dy = 40 + Math.pow(dy - 40, 0.88);
+    }
+    setDragY(dy);
+  };
+  const onPanelTouchEnd = () => {
+    const s = dragState.current;
+    if (!s.active) return;
+    const y = dragY;
+    dragState.current.active = false;
+    if (y > 110) {
+      // Dismiss
+      setDragY(window.innerHeight);
+      setTimeout(() => onClose && onClose(), 200);
+    } else {
+      // Snap back
+      setDragY(0);
+    }
+  };
 
   // Render via portal so `position: fixed` works regardless of the inner
   // `overflow: auto` ancestor that App uses for the main scroll container.
@@ -1699,22 +1756,35 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
       }}>
       <div ref={panelRef}
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={onPanelTouchStart}
+        onTouchMove={onPanelTouchMove}
+        onTouchEnd={onPanelTouchEnd}
+        onTouchCancel={onPanelTouchEnd}
         style={{
           width: '100%', background: theme.surface,
           borderTopLeftRadius: 20, borderTopRightRadius: 20,
           padding: '20px 18px 28px', maxHeight: '72vh',
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
+          overscrollBehaviorY: 'contain',
           touchAction: 'pan-y',
-          transform: visible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.42s cubic-bezier(0.2, 1.15, 0.3, 1)',
+          transform: visible
+            ? `translateY(${dragY}px)`
+            : 'translateY(100%)',
+          transition: dragState.current.active
+            ? 'none'
+            : 'transform 0.42s cubic-bezier(0.2, 1.15, 0.3, 1)',
           willChange: 'transform',
         }}>
-        <div style={{
-          width: 40, height: 4, borderRadius: 2, background: theme.line,
-          margin: '0 auto 16px',
-        }}/>
+        <div data-drag-handle style={{
+          width: 100, height: 24, margin: '-6px auto 10px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'grab',
+        }}>
+          <div style={{
+            width: 40, height: 4, borderRadius: 2, background: theme.line,
+          }}/>
+        </div>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
           marginBottom: 4,
@@ -9987,7 +10057,7 @@ function App({ session }) {
           background: theme.bg, overflow: 'hidden',
         }}>
           {/* Main scrollable content */}
-          <div style={{
+          <div data-app-scroller style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             overflow: 'auto',
           }}>
