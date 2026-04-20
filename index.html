@@ -1030,7 +1030,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
+function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session, logDate, setLogDate }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1188,7 +1188,8 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
     if (r.error) console.warn('fav sync:', r.error.message);
   };
   const todayIso = new Date().toISOString().slice(0, 10);
-  const [selectedDate, setSelectedDate] = React.useState(todayIso);
+  const selectedDate = logDate || todayIso;
+  const setSelectedDate = setLogDate || (() => {});
   const dayLog = log.filter(e => (e.date || todayIso) === selectedDate);
   // Resolve targets that were active on the selected date
   const targets = targetsForDate ? targetsForDate(selectedDate) : baseTargets;
@@ -1205,6 +1206,49 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
   const [drill, setDrill] = React.useState(null); // { key: 'c'|'p'|'f', label, unit, color }
   const [ringView, setRingView] = React.useState('kcal'); // 'kcal' | 'exercise'
   const exGoalKcal = targets.exKcal || 400;
+
+  // Per-day select mode
+  const [selectMode, setSelectMode] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState(new Set());
+  const [pickAction, setPickAction] = React.useState(null); // 'copy' | 'move' | null
+  const [pickDate, setPickDate] = React.useState(todayIso);
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setPickAction(null); };
+  const performAction = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    const sb = window.sb;
+    if (!sb || !session) return;
+    if (pickAction === 'move') {
+      const r = await sb.from('meal_logs').update({ date: pickDate }).in('id', ids);
+      if (r.error) { window.showToast && window.showToast('Move failed: ' + r.error.message); return; }
+      setLog(prev => prev.map(l => ids.includes(l.id) ? { ...l, date: pickDate } : l));
+      window.showToast && window.showToast(`Moved ${ids.length} item${ids.length === 1 ? '' : 's'} to ${pickDate}`);
+    } else if (pickAction === 'copy') {
+      const uid = session.user.id;
+      const picked = log.filter(l => ids.includes(l.id));
+      const newRows = picked.map((e, i) => ({
+        id: 'l_copy_' + Date.now() + '_' + i,
+        user_id: uid, date: pickDate,
+        meal: e.meal, food_id: e.foodId, qty: e.qty || 1, time: e.time || null,
+      }));
+      if (newRows.length) {
+        const r = await sb.from('meal_logs').insert(newRows);
+        if (r.error) { window.showToast && window.showToast('Copy failed: ' + r.error.message); return; }
+        setLog(prev => [...prev, ...newRows.map(r => ({
+          id: r.id, foodId: r.food_id, qty: +r.qty || 1, meal: r.meal, time: r.time, date: r.date,
+        }))]);
+        window.showToast && window.showToast(`Copied ${newRows.length} item${newRows.length === 1 ? '' : 's'} to ${pickDate}`);
+      }
+    }
+    exitSelectMode();
+  };
   const isToday = selectedDate === todayIso;
   const [markedMap, setMarkedMap] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem('cal_marked_complete') || '{}'); }
@@ -1415,10 +1459,28 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
           });
         }}/>
 
+      {/* Edit toggle */}
+      {dayLog.length > 0 && (
+        <div style={{
+          margin: '0 16px 8px', display: 'flex', justifyContent: 'flex-end',
+        }}>
+          <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)} style={{
+            padding: '6px 12px', border: `1px solid ${theme.line}`,
+            background: selectMode ? theme.ink : 'transparent',
+            color: selectMode ? theme.bg : theme.inkSoft,
+            borderRadius: 999, cursor: 'pointer',
+            fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+          }}>{selectMode ? `Cancel · ${selectedIds.size}` : 'Edit'}</button>
+        </div>
+      )}
+
       {/* Meal sections */}
       {meals.map(m => (
-        <MealSection key={m + favBump} meal={m} theme={theme}
+        <MealSection key={m + favBump + (selectMode ? '_s' : '')} meal={m} theme={theme}
           entries={dayLog.filter(e => e.meal === m)}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
           onDelete={(id) => {
             const removed = log.find(e => e.id === id);
             setLog(log.filter(e => e.id !== id));
@@ -1482,6 +1544,71 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
       {drill && (
         <MacroDrillSheet theme={theme} log={dayLog} drill={drill}
           onClose={() => setDrill(null)} onOpenFood={onOpenFood} />
+      )}
+
+      {/* Select-mode action bar */}
+      {selectMode && selectedIds.size > 0 && (
+        <div style={{
+          position: 'fixed', left: 12, right: 12, bottom: 90, zIndex: 50,
+          background: theme.surface, padding: '10px 12px',
+          borderRadius: 16, border: `1px solid ${theme.line}`,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{
+            fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
+          }}>{selectedIds.size} selected</span>
+          <div style={{ flex: 1 }}/>
+          <button onClick={() => { setPickAction('move'); setPickDate(todayIso); }} style={{
+            padding: '8px 14px', border: `1px solid ${theme.line}`,
+            background: theme.surfaceAlt, color: theme.ink, cursor: 'pointer',
+            borderRadius: 999, fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+          }}>Move…</button>
+          <button onClick={() => { setPickAction('copy'); setPickDate(todayIso); }} style={{
+            padding: '8px 14px', border: 'none',
+            background: theme.accent, color: theme.accentInk, cursor: 'pointer',
+            borderRadius: 999, fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+          }}>Copy…</button>
+        </div>
+      )}
+
+      {/* Date picker for selected action */}
+      {pickAction && (
+        <div onClick={() => setPickAction(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: '100%', maxWidth: 320, background: theme.surface,
+            borderRadius: 16, padding: '18px 18px 20px',
+          }}>
+            <div style={{
+              fontFamily: theme.titleFont, fontSize: 16, fontWeight: theme.titleWeight,
+              color: theme.ink, marginBottom: 4,
+            }}>{pickAction === 'copy' ? 'Copy to' : 'Move to'}</div>
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginBottom: 12,
+            }}>{selectedIds.size} selected · {pickAction === 'copy' ? 'duplicates them on the new date' : 'moves them off this date'}</div>
+            <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px', marginBottom: 12,
+                border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
+                fontSize: 14, outline: 'none', background: theme.bg, color: theme.ink,
+              }}/>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setPickAction(null)} style={{
+                flex: 1, padding: '10px 0', border: `1px solid ${theme.line}`,
+                background: 'transparent', color: theme.inkSoft,
+                borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>Cancel</button>
+              <button onClick={performAction} style={{
+                flex: 1, padding: '10px 0', border: 'none',
+                background: theme.accent, color: theme.accentInk,
+                borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>{pickAction === 'copy' ? 'Copy' : 'Move'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2087,7 +2214,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
   );
 }
 
-function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry, onToggleFav, onCopyToDate }) {
+function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry, onToggleFav, onCopyToDate, selectMode, selectedIds, onToggleSelect }) {
   const subtotal = sumMacros(entries);
   const hasItems = entries.length > 0;
   const [dragOver, setDragOver] = React.useState(false);
@@ -2159,12 +2286,14 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
       {hasItems && entries.map((e, i) => (
         <SwipeRow key={e.id} entry={e} theme={theme}
           onDelete={() => onDelete(e.id)}
-          onTap={() => onOpen(e.foodId)}
+          onTap={() => selectMode ? onToggleSelect(e.id) : onOpen(e.foodId)}
           isLast={i === entries.length - 1}
-          draggable={true}
+          draggable={!selectMode}
           onToggleFav={onToggleFav}
           onCopyToDate={onCopyToDate}
-          onMoveEntry={onMoveEntry}
+          onMoveEntry={selectMode ? null : onMoveEntry}
+          selectMode={selectMode}
+          selected={selectedIds && selectedIds.has(e.id)}
         />
       ))}
     </div>
@@ -2174,7 +2303,7 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
 // ─────────────────────────────────────────────────────────────
 // SwipeRow — touch + mouse drag to reveal delete button
 // ─────────────────────────────────────────────────────────────
-function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onMoveEntry }) {
+function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onMoveEntry, selectMode, selected }) {
 
   // Touch drag — initiated immediately by tapping the drag handle
   const longPressTimer = React.useRef(null);
@@ -2410,7 +2539,15 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
           cursor: 'pointer', userSelect: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
-        {onMoveEntry && (
+        {selectMode && (
+          <div style={{
+            width: 22, height: 22, borderRadius: 4, flexShrink: 0,
+            border: `1.5px solid ${selected ? '#2B7A5C' : theme.line}`,
+            background: selected ? '#2B7A5C' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{selected && <span style={{ color: '#fff', fontSize: 14 }}>✓</span>}</div>
+        )}
+        {onMoveEntry && !selectMode && (
           <div
             onTouchStart={startTouchDrag}
             onMouseDown={startTouchDrag}
@@ -6924,21 +7061,6 @@ function AddPickerSheet({ theme, onClose, onManual, onAI, onBulk, onPaste, onExe
               </div>
             </div>
           </button>
-          <button onClick={onHistory} style={{
-            padding: '16px 18px', border: `1px solid ${theme.line}`,
-            background: theme.surfaceAlt, color: theme.ink, cursor: 'pointer',
-            borderRadius: theme.radius.card,
-            fontFamily: theme.font, fontSize: 15, fontWeight: 600,
-            textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14,
-          }}>
-            <span style={{ fontSize: 22 }}>🕘</span>
-            <div style={{ flex: 1 }}>
-              <div>From history · multi-select</div>
-              <div style={{ fontSize: 12, color: theme.inkSoft, fontWeight: 400, marginTop: 2 }}>
-                Pick past meals to copy or move to another date
-              </div>
-            </div>
-          </button>
           <button onClick={onManual} style={{
             padding: '16px 18px', border: `1px solid ${theme.line}`,
             background: theme.surfaceAlt, color: theme.ink, cursor: 'pointer',
@@ -8066,7 +8188,8 @@ function App({ session }) {
   const [showBulk, setShowBulk] = useStateApp(false);
   const [showPaste, setShowPaste] = useStateApp(false);
   const [showExercise, setShowExercise] = useStateApp(false);
-  const [showHistory, setShowHistory] = useStateApp(false);
+  // Date the user is currently focused on (drives Home view + where AI/Bulk logs land)
+  const [logDate, setLogDate] = useStateApp(() => new Date().toISOString().slice(0, 10));
   const openDetail = (foodId, meal) => setDetailFood({ foodId, meal });
   const closeDetail = () => setDetailFood(null);
 
@@ -8085,7 +8208,7 @@ function App({ session }) {
       : (payload.meal && payload.items ? [{ meal: payload.meal, items: payload.items }] : []);
     const newFoods = [];
     const newEntries = [];
-    const today = new Date().toISOString().slice(0, 10);
+    const targetDate = logDate || new Date().toISOString().slice(0, 10);
     // Upload photos first (if a group has a data-URL photo)
     for (const g of groups) {
       if (g.photo && g.photo.startsWith('data:') && session) {
@@ -8109,12 +8232,31 @@ function App({ session }) {
           photoPath: i === 0 ? (g.photoPath || null) : null,
         });
         newEntries.push({
-          id: 'l_' + id, foodId: id, qty: 1, meal: g.meal || 'Snack', time: '14:00', date: today,
+          id: 'l_' + id, foodId: id, qty: 1, meal: g.meal || 'Snack', time: '14:00', date: targetDate,
         });
       });
     });
     newFoods.forEach(f => FOODS.push(f));
     setLog([...log, ...newEntries]);
+    // If logging to a past date, push directly to Supabase (App's push only syncs today)
+    const today = new Date().toISOString().slice(0, 10);
+    if (window.sb && session && targetDate !== today && newEntries.length) {
+      const uid = session.user.id;
+      try {
+        await window.sb.from('foods').upsert(newFoods.map(f => ({
+          id: f.id, user_id: uid, name: f.name, brand: f.brand || null,
+          serving_g: f.servingG || 100,
+          kcal: f.kcal || 0, c: f.c || 0, p: f.p || 0, f: f.f || 0,
+          sat_fat: f.satFat ?? null, sugar: f.sugar ?? null, fibre: f.fibre ?? null,
+          ingredients: f.ingredients || null,
+          photo_path: f.photoPath || null,
+        })), { onConflict: 'id' });
+        await window.sb.from('meal_logs').insert(newEntries.map(e => ({
+          id: e.id, user_id: uid, date: e.date, meal: e.meal,
+          food_id: e.foodId, qty: e.qty || 1, time: e.time || null,
+        })));
+      } catch (err) { console.warn('past-date sync:', err.message); }
+    }
     setTab('home');
   };
 
@@ -8143,7 +8285,8 @@ function App({ session }) {
                 onAddMeal={openLog} onOpenFood={openDetail}
                 onOpenProfile={() => setTab('profile')}
                 onAddExercise={() => setShowExercise(true)}
-                session={session} />
+                session={session}
+                logDate={logDate} setLogDate={setLogDate} />
             )}
             {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
@@ -8169,14 +8312,7 @@ function App({ session }) {
               onAI={() => { setShowAddPicker(false); setTab('ai'); }}
               onBulk={() => { setShowAddPicker(false); setShowBulk(true); }}
               onPaste={() => { setShowAddPicker(false); setShowPaste(true); }}
-              onExercise={() => { setShowAddPicker(false); setShowExercise(true); }}
-              onHistory={() => { setShowAddPicker(false); setShowHistory(true); }}/>
-          )}
-
-          {showHistory && (
-            <HistorySheet theme={theme} session={session}
-              log={log} setLog={setLog}
-              onClose={() => setShowHistory(false)}/>
+              onExercise={() => { setShowAddPicker(false); setShowExercise(true); }}/>
           )}
 
           {showExercise && (
