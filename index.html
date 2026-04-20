@@ -48,10 +48,32 @@
     return path;
   };
 
-  // Register service worker for offline PWA support
+  // Register service worker for offline PWA support.
+  //
+  // Two things make deploys sticky without this care:
+  //   1. The browser may cache sw.js itself for up to 24h. updateViaCache:'none'
+  //      forces a revalidation every time the SW is fetched.
+  //   2. Even when a new SW installs + activates, the current tab keeps running
+  //      the old bundle until it reloads. We listen for controllerchange and
+  //      reload once — so the next deploy lands on the next app focus.
   if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      // Give the new SW a tick to settle, then reload the page.
+      setTimeout(() => location.reload(), 50);
+    });
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW:', e));
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          // Kick an update check now and every time the tab comes back.
+          reg.update().catch(() => {});
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update().catch(() => {});
+          });
+        })
+        .catch((e) => console.warn('SW:', e));
     });
   }
 
@@ -232,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
