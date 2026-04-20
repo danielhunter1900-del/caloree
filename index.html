@@ -2055,8 +2055,7 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
 // ─────────────────────────────────────────────────────────────
 // SwipeRow — touch + mouse drag to reveal delete button
 // ─────────────────────────────────────────────────────────────
-function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onCopyToDate, onMoveEntry }) {
-  const [showCopy, setShowCopy] = React.useState(false);
+function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFav, onMoveEntry }) {
 
   // Long-press touch drag (works on iOS where HTML5 drag is broken)
   const longPressTimer = React.useRef(null);
@@ -2070,8 +2069,11 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
       // Begin drag: cancel any in-progress swipe, reset offset
       dragging.current = false;
       setOffset(0);
+      // Cleanup any orphan ghosts from previous drags
+      document.querySelectorAll('.caloree-drag-ghost').forEach(el => el.remove());
       // Build ghost
       const ghost = document.createElement('div');
+      ghost.className = 'caloree-drag-ghost';
       ghost.style.cssText = `position:fixed; pointer-events:none; z-index:9999;
         left:${t.clientX - 100}px; top:${t.clientY - 24}px;
         width:200px; padding:10px 14px; background:${theme.surface};
@@ -2084,6 +2086,18 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
       touchDragRef.current.active = true;
       touchDragRef.current.ghost = ghost;
       if (navigator.vibrate) navigator.vibrate(20);
+
+      // Document-level fallback to guarantee cleanup even if component unmounts
+      const cleanup = () => {
+        document.querySelectorAll('.caloree-drag-ghost').forEach(el => el.remove());
+        window.dispatchEvent(new CustomEvent('caloree:touchdrag-end', { detail: {} }));
+        touchDragRef.current = { active: false, ghost: null, startX: 0, startY: 0 };
+        document.removeEventListener('touchend', docEnd, true);
+        document.removeEventListener('touchcancel', docEnd, true);
+      };
+      const docEnd = () => cleanup();
+      document.addEventListener('touchend', docEnd, true);
+      document.addEventListener('touchcancel', docEnd, true);
     }, 400);
   };
   const onTouchMoveDrag = (e) => {
@@ -2207,53 +2221,6 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
             }}>
             {food.isFavourite ? '★' : '☆'}
           </button>
-        )}
-        {onCopyToDate && (
-          <button onClick={(e) => { e.stopPropagation(); setShowCopy(true); }}
-            title="Copy to another date"
-            style={{
-              border: 'none', background: 'none', cursor: 'pointer',
-              padding: 4, fontSize: 14, lineHeight: 1, color: theme.inkMute,
-            }}>⎘</button>
-        )}
-        {showCopy && (
-          <div onClick={(ev) => ev.stopPropagation()} style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 250,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-          }}>
-            <div style={{
-              width: '100%', maxWidth: 320, background: theme.surface,
-              borderRadius: 14, padding: '18px 18px 20px',
-            }}>
-              <div style={{
-                fontFamily: theme.titleFont, fontSize: 16, fontWeight: theme.titleWeight,
-                color: theme.ink, marginBottom: 10,
-              }}>Copy {food.name} to…</div>
-              <input type="date" defaultValue={new Date().toISOString().slice(0, 10)}
-                id={`copydate-${entry.id}`}
-                style={{
-                  width: '100%', padding: '10px 12px', marginBottom: 12,
-                  border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
-                  fontSize: 14, outline: 'none',
-                }}/>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setShowCopy(false)} style={{
-                  flex: 1, padding: '10px 0', border: `1px solid ${theme.line}`,
-                  background: 'transparent', color: theme.inkSoft,
-                  borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                }}>Cancel</button>
-                <button onClick={() => {
-                  const d = document.getElementById(`copydate-${entry.id}`).value;
-                  if (d) onCopyToDate(entry.id, d);
-                  setShowCopy(false);
-                }} style={{
-                  flex: 1, padding: '10px 0', border: 'none',
-                  background: theme.accent, color: theme.accentInk,
-                  borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                }}>Copy</button>
-              </div>
-            </div>
-          </div>
         )}
         <div style={{ textAlign: 'right' }}>
           <div style={{
