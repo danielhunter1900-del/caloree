@@ -1220,7 +1220,6 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
   const remaining = Math.max(0, effectiveKcalGoal - totals.kcal);
   const animKcal = useAnimatedNum(totals.kcal);
   const [drill, setDrill] = React.useState(null); // { key: 'c'|'p'|'f', label, unit, color }
-  const [ringView, setRingView] = React.useState('kcal'); // 'kcal' | 'exercise'
   const exGoalKcal = targets.exKcal || 400;
 
   // Per-day select mode
@@ -1308,55 +1307,31 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
             <div style={{
               fontFamily: theme.font, fontSize: 11, fontWeight: 600,
               color: theme.inkSoft, letterSpacing: '0.12em', textTransform: 'uppercase',
-            }}>{ringView === 'exercise' ? 'Exercise' : 'Calories'}</div>
+            }}>Calories</div>
             <div style={{
               fontFamily: theme.font, fontSize: 13, color: theme.inkMute, marginTop: 2,
             }}>
-              {ringView === 'exercise'
-                ? `Goal ${exGoalKcal} kcal burned`
-                : `Goal ${effectiveKcalGoal.toLocaleString()} kcal${settings.adjustForExercise && dayExBurn > 0 ? ` (${targets.kcal} + ${Math.round(dayExBurn)} exercise)` : ''}`}
+              Goal {effectiveKcalGoal.toLocaleString()} kcal{settings.adjustForExercise && dayExBurn > 0 ? ` (${targets.kcal} + ${Math.round(dayExBurn)} exercise)` : ''}
             </div>
           </div>
           <StatusBadge theme={theme}
-            kcal={ringView === 'exercise' ? dayExBurn : totals.kcal}
-            target={ringView === 'exercise' ? exGoalKcal : effectiveKcalGoal}
-            kind={ringView === 'exercise' ? 'exercise' : 'food'} />
+            kcal={totals.kcal}
+            target={effectiveKcalGoal}
+            kind="food" />
         </div>
 
-        {/* Ring view toggle */}
-        <div style={{
-          display: 'flex', gap: 2, padding: 2, marginBottom: 8,
-          background: theme.surfaceAlt, borderRadius: theme.radius.btn,
-        }}>
-          {[['kcal', 'Calories'], ['exercise', 'Exercise']].map(([k, l]) => (
-            <button key={k} onClick={() => setRingView(k)} style={{
-              flex: 1, padding: '6px 0', border: 'none',
-              background: ringView === k ? theme.surface : 'transparent',
-              color: theme.ink, cursor: 'pointer',
-              borderRadius: theme.radius.btn - 2,
-              fontFamily: theme.font, fontSize: 12,
-              fontWeight: ringView === k ? 600 : 500,
-              boxShadow: ringView === k ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-            }}>{l}</button>
-          ))}
-        </div>
-
-        <div onClick={() => ringView === 'kcal' && setDrill({ key: 'kcal', label: 'Calories', unit: ' kcal', color: theme.accent })}
-          style={{ display: 'flex', justifyContent: 'center', margin: '8px 0 4px', cursor: ringView === 'kcal' ? 'pointer' : 'default' }}>
-          <Ring pct={ringView === 'exercise' ? dayExBurn / exGoalKcal : ringPct}
+        <div onClick={() => setDrill({ key: 'kcal', label: 'Calories', unit: ' kcal', color: theme.accent })}
+          style={{ display: 'flex', justifyContent: 'center', margin: '8px 0 4px', cursor: 'pointer' }}>
+          <Ring pct={ringPct}
             size={228} stroke={theme.name === 'Editorial' ? 8 : 14} theme={theme}>
             <div style={{
               fontFamily: theme.numFont, fontSize: 56, fontWeight: theme.numWeight,
               color: theme.ink, letterSpacing: theme.letter, lineHeight: 1,
-            }}>{ringView === 'exercise'
-              ? Math.round(dayExBurn).toLocaleString()
-              : Math.round(animKcal).toLocaleString()}</div>
+            }}>{Math.round(animKcal).toLocaleString()}</div>
             <div style={{
               fontFamily: theme.font, fontSize: 12, color: theme.inkSoft,
               marginTop: 6, letterSpacing: '0.06em', textTransform: 'uppercase',
-            }}>{ringView === 'exercise'
-              ? `${Math.max(0, exGoalKcal - Math.round(dayExBurn))} to goal`
-              : `${Math.round(remaining)} remaining`}</div>
+            }}>{Math.round(remaining)} remaining</div>
           </Ring>
         </div>
 
@@ -3838,43 +3813,256 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Exercise calendar — month grid with type filter chips
+// Exercise calendar — Week / Month / Year views with filter chips
 // ─────────────────────────────────────────────────────────────
-function ExerciseCalendar({ theme, bucket, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate, chartMetric }) {
+function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate }) {
   if (!bucket || !bucket.bars || !bucket.bars.length) return null;
-  const first = bucket.bars[0];
-  const y = first.y, m = first.m;
-  const monthStart = new Date(y, m, 1);
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  // JS getDay: 0=Sun..6=Sat. We want Mon-first: M T W T F S S
-  const firstDowJs = monthStart.getDay();
-  const firstDowMon = (firstDowJs + 6) % 7; // 0=Mon..6=Sun
-  const cells = firstDowMon + daysInMonth;
-  const rows = Math.ceil(cells / 7);
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  // Types actually logged this month + per-type total minutes for chip counts
+  // Collect the list of ISO dates to scan for per-type totals.
+  // Month & Week: bars are days. Year: bars are months, so walk each month's days.
+  const scanDates = React.useMemo(() => {
+    if (range === 'Year') {
+      const out = [];
+      bucket.bars.forEach(b => {
+        const dim = new Date(b.y, b.m + 1, 0).getDate();
+        for (let d = 1; d <= dim; d++) {
+          const mm = String(b.m + 1).padStart(2, '0');
+          const dd = String(d).padStart(2, '0');
+          out.push(`${b.y}-${mm}-${dd}`);
+        }
+      });
+      return out;
+    }
+    return bucket.bars.map(b => b.iso);
+  }, [bucket, range]);
+
+  // Per-type totals (minutes + distance) for chip labels
   const typeTotals = {};
-  bucket.bars.forEach(b => {
-    const ex = exByDate[b.iso];
+  scanDates.forEach(iso => {
+    const ex = exByDate[iso];
     if (!ex || !ex.byType) return;
     Object.entries(ex.byType).forEach(([t, v]) => {
-      const val = chartMetric === 'exKcal' ? v.kcal : v.min;
-      if (val > 0) typeTotals[t] = (typeTotals[t] || 0) + val;
+      if ((v.min || 0) > 0 || (v.km || 0) > 0 || (v.kcal || 0) > 0) {
+        if (!typeTotals[t]) typeTotals[t] = { min: 0, km: 0 };
+        typeTotals[t].min += v.min || 0;
+        typeTotals[t].km  += v.km  || 0;
+      }
     });
   });
-  const types = Object.keys(typeTotals).sort((a, b) => typeTotals[b] - typeTotals[a]);
-  const unit = chartMetric === 'exKcal' ? 'kcal' : 'min';
+  const types = Object.keys(typeTotals).sort((a, b) => typeTotals[b].min - typeTotals[a].min);
 
-  const cellSize = 42;
-  const gap = 4;
-  const gridW = cellSize * 7 + gap * 6;
-
-  const buildIso = (day) => {
-    const mm = String(m + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    return `${y}-${mm}-${dd}`;
+  const fmtChipValue = (t) => {
+    const v = typeTotals[t];
+    const parts = [];
+    if (v.km > 0) parts.push(`${v.km.toFixed(v.km < 10 ? 1 : 0)} km`);
+    parts.push(`${Math.round(v.min)} min`);
+    return parts.join(' · ');
   };
+
+  // Day cell renderer — shared by Week + Month + Year
+  const DayCell = ({ iso, dayNum, size, fontSize, dotSize }) => {
+    const ex = exByDate[iso];
+    const dayTypes = ex && ex.byType
+      ? Object.entries(ex.byType)
+          .filter(([, v]) => (v.min || 0) > 0 || (v.km || 0) > 0 || (v.kcal || 0) > 0)
+          .map(([t]) => t)
+      : [];
+    const isToday = iso === todayIso;
+    const isFuture = iso > todayIso;
+    const hasSelected = selectedType && dayTypes.includes(selectedType);
+    const anyLogged = dayTypes.length > 0;
+    const dimCell = selectedType && anyLogged && !hasSelected;
+    const borderColor = hasSelected
+      ? (EX_COLOR_MAP[selectedType] || theme.accent)
+      : (isToday ? theme.ink : theme.line);
+    const borderWidth = hasSelected || isToday ? 1.5 : 1;
+    return (
+      <div
+        onClick={() => !isFuture && onOpenDate && onOpenDate(iso)}
+        style={{
+          width: size, height: size,
+          background: isFuture ? theme.bg : theme.surface,
+          border: `${borderWidth}px ${isToday ? 'dashed' : 'solid'} ${borderColor}`,
+          borderRadius: 8, position: 'relative',
+          cursor: isFuture ? 'default' : 'pointer',
+          opacity: isFuture ? 0.5 : (dimCell ? 0.5 : 1),
+          transition: 'opacity 0.15s, border 0.15s',
+        }}
+        title={anyLogged ? `${iso} · ${dayTypes.join(', ')}` : iso}
+      >
+        <div style={{
+          position: 'absolute', top: 3, left: 5,
+          fontFamily: theme.font, fontSize,
+          fontWeight: isToday ? 700 : (anyLogged ? 600 : 400),
+          color: isFuture ? theme.inkMute : theme.ink,
+        }}>{dayNum}</div>
+        {anyLogged && (
+          <div style={{
+            position: 'absolute', bottom: 4, left: 0, right: 0,
+            display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap',
+          }}>
+            {dayTypes.slice(0, 4).map((t, di) => {
+              const faded = selectedType && t !== selectedType;
+              return (
+                <div key={di} style={{
+                  width: dotSize, height: dotSize, borderRadius: dotSize / 2,
+                  background: faded ? '#E6E3DC' : (EX_COLOR_MAP[t] || '#8A8A8A'),
+                }}/>
+              );
+            })}
+            {dayTypes.length > 4 && (
+              <div style={{ fontSize: 8, color: theme.inkMute, lineHeight: 1 }}>+{dayTypes.length - 4}</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Build the grid body depending on range
+  let gridNode = null;
+
+  if (range === 'Week') {
+    // bars are 7 days already in order
+    const cellSize = 46;
+    const gap = 4;
+    const gridW = cellSize * 7 + gap * 6;
+    gridNode = (
+      <div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+          gap: `${gap}px`, marginBottom: 6, maxWidth: gridW,
+        }}>
+          {bucket.bars.map((b, i) => (
+            <div key={i} style={{
+              textAlign: 'center', fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+              color: theme.inkMute, letterSpacing: '0.04em',
+            }}>{['S','M','T','W','T','F','S'][b.dow]}</div>
+          ))}
+        </div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+          gap: `${gap}px`, maxWidth: gridW,
+        }}>
+          {bucket.bars.map((b, i) => (
+            <DayCell key={i} iso={b.iso} dayNum={b.d} size={cellSize} fontSize={11} dotSize={7}/>
+          ))}
+        </div>
+      </div>
+    );
+  } else if (range === 'Month') {
+    const first = bucket.bars[0];
+    const y = first.y, m = first.m;
+    const monthStart = new Date(y, m, 1);
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const firstDowMon = (monthStart.getDay() + 6) % 7;
+    const cells = firstDowMon + daysInMonth;
+    const rows = Math.ceil(cells / 7);
+    const cellSize = 42;
+    const gap = 4;
+    const gridW = cellSize * 7 + gap * 6;
+    const buildIso = (day) => {
+      const mm = String(m + 1).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      return `${y}-${mm}-${dd}`;
+    };
+    gridNode = (
+      <div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+          gap: `${gap}px`, marginBottom: 6, maxWidth: gridW,
+        }}>
+          {['M','T','W','T','F','S','S'].map((d, i) => (
+            <div key={i} style={{
+              textAlign: 'center', fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+              color: theme.inkMute, letterSpacing: '0.04em',
+            }}>{d}</div>
+          ))}
+        </div>
+        <div style={{
+          display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
+          gap: `${gap}px`, maxWidth: gridW,
+        }}>
+          {Array.from({ length: rows * 7 }).map((_, i) => {
+            const dayNum = i - firstDowMon + 1;
+            if (dayNum < 1 || dayNum > daysInMonth) {
+              return <div key={i} style={{ width: cellSize, height: cellSize }} />;
+            }
+            return <DayCell key={i} iso={buildIso(dayNum)} dayNum={dayNum} size={cellSize} fontSize={10} dotSize={6}/>;
+          })}
+        </div>
+      </div>
+    );
+  } else {
+    // Year: month summary cards — each shows that month's total minutes + top 3 type dots
+    gridNode = (
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
+      }}>
+        {Array.from({ length: 12 }).map((_, mi) => {
+          const y = bucket.bars[0].y;
+          const dim = new Date(y, mi + 1, 0).getDate();
+          const monthTotals = {};
+          let anyData = false;
+          for (let d = 1; d <= dim; d++) {
+            const mm = String(mi + 1).padStart(2, '0');
+            const dd = String(d).padStart(2, '0');
+            const iso = `${y}-${mm}-${dd}`;
+            const ex = exByDate[iso];
+            if (!ex || !ex.byType) continue;
+            Object.entries(ex.byType).forEach(([t, v]) => {
+              const minutes = v.min || 0;
+              if (minutes <= 0) return;
+              monthTotals[t] = (monthTotals[t] || 0) + minutes;
+              anyData = true;
+            });
+          }
+          const monthFirstIso = `${y}-${String(mi + 1).padStart(2, '0')}-01`;
+          const isFuture = monthFirstIso > todayIso;
+          const topTypes = Object.entries(monthTotals).sort((a, b) => b[1] - a[1]).slice(0, 3);
+          const totalMin = Object.values(monthTotals).reduce((s, v) => s + v, 0);
+          const hasSelected = selectedType && monthTotals[selectedType];
+          const dim_ = selectedType && anyData && !hasSelected;
+          return (
+            <div key={mi} onClick={() => !isFuture && onOpenDate && onOpenDate(monthFirstIso)}
+              style={{
+                padding: '8px 10px', height: 68,
+                background: isFuture ? theme.bg : theme.surface,
+                border: `1px solid ${hasSelected ? (EX_COLOR_MAP[selectedType] || theme.accent) : theme.line}`,
+                borderRadius: 8, cursor: isFuture ? 'default' : 'pointer',
+                opacity: isFuture ? 0.5 : (dim_ ? 0.5 : 1),
+                display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              }}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 11, fontWeight: 600, color: theme.ink,
+              }}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mi]}</div>
+              {anyData ? (
+                <div>
+                  <div style={{ display: 'flex', gap: 2, marginBottom: 2 }}>
+                    {topTypes.map(([t], di) => {
+                      const faded = selectedType && t !== selectedType;
+                      return (
+                        <div key={di} style={{
+                          width: 6, height: 6, borderRadius: 3,
+                          background: faded ? '#E6E3DC' : (EX_COLOR_MAP[t] || '#8A8A8A'),
+                        }}/>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontFamily: theme.font, fontSize: 10, color: theme.inkSoft }}>
+                    {Math.round(totalMin)} min
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontFamily: theme.font, fontSize: 10, color: theme.inkMute }}>—</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -3896,96 +4084,13 @@ function ExerciseCalendar({ theme, bucket, exByDate, selectedType, setSelectedTy
         )}
       </div>
       <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginBottom: 12 }}>
-        {selectedType ? `Showing ${selectedType} only` : 'Tap a type to filter · tap a day to open it'}
+        {selectedType ? `Showing ${selectedType} only` : (
+          range === 'Year' ? 'Tap a type to filter · tap a month to jump there' : 'Tap a type to filter · tap a day to open it'
+        )}
       </div>
 
-      {/* Weekday header */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
-        gap: `${gap}px`, marginBottom: 6, maxWidth: gridW,
-      }}>
-        {['M','T','W','T','F','S','S'].map((d, i) => (
-          <div key={i} style={{
-            textAlign: 'center', fontFamily: theme.font, fontSize: 10, fontWeight: 600,
-            color: theme.inkMute, letterSpacing: '0.04em',
-          }}>{d}</div>
-        ))}
-      </div>
+      {gridNode}
 
-      {/* Calendar grid */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(7, ${cellSize}px)`,
-        gap: `${gap}px`, maxWidth: gridW,
-      }}>
-        {Array.from({ length: rows * 7 }).map((_, i) => {
-          const dayNum = i - firstDowMon + 1;
-          if (dayNum < 1 || dayNum > daysInMonth) {
-            return <div key={i} style={{ width: cellSize, height: cellSize }} />;
-          }
-          const iso = buildIso(dayNum);
-          const ex = exByDate[iso];
-          const dayTypes = ex && ex.byType
-            ? Object.entries(ex.byType)
-                .filter(([, v]) => (chartMetric === 'exKcal' ? v.kcal : v.min) > 0)
-                .map(([t]) => t)
-            : [];
-          const isToday = iso === todayIso;
-          const isFuture = iso > todayIso;
-          const hasSelected = selectedType && dayTypes.includes(selectedType);
-          const anyLogged = dayTypes.length > 0;
-          const dimCell = selectedType && anyLogged && !hasSelected;
-          const borderColor = hasSelected
-            ? (EX_COLOR_MAP[selectedType] || theme.accent)
-            : (isToday ? theme.ink : theme.line);
-          const borderWidth = hasSelected || isToday ? 1.5 : 1;
-          return (
-            <div
-              key={i}
-              onClick={() => !isFuture && onOpenDate && onOpenDate(iso)}
-              style={{
-                width: cellSize, height: cellSize,
-                background: isFuture ? theme.bg : theme.surface,
-                border: `${borderWidth}px ${isToday ? 'dashed' : 'solid'} ${borderColor}`,
-                borderRadius: 8, position: 'relative',
-                cursor: isFuture ? 'default' : 'pointer',
-                opacity: isFuture ? 0.5 : (dimCell ? 0.5 : 1),
-                transition: 'opacity 0.15s, border 0.15s',
-              }}
-              title={anyLogged ? `${iso} · ${dayTypes.join(', ')}` : iso}
-            >
-              <div style={{
-                position: 'absolute', top: 3, left: 5,
-                fontFamily: theme.font, fontSize: 10,
-                fontWeight: isToday ? 700 : (anyLogged ? 600 : 400),
-                color: isFuture ? theme.inkMute : theme.ink,
-              }}>{dayNum}</div>
-              {anyLogged && (
-                <div style={{
-                  position: 'absolute', bottom: 4, left: 0, right: 0,
-                  display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap',
-                }}>
-                  {dayTypes.slice(0, 4).map((t, di) => {
-                    const faded = selectedType && t !== selectedType;
-                    return (
-                      <div key={di} style={{
-                        width: 6, height: 6, borderRadius: 3,
-                        background: faded ? '#E6E3DC' : (EX_COLOR_MAP[t] || '#8A8A8A'),
-                      }}/>
-                    );
-                  })}
-                  {dayTypes.length > 4 && (
-                    <div style={{
-                      fontSize: 8, color: theme.inkMute, lineHeight: 1,
-                    }}>+{dayTypes.length - 4}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Type filter chips */}
       {types.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <div style={{
@@ -4014,7 +4119,7 @@ function ExerciseCalendar({ theme, bucket, exByDate, selectedType, setSelectedTy
                     width: 8, height: 8, borderRadius: 4,
                     background: active ? '#FFFFFF' : color,
                   }}/>
-                  {t} · {Math.round(typeTotals[t])}{unit === 'min' ? 'm' : 'k'}
+                  {t} · {fmtChipValue(t)}
                 </button>
               );
             })}
@@ -4039,13 +4144,15 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
     const m = {};
     (exerciseLog || []).forEach(e => {
       if (!e.date) return;
-      if (!m[e.date]) m[e.date] = { kcal: 0, min: 0, byType: {} };
+      if (!m[e.date]) m[e.date] = { kcal: 0, min: 0, km: 0, byType: {} };
       m[e.date].kcal += (+e.kcal || 0);
       m[e.date].min += (+e.duration || 0);
+      m[e.date].km += (+e.distance || 0);
       const t = e.type || 'Other';
-      if (!m[e.date].byType[t]) m[e.date].byType[t] = { kcal: 0, min: 0 };
+      if (!m[e.date].byType[t]) m[e.date].byType[t] = { kcal: 0, min: 0, km: 0 };
       m[e.date].byType[t].kcal += (+e.kcal || 0);
       m[e.date].byType[t].min += (+e.duration || 0);
+      m[e.date].byType[t].km += (+e.distance || 0);
     });
     return m;
   }, [exerciseLog]);
@@ -4308,14 +4415,13 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
         })()}
       </div>}
 
-      {/* Exercise calendar (Month range, exercise metric) */}
-      {range === 'Month' && (chartMetric === 'exKcal' || chartMetric === 'exMin') && (
-        <ExerciseCalendar theme={theme} bucket={bucket}
+      {/* Exercise calendar / ribbon — shown for all ranges */}
+      {bucket && (chartMetric === 'exKcal' || chartMetric === 'exMin') && (
+        <ExerciseCalendar theme={theme} bucket={bucket} range={range}
           exByDate={exByDate}
           selectedType={selectedExType}
           setSelectedType={setSelectedExType}
           EX_COLOR_MAP={EX_COLOR_MAP}
-          chartMetric={chartMetric}
           onOpenDate={(iso) => {
             if (setLogDate) setLogDate(iso);
             if (setTab) setTab('home');
