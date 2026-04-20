@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Flat calorie-ring icon — no gradients, bold single accent. -->
-  <rect width="512" height="512" rx="112" fill="#F1EADA"/>
+  <!-- Flat calorie-ring icon — solid green background, bold cream ring. -->
+  <rect width="512" height="512" rx="112" fill="#2B7A5C"/>
   <g transform="translate(256 256)">
-    <circle r="112" fill="none" stroke="#E3DACA" stroke-width="14"/>
-    <circle r="112" fill="none" stroke="#2B7A5C" stroke-width="18"
-      stroke-linecap="round" stroke-dasharray="500 704" transform="rotate(-90)"/>
+    <circle r="118" fill="none" stroke="#F1EADA" stroke-width="16" opacity="0.28"/>
+    <circle r="118" fill="none" stroke="#F1EADA" stroke-width="22"
+      stroke-linecap="round" stroke-dasharray="525 741" transform="rotate(-90)"/>
   </g>
 </svg>

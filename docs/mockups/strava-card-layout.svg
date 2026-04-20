@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 620" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="840" height="620" fill="#F7F5F0"/>
+
+  <!-- ======= CURRENT (left) ======= -->
+  <text x="30" y="34" font-size="12" font-weight="700" fill="#9A9A95" letter-spacing="2">CURRENT</text>
+  <g transform="translate(30 50)">
+    <rect width="370" height="280" rx="14" fill="#FFFFFF"/>
+    <text x="20" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">STRAVA</text>
+    <text x="350" y="26" text-anchor="end" font-size="10" fill="#9A9A95">Synced 30 min ago</text>
+    <text x="20" y="54" font-size="14" fill="#1A1A1A">Connected as <tspan font-weight="700">Daniel Hunter</tspan></text>
+
+    <!-- orange "Review 3 new" -->
+    <rect x="20" y="72" width="330" height="38" rx="8" fill="#FC4C02"/>
+    <text x="185" y="97" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Review 3 new activities</text>
+
+    <!-- Row of 3 buttons — too many -->
+    <rect x="20"  y="124" width="108" height="38" rx="8" fill="#1A1A1A"/>
+    <text x="74"  y="149" text-anchor="middle" font-size="13" font-weight="600" fill="#FFFFFF">Sync now</text>
+    <rect x="134" y="124" width="138" height="38" rx="8" fill="transparent" stroke="#D8D4CB"/>
+    <text x="203" y="149" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Re-sync last year</text>
+    <rect x="278" y="124" width="72" height="38" rx="8" fill="transparent" stroke="#F3CFCA"/>
+    <text x="314" y="149" text-anchor="middle" font-size="12" font-weight="600" fill="#B3261E">Disconnect</text>
+
+    <text x="20" y="184" font-size="11" fill="#9A9A95">Sync found 3 new activities · 3 detailed pulls</text>
+
+    <!-- Notes on problems -->
+    <rect x="20" y="212" width="330" height="52" rx="8" fill="#FDECEA"/>
+    <text x="30" y="232" font-size="11" font-weight="700" fill="#B3261E">Problems</text>
+    <text x="30" y="250" font-size="11" fill="#5C2B28">• 3 action buttons in a row — crowded</text>
+    <text x="30" y="264" font-size="11" fill="#5C2B28">• Destructive "Disconnect" next to primary "Sync"</text>
+  </g>
+
+  <!-- ======= PROPOSED (right) ======= -->
+  <text x="440" y="34" font-size="12" font-weight="700" fill="#2B7A5C" letter-spacing="2">PROPOSED</text>
+  <g transform="translate(440 50)">
+    <rect width="370" height="344" rx="14" fill="#FFFFFF"/>
+
+    <!-- Header row: logo + status -->
+    <text x="20" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">STRAVA</text>
+    <g transform="translate(333 16)">
+      <circle r="5" fill="#2B7A5C"/>
+    </g>
+    <text x="350" y="26" text-anchor="end" font-size="10" fill="#9A9A95" dx="-10">Connected</text>
+
+    <!-- Athlete row with synced hint -->
+    <text x="20" y="54" font-size="14" fill="#1A1A1A">Daniel Hunter</text>
+    <text x="350" y="54" text-anchor="end" font-size="11" fill="#9A9A95">Last sync · 30 min ago</text>
+
+    <!-- Primary action: one big button -->
+    <rect x="20" y="74" width="330" height="44" rx="10" fill="#FC4C02"/>
+    <text x="185" y="101" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Review 3 new activities</text>
+
+    <!-- Divider -->
+    <line x1="20" y1="136" x2="350" y2="136" stroke="#ECEAE4"/>
+
+    <!-- Secondary: compact icon row -->
+    <g transform="translate(20 152)">
+      <rect width="330" height="42" rx="8" fill="#F7F5F0"/>
+      <!-- Sync now -->
+      <g transform="translate(0 0)">
+        <rect width="110" height="42" rx="8" fill="transparent"/>
+        <path d="M41 13a8 8 0 1 1-6 14" stroke="#1A1A1A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+        <polyline points="33,27 35,27 35,25" stroke="#1A1A1A" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+        <text x="55" y="27" font-size="12" font-weight="600" fill="#1A1A1A">Sync now</text>
+      </g>
+      <line x1="110" y1="10" x2="110" y2="32" stroke="#D8D4CB"/>
+      <!-- Full re-sync -->
+      <g transform="translate(110 0)">
+        <rect width="110" height="42" rx="8" fill="transparent"/>
+        <text x="55" y="27" text-anchor="middle" font-size="12" font-weight="600" fill="#1A1A1A">Full re-sync</text>
+      </g>
+      <line x1="220" y1="10" x2="220" y2="32" stroke="#D8D4CB"/>
+      <!-- Settings ellipsis -->
+      <g transform="translate(220 0)">
+        <rect width="110" height="42" rx="8" fill="transparent"/>
+        <text x="55" y="28" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Settings ▸</text>
+      </g>
+    </g>
+
+    <!-- Last-sync result -->
+    <text x="20" y="218" font-size="11" fill="#9A9A95">3 new activities · 3 detailed pulls · headroom on Strava rate limit</text>
+
+    <!-- Settings revealed inline -->
+    <g transform="translate(20 240)">
+      <rect width="330" height="84" rx="10" fill="#F7F5F0" stroke="#ECEAE4"/>
+      <text x="14" y="22" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.4">WHEN SETTINGS EXPANDS</text>
+
+      <text x="14" y="44" font-size="12" fill="#5C5C58">What to import</text>
+      <text x="316" y="44" text-anchor="end" font-size="12" font-weight="600" fill="#1A1A1A">All types ▸</text>
+
+      <text x="14" y="64" font-size="12" fill="#5C5C58">Auto-sync on app open</text>
+      <rect x="284" y="52" width="32" height="18" rx="9" fill="#2B7A5C"/>
+      <circle cx="307" cy="61" r="7" fill="#FFFFFF"/>
+
+      <text x="14" y="84" font-size="12" fill="#B3261E">Disconnect Strava</text>
+    </g>
+
+    <!-- Caption -->
+    <g transform="translate(0 338)">
+      <rect width="370" height="1" fill="#ECEAE4"/>
+    </g>
+  </g>
+
+  <!-- Side-by-side notes -->
+  <text x="440" y="420" font-size="12" font-weight="700" fill="#2B7A5C" letter-spacing="2">WHY IT'S BETTER</text>
+  <g transform="translate(440 430)" font-family="-apple-system, system-ui" font-size="12" fill="#1A1A1A">
+    <text x="0" y="20">1. One primary CTA (review / or connect) — always biggest.</text>
+    <text x="0" y="40">2. Utility actions live in a small 3-up icon row, not 3 big buttons.</text>
+    <text x="0" y="60">3. Destructive "Disconnect" tucked under Settings ▸ so a mis-tap</text>
+    <text x="0" y="74">   can't blow up your connection.</text>
+    <text x="0" y="94">4. Status dot + "Connected" as a tiny chip instead of full-width</text>
+    <text x="0" y="108">  athlete banner — same info, less weight.</text>
+    <text x="0" y="128">5. Import scope (Runs only vs all) surfaced as a setting; today it's</text>
+    <text x="0" y="142">  hardcoded.</text>
+  </g>
+
+  <!-- Title -->
+  <text x="30" y="580" font-size="14" font-weight="700" fill="#1A1A1A">Caloree · Profile · Strava card layout</text>
+  <text x="30" y="600" font-size="11" fill="#9A9A95">Collapse + reorder: Strava goes ABOVE Anthropic key. Key card collapses by default.</text>
+</svg>

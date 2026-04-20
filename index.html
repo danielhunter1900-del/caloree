@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7575,11 +7575,12 @@ function StravaReviewSheet({ theme, onClose }) {
 }
 
 // Ask Claude to suggest goal numbers based on the user's own data.
-function AskClaudeGoalsButton({ theme, targets, log, weightLog, onSuggest }) {
+function AskClaudeGoalsButton({ theme, targets, log, weightLog, exerciseLog = [], wellnessMap = {}, onSuggest }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
   const [preview, setPreview] = React.useState(null); // { fields, why }
   const [showFactors, setShowFactors] = React.useState(false);
+  const [goal, setGoal] = React.useState('maintain'); // 'cut' | 'maintain' | 'gain'
 
   const run = async () => {
     const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
@@ -7587,19 +7588,101 @@ function AskClaudeGoalsButton({ theme, targets, log, weightLog, onSuggest }) {
     setBusy(true); setError(null); setPreview(null);
     try {
       // 14-day snapshot from HISTORY so Claude has real numbers.
-      const last14 = (window.HISTORY || []).slice(-14).map(d => ({
+      const HIST = window.HISTORY || [];
+      const last14 = HIST.slice(-14).map(d => ({
         date: d.iso, kcal: d.kcal, c: d.c, p: d.p, f: d.f,
         satFat: d.satFat, sugar: d.sugar, fibre: d.fibre,
+        energy: d.energy ?? null, sleep_hrs: d.sleepHrs ?? null,
+        stress: d.stress ?? null,
       }));
       const weights = (weightLog || []).slice(-10).map(w => ({ iso: w.iso, kg: +w.kg }));
-      const prompt = `Current daily targets: ${JSON.stringify(targets)}
-Last 14 days of logged food: ${JSON.stringify(last14)}
-Recent weights: ${JSON.stringify(weights)}
 
-Suggest updated daily targets based on what they're actually eating and their weight trend. Preserve fields they don't clearly need to change. Round kcal to the nearest 50, macros to the nearest 5.
+      // Weight trend kg/week from the slope across recent weighings.
+      let weightTrend = null;
+      if (weights.length >= 2) {
+        const first = weights[0], last = weights[weights.length - 1];
+        const days = (new Date(last.iso) - new Date(first.iso)) / 86400000;
+        if (days > 0) {
+          weightTrend = {
+            kg_per_week: +((last.kg - first.kg) / days * 7).toFixed(2),
+            span_days: Math.round(days),
+            latest_kg: last.kg,
+          };
+        }
+      }
+
+      // Exercise rollup for the same 14-day window.
+      const isoSet = new Set(last14.map(d => d.date));
+      const restDaysSet = new Set(last14.map(d => d.date));
+      const ex = { total_min: 0, total_kcal: 0, total_km: 0, sessions: 0, byType: {} };
+      (exerciseLog || []).forEach(e => {
+        if (!e.date || !isoSet.has(e.date)) return;
+        ex.total_min  += +e.duration || 0;
+        ex.total_kcal += +e.kcal     || 0;
+        ex.total_km   += +e.distance || 0;
+        ex.sessions   += 1;
+        restDaysSet.delete(e.date);
+        const t = e.type || 'Other';
+        if (!ex.byType[t]) ex.byType[t] = { min: 0, count: 0 };
+        ex.byType[t].min  += +e.duration || 0;
+        ex.byType[t].count += 1;
+      });
+      ex.total_min  = Math.round(ex.total_min);
+      ex.total_kcal = Math.round(ex.total_kcal);
+      ex.total_km   = +ex.total_km.toFixed(1);
+      ex.rest_days = restDaysSet.size;
+
+      // Consistency: how often actual intake lands within ±10% of current kcal target.
+      const kcalTarget = targets.kcal || 0;
+      const onTarget = kcalTarget ? last14.filter(d => d.kcal && Math.abs(d.kcal - kcalTarget) / kcalTarget <= 0.10).length : 0;
+      const consistency = { on_target_days: onTarget, total_days: last14.length };
+
+      // Adherence to existing sub-macro limits (how often user exceeds current caps)
+      const overSatFat = last14.filter(d => (d.satFat || 0) > (targets.satFat || 20)).length;
+      const overSugar  = last14.filter(d => (d.sugar  || 0) > (targets.sugar  || 50)).length;
+      const underFibre = last14.filter(d => (d.fibre  || 0) < (targets.fibre  || 30)).length;
+      const adherence = { over_sat_fat_days: overSatFat, over_sugar_days: overSugar, under_fibre_days: underFibre };
+
+      const goalLabel = {
+        cut: 'CUT (lose fat — modest deficit, preserve protein for muscle)',
+        maintain: 'MAINTAIN (hold current weight, optimise energy and performance)',
+        gain: 'GAIN (add lean mass — moderate surplus, high protein)',
+      }[goal];
+
+      const prompt = `The user wants their daily targets suggested based on their real data.
+
+USER'S STATED GOAL: ${goalLabel}
+
+Current daily targets: ${JSON.stringify(targets)}
+
+Last 14 days of logged food (each row includes wellness signals — energy, sleep, stress on a 1-5 scale):
+${JSON.stringify(last14)}
+
+Exercise in the same 14-day window: ${JSON.stringify(ex)}
+
+Recent weights: ${JSON.stringify(weights)}
+Weight trend: ${JSON.stringify(weightTrend)}
+
+Consistency vs. current kcal target (±10% band): ${JSON.stringify(consistency)}
+Adherence to current sub-macro limits: ${JSON.stringify(adherence)}
+
+Reasoning guidelines:
+1. CALORIES. Use the measured weight trend as the primary signal of maintenance:
+   - flat (<0.05 kg/week change) → current avg intake ≈ maintenance
+   - losing → current intake < maintenance; add back losses to find maintenance
+   - gaining → current intake > maintenance
+   Then apply the goal: cut = -15-20% from maintenance, maintain = match maintenance, gain = +10-15%.
+2. PROTEIN. Scale with latest bodyweight: cut ~2.0 g/kg, maintain ~1.6 g/kg, gain ~1.8-2.0 g/kg.
+   If exercise volume is high (>180 min/week OR strength sessions present), push protein up.
+3. ENERGY & SLEEP. If average energy is low (<3/5) or sleep averaged <6.5h alongside a current deficit, DO NOT deepen the cut — hold kcal, raise carbs slightly, and flag it in "why".
+4. TRAINING MIX. Strength/HIIT-heavy → raise protein. Endurance-heavy (Run/Cycling) → raise carbs. Use ex.byType.
+5. REST DAYS. Many rest days (>8 of 14) suggests the user is under-recovering or has low volume; be conservative with surplus sizes.
+6. CONSISTENCY. If actual intake is nowhere near target (on_target_days <3 of 14), the target isn't working — anchor closer to actual intake, then nudge toward the goal.
+7. SUB-MACROS. Tighten sat fat / sugar limits if repeatedly exceeded; raise fibre target only if adherence is already strong.
+8. Round kcal to the nearest 50, macros to the nearest 5.
 
 Return ONLY JSON (no prose, no fences):
-{"kcal": N, "c": N, "p": N, "f": N, "satFat": N, "sugar": N, "fibre": N, "exKcal": N, "exMin": N, "why": "one short sentence explaining the key reason for the change"}`;
+{"kcal": N, "c": N, "p": N, "f": N, "satFat": N, "sugar": N, "fibre": N, "exKcal": N, "exMin": N, "why": "one specific sentence citing the key factor — e.g. 'weight +0.2kg/wk stable, hold kcal, push protein to 2.0 g/kg for strength work' or 'energy 2.4/5 with sleep 6h avg, not deepening the cut'"}`;
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -7639,35 +7722,83 @@ Return ONLY JSON (no prose, no fences):
   const decline = () => setPreview(null);
 
   // Summarize what Claude "sees" so the suggestion isn't a black box.
-  const factors = [
-    {
-      k: 'Current daily targets',
-      v: `kcal ${targets.kcal} · c ${targets.c}g · p ${targets.p}g · f ${targets.f}g`
-        + (targets.satFat != null ? ` · satFat ${targets.satFat}g` : '')
-        + (targets.sugar  != null ? ` · sugar ${targets.sugar}g`   : '')
-        + (targets.fibre  != null ? ` · fibre ${targets.fibre}g`   : ''),
-    },
-    {
-      k: 'Last 14 days of food',
-      v: (() => {
-        const rows = (window.HISTORY || []).slice(-14);
-        const n = rows.length;
-        if (!n) return 'No food logged yet';
-        const avg = (key) => Math.round(rows.reduce((s, d) => s + (d[key] || 0), 0) / n);
-        return `${n} days · kcal avg ${avg('kcal')} · c ${avg('c')}g · p ${avg('p')}g · f ${avg('f')}g`;
-      })(),
-    },
-    {
-      k: 'Recent weights',
-      v: (() => {
-        const wl = (weightLog || []).slice(-10);
-        if (wl.length < 2) return wl.length === 1 ? `1 entry (${wl[0].kg} kg)` : 'No weigh-ins';
-        const first = +wl[0].kg, last = +wl[wl.length - 1].kg;
-        const delta = last - first;
-        return `${wl.length} entries · ${first.toFixed(1)} → ${last.toFixed(1)} kg (${delta > 0 ? '+' : ''}${delta.toFixed(1)})`;
-      })(),
-    },
-  ];
+  const factors = (() => {
+    const rows = (window.HISTORY || []).slice(-14);
+    const n = rows.length;
+    const avg = (key) => n ? Math.round(rows.reduce((s, d) => s + (d[key] || 0), 0) / n) : 0;
+    const avgF = (key) => n ? +(rows.reduce((s, d) => s + (+d[key] || 0), 0) / n).toFixed(1) : 0;
+
+    // Exercise rollup matching the 14-day window
+    const isoSet = new Set(rows.map(r => r.iso));
+    let exMin = 0, exKcal = 0, sessions = 0;
+    const byType = {};
+    (exerciseLog || []).forEach(e => {
+      if (!e.date || !isoSet.has(e.date)) return;
+      exMin  += +e.duration || 0;
+      exKcal += +e.kcal     || 0;
+      sessions += 1;
+      byType[e.type || 'Other'] = (byType[e.type || 'Other'] || 0) + (+e.duration || 0);
+    });
+    const topTypes = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([t, m]) => `${t} ${Math.round(m)}m`).join(', ');
+
+    // Weight trend
+    const wl = (weightLog || []).slice(-10);
+    let weightLine = 'No weigh-ins';
+    if (wl.length === 1) weightLine = `1 entry (${wl[0].kg} kg)`;
+    else if (wl.length >= 2) {
+      const first = +wl[0].kg, last = +wl[wl.length - 1].kg;
+      const days = Math.max(1, (new Date(wl[wl.length - 1].iso) - new Date(wl[0].iso)) / 86400000);
+      const perWeek = ((last - first) / days * 7).toFixed(2);
+      weightLine = `${wl.length} entries · ${first.toFixed(1)} → ${last.toFixed(1)} kg (${perWeek > 0 ? '+' : ''}${perWeek}/wk)`;
+    }
+
+    // Consistency vs. kcal target
+    const kcalTarget = targets.kcal || 0;
+    const onTarget = kcalTarget
+      ? rows.filter(d => d.kcal && Math.abs(d.kcal - kcalTarget) / kcalTarget <= 0.10).length
+      : 0;
+
+    const energyAvg = avgF('energy');
+    const sleepAvg  = avgF('sleepHrs');
+    const stressAvg = avgF('stress');
+
+    return [
+      {
+        k: 'Current targets',
+        v: `kcal ${targets.kcal} · c ${targets.c}g · p ${targets.p}g · f ${targets.f}g`
+          + (targets.satFat != null ? ` · satFat ${targets.satFat}g` : '')
+          + (targets.sugar  != null ? ` · sugar ${targets.sugar}g`   : '')
+          + (targets.fibre  != null ? ` · fibre ${targets.fibre}g`   : ''),
+      },
+      {
+        k: 'Actual intake · 14 days',
+        v: n ? `kcal avg ${avg('kcal')} · c ${avg('c')}g · p ${avg('p')}g · f ${avg('f')}g` : 'No food logged yet',
+      },
+      {
+        k: 'Adherence · 14 days',
+        v: kcalTarget
+          ? `${onTarget}/${n} days within ±10% of kcal target`
+          : '—',
+      },
+      {
+        k: 'Weight trend',
+        v: weightLine,
+      },
+      {
+        k: 'Exercise · 14 days',
+        v: sessions
+          ? `${sessions} sessions · ${Math.round(exMin)} min · ${Math.round(exKcal)} kcal${topTypes ? ' · ' + topTypes : ''}`
+          : 'No exercise logged',
+      },
+      {
+        k: 'Wellness · avg',
+        v: energyAvg || sleepAvg || stressAvg
+          ? `energy ${energyAvg}/5 · sleep ${sleepAvg}h · stress ${stressAvg}/5`
+          : 'No wellness logged',
+      },
+    ];
+  })();
 
   const fmt = (k, v) => {
     if (v == null) return '—';
@@ -7689,6 +7820,31 @@ Return ONLY JSON (no prose, no fences):
 
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.line}` }}>
+      {/* Goal picker — required before Claude can tailor the targets */}
+      <div style={{
+        fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+        color: theme.inkMute, letterSpacing: '0.1em', marginBottom: 6,
+      }}>GOAL</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        {[
+          ['cut', 'Lose weight'],
+          ['maintain', 'Maintain'],
+          ['gain', 'Gain weight'],
+        ].map(([k, l]) => {
+          const active = goal === k;
+          return (
+            <button key={k} onClick={() => setGoal(k)} style={{
+              flex: 1, padding: '8px 0', borderRadius: theme.radius.btn,
+              border: `1px solid ${active ? theme.ink : theme.line}`,
+              background: active ? theme.ink : 'transparent',
+              color: active ? theme.bg : theme.inkSoft,
+              fontFamily: theme.font, fontSize: 12, fontWeight: active ? 700 : 500,
+              cursor: 'pointer',
+            }}>{l}</button>
+          );
+        })}
+      </div>
+
       <button onClick={run} disabled={busy} style={{
         width: '100%', padding: '10px 14px', border: `1px solid ${theme.line}`,
         background: theme.surfaceAlt, color: theme.ink, cursor: busy ? 'default' : 'pointer',
@@ -7731,8 +7887,12 @@ Return ONLY JSON (no prose, no fences):
             </div>
           ))}
           <div style={{
-            fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 6, lineHeight: 1.35,
-          }}>Claude does NOT have your height, age, or stated goal — it only balances what you're actually eating against your weight trend. Adjust manually after if you're cutting or bulking on purpose.</div>
+            fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 6, lineHeight: 1.4,
+          }}>
+            <div style={{ fontWeight: 600, color: theme.inkSoft, marginBottom: 2 }}>Not tracked (Claude can't use):</div>
+            Age · height · sex · medical conditions · cycle · meal timing preferences · injuries.
+            Adjust the suggestion manually after if any of these matter for you.
+          </div>
         </div>
       )}
 
@@ -7879,7 +8039,8 @@ function ApiKeyCard({ theme }) {
 const { useState: useStateProfile } = React;
 
 function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
-  weightLog, setWeightLog, settings, setSettings, log, session }) {
+  weightLog, setWeightLog, settings, setSettings, log, session,
+  exerciseLog = [], wellnessMap = {} }) {
 
   const [exportBusy, setExportBusy] = React.useState(false);
 
@@ -8109,6 +8270,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         {editingGoals && (
           <AskClaudeGoalsButton theme={theme}
             targets={targets} log={log} weightLog={weightLog}
+            exerciseLog={exerciseLog} wellnessMap={wellnessMap}
             onSuggest={(suggested) => setDraft({ ...draft, ...suggested })}/>
         )}
 
@@ -10375,7 +10537,8 @@ function App({ session }) {
                 targets={targets} setTargets={setTargets}
                 weightLog={weightLog} setWeightLog={setWeightLog}
                 settings={settings} setSettings={setSettings}
-                log={log} session={session} />
+                log={log} session={session}
+                exerciseLog={exerciseLog} wellnessMap={wellnessMap} />
             )}
           </div>
 

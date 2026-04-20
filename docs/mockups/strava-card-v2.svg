@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 680" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="440" height="680" fill="#F7F5F0"/>
+
+  <text x="20" y="30" font-size="11" font-weight="700" fill="#9A9A95" letter-spacing="2">PROFILE · STRAVA CARD</text>
+
+  <!-- Card -->
+  <g transform="translate(20 50)">
+    <rect width="400" height="300" rx="14" fill="#FFFFFF"/>
+
+    <!-- Section header -->
+    <text x="20" y="28" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">STRAVA</text>
+    <text x="380" y="28" text-anchor="end" font-size="11" fill="#9A9A95">Synced 30m ago</text>
+
+    <!-- Athlete line -->
+    <text x="20" y="54" font-size="15" fill="#1A1A1A">Daniel Hunter</text>
+
+    <!-- Primary CTA -->
+    <rect x="20" y="70" width="360" height="44" rx="10" fill="#FC4C02"/>
+    <text x="200" y="97" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Review 3 new activities</text>
+
+    <!-- Last sync summary -->
+    <text x="20" y="134" font-size="11" fill="#9A9A95">3 new · 3 detailed pulls · all under rate limit</text>
+
+    <!-- Divider -->
+    <line x1="20" y1="152" x2="380" y2="152" stroke="#ECEAE4"/>
+
+    <!-- Two neat buttons, full width each, stacked -->
+    <rect x="20" y="168" width="360" height="40" rx="10" fill="#F7F5F0" stroke="#D8D4CB"/>
+    <text x="200" y="193" text-anchor="middle" font-size="13" font-weight="600" fill="#1A1A1A">Sync now</text>
+
+    <rect x="20" y="216" width="360" height="40" rx="10" fill="transparent" stroke="#D8D4CB"/>
+    <text x="200" y="241" text-anchor="middle" font-size="13" font-weight="600" fill="#5C5C58">More options ▾</text>
+  </g>
+
+  <!-- Expanded state -->
+  <text x="20" y="395" font-size="11" font-weight="700" fill="#9A9A95" letter-spacing="2">WHEN "MORE OPTIONS" IS EXPANDED</text>
+
+  <g transform="translate(20 415)">
+    <rect width="400" height="220" rx="14" fill="#FFFFFF"/>
+    <text x="20" y="28" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">STRAVA</text>
+
+    <!-- Primary row stays -->
+    <rect x="20" y="44" width="360" height="44" rx="10" fill="#FC4C02"/>
+    <text x="200" y="71" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Review 3 new activities</text>
+
+    <!-- Sync now -->
+    <rect x="20" y="104" width="360" height="40" rx="10" fill="#F7F5F0" stroke="#D8D4CB"/>
+    <text x="200" y="129" text-anchor="middle" font-size="13" font-weight="600" fill="#1A1A1A">Sync now</text>
+
+    <!-- Collapsed toggle -->
+    <rect x="20" y="152" width="360" height="34" rx="8" fill="transparent" stroke="#D8D4CB"/>
+    <text x="200" y="173" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Fewer options ▴</text>
+
+    <!-- Two secondary rows -->
+    <rect x="20" y="196" width="173" height="34" rx="8" fill="transparent"/>
+    <text x="107" y="217" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Full re-sync · 1y</text>
+
+    <rect x="207" y="196" width="173" height="34" rx="8" fill="transparent"/>
+    <text x="293" y="217" text-anchor="middle" font-size="12" font-weight="600" fill="#B3261E">Disconnect</text>
+
+    <line x1="193" y1="196" x2="193" y2="230" stroke="#ECEAE4"/>
+  </g>
+
+  <!-- Notes -->
+  <g transform="translate(20 650)" font-size="11" fill="#5C5C58">
+    <text x="0" y="0">Fixes: no green dot · single-column stacked buttons · "More options" hides Disconnect + Full re-sync by default.</text>
+  </g>
+</svg>
