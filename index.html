@@ -1965,9 +1965,36 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
   const subtotal = sumMacros(entries);
   const hasItems = entries.length > 0;
   const [dragOver, setDragOver] = React.useState(false);
+  const sectionRef = React.useRef(null);
+
+  // Touch drop detection — listen to global drag events
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (!sectionRef.current) return;
+      const r = sectionRef.current.getBoundingClientRect();
+      const x = e.detail.x, y = e.detail.y;
+      const inside = x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      if (e.type === 'caloree:touchdrag-move') {
+        setDragOver(inside);
+      } else if (e.type === 'caloree:touchdrag-drop') {
+        if (inside && e.detail.id) onMoveEntry && onMoveEntry(e.detail.id, meal);
+        setDragOver(false);
+      } else if (e.type === 'caloree:touchdrag-end') {
+        setDragOver(false);
+      }
+    };
+    window.addEventListener('caloree:touchdrag-move', handler);
+    window.addEventListener('caloree:touchdrag-drop', handler);
+    window.addEventListener('caloree:touchdrag-end', handler);
+    return () => {
+      window.removeEventListener('caloree:touchdrag-move', handler);
+      window.removeEventListener('caloree:touchdrag-drop', handler);
+      window.removeEventListener('caloree:touchdrag-end', handler);
+    };
+  }, [meal, onMoveEntry]);
 
   return (
-    <div
+    <div ref={sectionRef}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
@@ -2032,6 +2059,64 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
   const [showCopy, setShowCopy] = React.useState(false);
   const [showMove, setShowMove] = React.useState(false);
   const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+
+  // Long-press touch drag (works on iOS where HTML5 drag is broken)
+  const longPressTimer = React.useRef(null);
+  const touchDragRef = React.useRef({ active: false, ghost: null, startX: 0, startY: 0 });
+  const onTouchStartDrag = (e) => {
+    if (!onMoveEntry) return;
+    const t = e.touches[0];
+    touchDragRef.current.startX = t.clientX;
+    touchDragRef.current.startY = t.clientY;
+    longPressTimer.current = setTimeout(() => {
+      // Begin drag: create ghost
+      const ghost = document.createElement('div');
+      ghost.style.cssText = `position:fixed; pointer-events:none; z-index:9999;
+        left:${t.clientX - 100}px; top:${t.clientY - 24}px;
+        width:200px; padding:10px 14px; background:${theme.surface};
+        border:1px solid ${theme.line}; border-radius:10px;
+        box-shadow:0 12px 32px rgba(0,0,0,0.25);
+        font-family:${theme.font}; font-size:13px; color:${theme.ink};
+        opacity:0.95; transform:rotate(-2deg);`;
+      ghost.textContent = `Move ${food.name}`;
+      document.body.appendChild(ghost);
+      touchDragRef.current.active = true;
+      touchDragRef.current.ghost = ghost;
+      if (navigator.vibrate) navigator.vibrate(20);
+    }, 400);
+  };
+  const onTouchMoveDrag = (e) => {
+    if (!touchDragRef.current.active) {
+      // Cancel long-press if user moves significantly before timer
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - touchDragRef.current.startX) > 8 ||
+          Math.abs(t.clientY - touchDragRef.current.startY) > 8) {
+        if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+      }
+      return;
+    }
+    e.preventDefault();
+    const t = e.touches[0];
+    const g = touchDragRef.current.ghost;
+    if (g) { g.style.left = (t.clientX - 100) + 'px'; g.style.top = (t.clientY - 24) + 'px'; }
+    window.dispatchEvent(new CustomEvent('caloree:touchdrag-move', {
+      detail: { x: t.clientX, y: t.clientY, id: entry.id }
+    }));
+  };
+  const onTouchEndDrag = (e) => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    if (touchDragRef.current.active) {
+      const t = e.changedTouches[0];
+      window.dispatchEvent(new CustomEvent('caloree:touchdrag-drop', {
+        detail: { x: t.clientX, y: t.clientY, id: entry.id }
+      }));
+      if (touchDragRef.current.ghost) {
+        document.body.removeChild(touchDragRef.current.ghost);
+      }
+      window.dispatchEvent(new CustomEvent('caloree:touchdrag-end', { detail: {} }));
+      touchDragRef.current = { active: false, ghost: null, startX: 0, startY: 0 };
+    }
+  };
   const [offset, setOffset] = useStateHome(0);
   const startX = useRefHome(null);
   const dragging = useRefHome(false);
@@ -2070,8 +2155,10 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
           e.dataTransfer.effectAllowed = 'move';
         }}
         onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-        onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
-        onClick={() => offset === 0 && onTap()}
+        onTouchStart={(e) => { onDown(e); onTouchStartDrag(e); }}
+        onTouchMove={(e) => { onMove(e); onTouchMoveDrag(e); }}
+        onTouchEnd={(e) => { onUp(e); onTouchEndDrag(e); }}
+        onClick={() => offset === 0 && !touchDragRef.current.active && onTap()}
         style={{
           background: theme.surface, padding: '12px 18px',
           transform: `translateX(${offset}px)`,
