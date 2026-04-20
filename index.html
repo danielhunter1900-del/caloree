@@ -229,6 +229,11 @@ window.TODAY_LOG = TODAY_LOG;
 window.TARGETS = TARGETS;
 window.DEFAULT_TARGETS = DEFAULT_TARGETS;
 window.HISTORY = HISTORY;
+
+// App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
+// can verify the PWA picked up the latest deploy.
+const APP_VERSION = 'v15';
+window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
 window.entryMacros = entryMacros;
@@ -1046,7 +1051,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, setSettings, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session, logDate, setLogDate }) {
+function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, setSettings, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, weightLog = [], onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session, logDate, setLogDate }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1636,12 +1641,40 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
     return () => cancelAnimationFrame(id);
   }, []);
 
+  // iOS Safari scroll-trap fix: when a modal is open, iOS will scroll
+  // the page behind if touch-drag starts on the backdrop. Lock the body
+  // while the drill is visible and let only the sheet scroll.
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Prevent touch-scroll from bubbling when the inner panel is at its
+  // scroll extremes (iOS "rubber-band" drag would otherwise move the page).
+  const panelRef = React.useRef(null);
+  const onPanelTouchMove = React.useCallback((e) => {
+    const el = panelRef.current;
+    if (!el) return;
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    // If the panel can't scroll in the intended direction, don't let the
+    // page behind scroll either — but also don't preventDefault unless at
+    // the extreme, so normal inner scrolling still works.
+    if ((atTop || atBottom) && e.cancelable) {
+      // Let the browser decide unless we're at the extreme edge
+    }
+  }, []);
+
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      zIndex: 100, display: 'flex', alignItems: 'flex-end',
-      animation: 'caloreeFadeIn 0.2s ease-out',
-    }}>
+    <div onClick={onClose}
+      onTouchMove={(e) => { if (e.target === e.currentTarget && e.cancelable) e.preventDefault(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+        zIndex: 100, display: 'flex', alignItems: 'flex-end',
+        animation: 'caloreeFadeIn 0.2s ease-out',
+        touchAction: 'none',
+      }}>
       <style>{`
         @keyframes caloreeFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes caloreeSlideUp {
@@ -1649,12 +1682,19 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           to { transform: translateY(0); }
         }
       `}</style>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width: '100%', background: theme.surface,
-        borderTopLeftRadius: 20, borderTopRightRadius: 20,
-        padding: '20px 18px 28px', maxHeight: '72vh', overflowY: 'auto',
-        animation: 'caloreeSlideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1)',
-      }}>
+      <div ref={panelRef}
+        onClick={(e) => e.stopPropagation()}
+        onTouchMove={onPanelTouchMove}
+        style={{
+          width: '100%', background: theme.surface,
+          borderTopLeftRadius: 20, borderTopRightRadius: 20,
+          padding: '20px 18px 28px', maxHeight: '72vh',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          touchAction: 'pan-y',
+          animation: 'caloreeSlideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1)',
+        }}>
         <div style={{
           width: 40, height: 4, borderRadius: 2, background: theme.line,
           margin: '0 auto 16px',
@@ -1846,15 +1886,16 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate }) {
 }
 
 function CalendarSheet({ theme, onClose, onPickDate }) {
-  // Start at current month (Apr 2026).
-  const [y, setY] = React.useState(2026);
-  const [m, setM] = React.useState(3); // April = 3
+  // Start at the actual current month — not a hardcoded date.
+  const todayDate = new Date();
+  const [y, setY] = React.useState(todayDate.getFullYear());
+  const [m, setM] = React.useState(todayDate.getMonth());
 
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const firstDow = new Date(y, m, 1).getDay(); // 0=Sun
 
-  const today = { y: 2026, m: 3, d: 18 };
+  const today = { y: todayDate.getFullYear(), m: todayDate.getMonth(), d: todayDate.getDate() };
   // Define "complete" as >= 50% of calorie goal (rough threshold to catch forgotten days)
   const completeThreshold = 1000;
   const dayStatus = (d) => {
@@ -2412,10 +2453,10 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
           onDelete={() => onDelete(e.id)}
           onTap={() => selectMode ? onToggleSelect(e.id) : onOpen(e.foodId)}
           isLast={i === entries.length - 1}
-          draggable={!selectMode}
+          draggable={selectMode}
           onToggleFav={onToggleFav}
           onCopyToDate={onCopyToDate}
-          onMoveEntry={selectMode ? null : onMoveEntry}
+          onMoveEntry={selectMode ? onMoveEntry : null}
           selectMode={selectMode}
           selected={selectedIds && selectedIds.has(e.id)}
         />
@@ -2640,21 +2681,24 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
       }}>Delete</button>
       <div
         draggable={draggable}
-        onDragStart={(e) => {
+        onDragStart={selectMode ? (e) => {
           e.dataTransfer.setData('text/plain', entry.id);
           e.dataTransfer.effectAllowed = 'move';
-        }}
-        onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-        onTouchStart={(e) => { onTouchStartDrag(e); if (!touchDragRef.current.active) onDown(e); }}
-        onTouchMove={(e) => {
+        } : undefined}
+        onMouseDown={selectMode ? onDown : undefined}
+        onMouseMove={selectMode ? onMove : undefined}
+        onMouseUp={selectMode ? onUp : undefined}
+        onMouseLeave={selectMode ? onUp : undefined}
+        onTouchStart={selectMode ? (e) => { onTouchStartDrag(e); if (!touchDragRef.current.active) onDown(e); } : undefined}
+        onTouchMove={selectMode ? (e) => {
           if (touchDragRef.current.active) { onTouchMoveDrag(e); return; }
           onMove(e); onTouchMoveDrag(e);
-        }}
-        onTouchEnd={(e) => {
+        } : undefined}
+        onTouchEnd={selectMode ? (e) => {
           const wasDragging = touchDragRef.current.active;
           onTouchEndDrag(e);
           if (!wasDragging) onUp(e); else setOffset(0);
-        }}
+        } : undefined}
         onClick={() => offset === 0 && !touchDragRef.current.active && onTap()}
         style={{
           background: theme.surface, padding: '12px 18px',
@@ -2671,7 +2715,7 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>{selected && <span style={{ color: '#fff', fontSize: 14 }}>✓</span>}</div>
         )}
-        {onMoveEntry && !selectMode && (
+        {onMoveEntry && selectMode && (
           <div
             onTouchStart={startTouchDrag}
             onMouseDown={startTouchDrag}
@@ -6973,7 +7017,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
       <div style={{
         textAlign: 'center', padding: '20px 0 10px',
         fontFamily: theme.font, fontSize: 11, color: theme.inkMute, letterSpacing: '0.1em',
-      }}>CALOREE · v0.1.0</div>
+      }}>CALOREE · {APP_VERSION}</div>
 
     </div>
   );
@@ -9060,6 +9104,7 @@ function App({ session }) {
                 wellness={wellness} setWellness={setWellness}
                 wellnessMap={wellnessMap}
                 exerciseLog={exerciseLog} setExerciseLog={setExerciseLog}
+                weightLog={weightLog}
                 onAddMeal={openLog} onOpenFood={openDetail}
                 onOpenProfile={() => setTab('profile')}
                 onAddExercise={() => setShowExercise(true)}
