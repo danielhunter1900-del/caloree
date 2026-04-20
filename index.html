@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1708,7 +1708,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           overscrollBehavior: 'contain',
           touchAction: 'pan-y',
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+          transition: 'transform 0.42s cubic-bezier(0.2, 1.15, 0.3, 1)',
           willChange: 'transform',
         }}>
         <div style={{
@@ -2303,7 +2303,9 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
     d.pace_sec_per_km    ? { k: 'Pace',         v: fmtPace(d.pace_sec_per_km) } : null,
     d.average_heartrate  ? { k: 'Avg HR',       v: `${fmtInt(d.average_heartrate)} bpm` } : null,
     d.max_heartrate      ? { k: 'Max HR',       v: `${fmtInt(d.max_heartrate)} bpm` } : null,
-    d.average_cadence    ? { k: 'Cadence',      v: `${fmtInt(d.average_cadence)}` } : null,
+    d.average_cadence    ? { k: 'Cadence',      v: entry.type === 'Run'
+        ? `${fmtInt(d.average_cadence * 2)} spm`
+        : `${fmtInt(d.average_cadence)} rpm` } : null,
     d.average_watts      ? { k: 'Avg power',    v: `${fmtInt(d.average_watts)} W` } : null,
     d.max_watts          ? { k: 'Max power',    v: `${fmtInt(d.max_watts)} W` } : null,
     d.elevation_gain_m   ? { k: 'Elev gain',    v: `${fmtInt(d.elevation_gain_m)} m` } : null,
@@ -2335,8 +2337,9 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
           borderTopLeftRadius: 20, borderTopRightRadius: 20,
           height: '92vh', overflowY: 'auto',
           WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+          touchAction: 'pan-y',
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+          transition: 'transform 0.42s cubic-bezier(0.2, 1.15, 0.3, 1)',
           display: 'flex', flexDirection: 'column',
         }}>
         {/* Header */}
@@ -2420,8 +2423,74 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
             </div>
           )}
 
+          {/* Intervals (Laps) — promoted for Speed runs since the
+              manual laps ARE the intervals; 1km auto-splits would
+              obscure them. */}
+          {(() => {
+            const isSpeed = entry.type === 'Run' && (d.runType === 'Speed' || (Array.isArray(d.laps) && d.laps.length >= 3));
+            if (!isSpeed || !Array.isArray(d.laps) || d.laps.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>
+                  Intervals ({d.laps.length})
+                </div>
+                <div style={{
+                  background: theme.surface, borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`, overflow: 'hidden',
+                }}>
+                  {d.laps.map((l, i) => {
+                    const dur = l.moving_time ? Math.round(l.moving_time / 60) : 0;
+                    const sec = l.moving_time ? l.moving_time % 60 : 0;
+                    const distKm = l.distance_m ? l.distance_m / 1000 : 0;
+                    const pace = l.average_speed_mps && l.distance_m
+                      ? Math.round(1000 / l.average_speed_mps) : null;
+                    return (
+                      <div key={i} style={{
+                        display: 'grid', gridTemplateColumns: '28px 1fr 72px 72px 52px', gap: 8,
+                        padding: '9px 14px',
+                        borderTop: i > 0 ? `1px solid ${theme.line}` : 'none',
+                        alignItems: 'center',
+                      }}>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, fontWeight: 600,
+                        }}>{i + 1}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 13, color: theme.ink, fontWeight: theme.numWeight,
+                        }}>
+                          {distKm ? `${distKm < 1 ? Math.round(distKm * 1000) + ' m' : distKm.toFixed(2) + ' km'}` : '—'}
+                        </div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                        }}>{l.moving_time ? `${Math.floor(l.moving_time / 60)}:${String(sec).padStart(2,'0')}` : ''}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                        }}>{pace ? fmtPace(pace) : ''}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                        }}>{l.avg_hr ? `${Math.round(l.avg_hr)}` : ''}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{
+                  fontFamily: theme.font, fontSize: 10, color: theme.inkMute,
+                  marginTop: 4, paddingLeft: 4, display: 'grid',
+                  gridTemplateColumns: '28px 1fr 72px 72px 52px', gap: 8, textAlign: 'right',
+                }}>
+                  <span/><span style={{ textAlign: 'left' }}>distance</span><span>time</span><span>pace</span><span>bpm</span>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Splits */}
-          {Array.isArray(d.splits_km) && d.splits_km.length > 0 && (() => {
+          {(() => {
+            // Hide auto km splits for Speed runs — the intervals are the real story there.
+            const isSpeed = entry.type === 'Run' && d.runType === 'Speed';
+            if (isSpeed) return null;
+            if (!Array.isArray(d.splits_km) || d.splits_km.length === 0) return null;
+            return true;
+          })() && Array.isArray(d.splits_km) && d.splits_km.length > 0 && (() => {
             const paces = d.splits_km.map(s => s.pace_sec_per_km || 0).filter(p => p > 0);
             const best = paces.length ? Math.min(...paces) : 0;
             const worst = paces.length ? Math.max(...paces) : 1;
@@ -2467,8 +2536,8 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
             );
           })()}
 
-          {/* Laps */}
-          {Array.isArray(d.laps) && d.laps.length > 0 && (
+          {/* Laps — skip when already shown as Intervals above */}
+          {!(entry.type === 'Run' && (d.runType === 'Speed' || (Array.isArray(d.laps) && d.laps.length >= 3))) && Array.isArray(d.laps) && d.laps.length > 0 && (
             <div style={{ marginBottom: 14 }}>
               <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>Laps</div>
               <div style={{
@@ -7327,7 +7396,7 @@ function StravaReviewSheet({ theme, onClose }) {
                     {d.distance_km ? <span>{d.distance_km.toFixed(2)} km</span> : null}
                     {d.pace_sec_per_km ? <span>{fmtPace(d.pace_sec_per_km)}</span> : null}
                     {d.average_heartrate ? <span>{Math.round(d.average_heartrate)} bpm{d.max_heartrate ? ` (max ${Math.round(d.max_heartrate)})` : ''}</span> : null}
-                    {d.average_cadence ? <span>{Math.round(d.average_cadence)} cad</span> : null}
+                    {d.average_cadence ? <span>{Math.round(d.average_cadence * (d.mapped_type === 'Run' ? 2 : 1))}{d.mapped_type === 'Run' ? ' spm' : ' rpm'}</span> : null}
                     {d.average_watts ? <span>{Math.round(d.average_watts)} W</span> : null}
                     {d.elevation_gain_m ? <span>↑ {Math.round(d.elevation_gain_m)} m</span> : null}
                     {typeof d.kcal === 'number' ? <span>{d.kcal} kcal</span> : null}
