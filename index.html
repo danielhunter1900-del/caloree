@@ -4928,6 +4928,7 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
     { k: 'exerciseMin', label: 'Exercise', unit: 'min', color: '#4F8A70', min: 0, max: 90, fmt: v => Math.round(+v || 0) },
     { k: 'coffees',   label: 'Coffee',   unit: '',     color: '#A0725A', min: 0, max: 6, fmt: v => (+v || 0).toFixed(1) },
     { k: 'water',     label: 'Water',    unit: 'cups', color: '#5FA8C9', min: 0, max: 3500, fmt: v => Math.round((+v || 0)/250) },
+    { k: 'readingMin', label: 'Reading', unit: 'min',  color: '#B87A3A', min: 0, max: 60, fmt: v => Math.round(+v || 0) },
     { k: 'stress',    label: 'Stress',   unit: '/5',   color: '#D96B5C', min: 1, max: 5, fmt: v => (+v || 0).toFixed(1) },
     { k: 'kcal',      label: 'Calories', unit: '',     color: '#8A8A8A', min: 1400, max: 2700, fmt: v => Math.round(+v || 0) },
   ];
@@ -8305,7 +8306,7 @@ function App({ session }) {
     } catch {}
     return {};
   });
-  const wellnessDefaults = { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0 };
+  const wellnessDefaults = { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0 };
   const wellness = (date) => wellnessMap[date] || { ...wellnessDefaults };
   const setWellness = (date, patch) => {
     setWellnessMap(prev => ({
@@ -8426,6 +8427,7 @@ function App({ session }) {
           sleepHrs: +w.sleep_hrs || 0,
           stress: w.stress || 0,
           energy: w.energy || 0,
+          readingMin: +w.reading_min || 0,
         });
       });
 
