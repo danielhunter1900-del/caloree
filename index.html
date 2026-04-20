@@ -1629,15 +1629,31 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
 
   const total = contributors.reduce((s, r) => s + r.amount, 0);
 
+  // Fade-in trigger so the bars animate their width after mount
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
       zIndex: 100, display: 'flex', alignItems: 'flex-end',
+      animation: 'caloreeFadeIn 0.2s ease-out',
     }}>
+      <style>{`
+        @keyframes caloreeFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes caloreeSlideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+      `}</style>
       <div onClick={(e) => e.stopPropagation()} style={{
         width: '100%', background: theme.surface,
         borderTopLeftRadius: 20, borderTopRightRadius: 20,
         padding: '20px 18px 28px', maxHeight: '72vh', overflowY: 'auto',
+        animation: 'caloreeSlideUp 0.32s cubic-bezier(0.32, 0.72, 0, 1)',
       }}>
         <div style={{
           width: 40, height: 4, borderRadius: 2, background: theme.line,
@@ -1664,12 +1680,15 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
             fontFamily: theme.font, fontSize: 13, color: theme.inkMute,
             padding: '24px 0', textAlign: 'center',
           }}>No {drill.label.toLowerCase()} logged yet.</div>
-        ) : contributors.map((r) => {
+        ) : contributors.map((r, i) => {
           const pct = total ? (r.amount / total) * 100 : 0;
           return (
             <div key={r.entry.id} onClick={() => { onClose(); onOpenFood && onOpenFood(r.food.id); }}
               style={{
                 padding: '10px 0', borderBottom: `1px solid ${theme.line}`, cursor: 'pointer',
+                opacity: mounted ? 1 : 0,
+                transform: mounted ? 'translateY(0)' : 'translateY(6px)',
+                transition: `opacity 0.28s ease-out ${i * 0.03}s, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1) ${i * 0.03}s`,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{
@@ -1688,7 +1707,8 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
                   background: theme.ring.track, overflow: 'hidden',
                 }}>
                   <div style={{
-                    width: `${pct}%`, height: '100%', background: drill.color,
+                    width: mounted ? `${pct}%` : '0%', height: '100%', background: drill.color,
+                    transition: `width 0.5s cubic-bezier(0.32, 0.72, 0, 1) ${0.05 + i * 0.03}s`,
                   }}/>
                 </div>
                 <div style={{
@@ -3458,7 +3478,10 @@ ${JSON.stringify({
 
 They want to modify it: "${text.trim()}"
 
-Return ONLY JSON (no prose, no code fences):
+Return ONLY a JSON object, no prose, no code fences, no explanation.
+Even if the user asks a question, respond with your best estimate as a JSON object —
+never reply in natural language.
+
 {
   "name": "new name reflecting the change",
   "brand": "short prep note",
@@ -3469,6 +3492,9 @@ Return ONLY JSON (no prose, no code fences):
 
 Rules:
 - All values are per-serving totals. Recompute based on the described change.
+- If the user is asking "are these macros correct?" — reassess the original food
+  against typical values for that food/brand/serving size and return your best
+  estimate. If values look roughly right, return them unchanged.
 - Keep the same serving size concept unless the change implies otherwise.
 - Never omit satFat/sugar/fibre — estimate conservatively.
 - Keep the name concise and reflect the swap.`;
@@ -3490,8 +3516,19 @@ Rules:
       const j = await res.json();
       const textBlock = (j.content || []).find(b => b.type === 'text');
       const raw = textBlock ? textBlock.text : '';
-      const clean = raw.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
-      setPreview(JSON.parse(clean));
+      // Strip code fences if present, then tolerate leading prose by
+      // extracting the first JSON object we can find in the response.
+      const fenced = raw.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+      let parsed = null;
+      try { parsed = JSON.parse(fenced); }
+      catch {
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) {
+          try { parsed = JSON.parse(match[0]); } catch {}
+        }
+      }
+      if (!parsed) throw new Error('Claude didn\'t return usable JSON. Try rephrasing as a change (e.g. "less butter, add spinach").');
+      setPreview(parsed);
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -4660,6 +4697,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
       {askOpen && (
         <AskCoachSheet theme={theme} range={range} bucketLabel={bucket?.label}
           data={data} targets={targets} setTargets={setTargets}
+          exByDate={exByDate} weightLog={weightLog} exerciseLog={exerciseLog}
           onClose={() => setAskOpen(false)} />
       )}
 
@@ -4838,33 +4876,96 @@ function ProposalRow({ proposal, theme, labelFor, currentTargets, onApply }) {
   );
 }
 
-function AskCoachSheet({ theme, range, bucketLabel, data, targets, setTargets, onClose }) {
+function AskCoachSheet({ theme, range, bucketLabel, data, targets, setTargets, exByDate = {}, weightLog = [], exerciseLog = [], onClose }) {
   const [messages, setMessages] = React.useState([
     { role: 'assistant', text: `I can see your last ${data.length} ${range === 'Year' ? 'months' : 'days'} (${bucketLabel}). Ask me anything — patterns, anomalies, coaching, or just "recap". If I suggest changes, you'll see an "Apply" button.` },
   ]);
   const [input, setInput] = React.useState('');
   const [busy, setBusy] = React.useState(false);
 
-  // Build compact context: per-row summary so Claude has structured data
-  const dataCtx = data.map(d => ({
-    label: d.barLabel,
-    kcal: Math.round(d.kcal),
-    c: Math.round(d.c), p: Math.round(d.p), f: Math.round(d.f),
-    sleep: d.sleepHrs != null ? +d.sleepHrs.toFixed(1) : null,
-    coffees: d.coffees ?? null, water: d.water ?? null,
-    stress: d.stress ?? null, energy: d.energy ?? null,
-  }));
+  // Build compact context: per-row summary so Claude has structured data.
+  // Includes ALL macros (incl. sat fat / sugar / fibre), wellness (incl. reading),
+  // plus exercise + weight so recaps can actually talk about them.
+  const dataCtx = data.map(d => {
+    const ex = d.iso ? exByDate[d.iso] : null;
+    const w = weightLog.find(w => w.iso === d.iso);
+    return {
+      label: d.barLabel,
+      iso: d.iso || null,
+      kcal: Math.round(d.kcal),
+      c: Math.round(d.c), p: Math.round(d.p), f: Math.round(d.f),
+      satFat: d.satFat != null ? Math.round(d.satFat) : null,
+      sugar:  d.sugar  != null ? Math.round(d.sugar)  : null,
+      fibre:  d.fibre  != null ? Math.round(d.fibre)  : null,
+      sleep: d.sleepHrs != null ? +d.sleepHrs.toFixed(1) : null,
+      coffees: d.coffees ?? null, water: d.water ?? null,
+      stress: d.stress ?? null, energy: d.energy ?? null,
+      reading_min: d.readingMin ?? null,
+      exercise_min: ex ? Math.round(ex.min) : 0,
+      exercise_kcal: ex ? Math.round(ex.kcal) : 0,
+      exercise_km: ex && ex.km ? +ex.km.toFixed(1) : 0,
+      exercise_types: ex && ex.byType ? Object.keys(ex.byType) : [],
+      weight_kg: w ? +w.kg.toFixed(1) : null,
+    };
+  });
+
+  // Richer exercise context: per-type totals + top sessions across the range
+  const exTypeTotals = {};
+  const sessions = [];
+  (exerciseLog || []).forEach(e => {
+    if (!e || !e.date) return;
+    const inRange = data.some(d => d.iso === e.date);
+    if (!inRange) return;
+    const t = e.type || 'Other';
+    if (!exTypeTotals[t]) exTypeTotals[t] = { min: 0, km: 0, kcal: 0, count: 0 };
+    exTypeTotals[t].min  += (+e.duration || 0);
+    exTypeTotals[t].km   += (+e.distance || 0);
+    exTypeTotals[t].kcal += (+e.kcal || 0);
+    exTypeTotals[t].count += 1;
+    sessions.push({
+      date: e.date, type: t,
+      duration_min: +e.duration || null,
+      distance_km:  +e.distance || null,
+      kcal: +e.kcal || null,
+      runType: e.details?.runType || null,
+      notes: e.notes || null,
+    });
+  });
+
+  // Weight trend within the range
+  const rangeStart = data[0]?.iso;
+  const rangeEnd   = data[data.length - 1]?.iso;
+  const weightsInRange = (weightLog || []).filter(w => (!rangeStart || w.iso >= rangeStart) && (!rangeEnd || w.iso <= rangeEnd));
+  const weightCtx = weightsInRange.length ? {
+    entries: weightsInRange.map(w => ({ iso: w.iso, kg: +w.kg.toFixed(1) })),
+    first_kg: +weightsInRange[0].kg.toFixed(1),
+    last_kg:  +weightsInRange[weightsInRange.length - 1].kg.toFixed(1),
+    delta_kg: +(weightsInRange[weightsInRange.length - 1].kg - weightsInRange[0].kg).toFixed(1),
+  } : null;
 
   const systemPrompt = `You are a nutrition & wellness coach looking at a user's data.
 Range: ${range} · ${bucketLabel}
-Targets: kcal ${targets.kcal}, carbs ${targets.c}g, protein ${targets.p}g, fat ${targets.f}g, sat fat ${targets.satFat || 20}g, sugar ${targets.sugar || 50}g, fibre ${targets.fibre || 30}g
-Data (${data.length} rows): ${JSON.stringify(dataCtx)}
+Targets: kcal ${targets.kcal}, carbs ${targets.c}g, protein ${targets.p}g, fat ${targets.f}g, sat fat ${targets.satFat || 20}g, sugar ${targets.sugar || 50}g, fibre ${targets.fibre || 30}g, exercise ${targets.exMin || 30} min/day
+
+Per-day data (${data.length} rows, JSON):
+${JSON.stringify(dataCtx)}
+
+Exercise sessions across this range (${sessions.length} sessions):
+${JSON.stringify(sessions.slice(0, 60))}
+
+Exercise totals by type: ${JSON.stringify(exTypeTotals)}
+Weight: ${weightCtx ? JSON.stringify(weightCtx) : 'no weigh-ins in range'}
 
 Rules:
+- You have the FULL dataset above: every macro (incl. sat fat, sugar, fibre), every
+  wellness metric (incl. reading minutes), every exercise session (incl. run subtype
+  and distance), and weight history. Use it. Do not claim data is "missing" unless a
+  specific field is literally null across the range.
 - Be specific. Cite numbers from the data.
-- Be concise (under 120 words unless asked for more).
-- If asked for a "recap" or "summary", give: kcal avg vs goal, protein adherence, notable streaks, and one suggestion.
-- If asked about patterns, use the data to compute correlations where plausible.
+- Be concise (under 150 words unless asked for more).
+- If asked for a "recap" or "summary", give: kcal avg vs goal, protein adherence,
+  exercise minutes vs target, weight change if any, notable streaks, one suggestion.
+- If asked about patterns, compute plausible correlations across the data.
 - Never invent data. If uncertain, say so.
 - No disclaimers about not being a doctor.
 
@@ -5559,6 +5660,7 @@ function AIChat({ theme, onAddMany }) {
   const [pending, setPending] = React.useState(null); // {meals: [{meal, items, photo?}]}
   const [photo, setPhoto] = React.useState(null); // { dataUrl, mediaType }
   const [photoKind, setPhotoKind] = React.useState('food'); // 'food' | 'label'
+  const taRef = React.useRef(null);
   const fileRef = React.useRef(null);
   const [listening, setListening] = React.useState(false);
   const recognitionRef = React.useRef(null);
@@ -5709,6 +5811,7 @@ Output a single item with the scaled values. If the label is illegible or missin
     const userText = input.trim();
     const userPhoto = photo;
     setInput(''); setPhoto(null); setPhotoKind('food');
+    if (taRef.current) taRef.current.style.height = 'auto';
     setMessages(m => [...m, { role: 'user', text: userText || '(photo)', photo: userPhoto }]);
     setBusy(true);
 
@@ -5860,17 +5963,26 @@ Output a single item with the scaled values. If the label is illegible or missin
             </svg>
           </button>
           <textarea
+            ref={taRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-grow: let the box match content up to a sensible cap
+              e.target.style.height = 'auto';
+              const next = Math.min(e.target.scrollHeight, 160);
+              e.target.style.height = next + 'px';
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
             }}
             placeholder="Describe what you ate…"
-            rows={2}
+            rows={1}
             style={{
               flex: 1, border: 'none', outline: 'none', background: 'transparent',
               resize: 'none', fontFamily: theme.font, fontSize: 14,
               color: theme.ink, padding: '6px 8px', letterSpacing: theme.letter,
+              minHeight: 36, maxHeight: 160, overflowY: 'auto',
+              lineHeight: 1.35,
             }}
           />
           {SR && (
@@ -5893,10 +6005,11 @@ Output a single item with the scaled values. If the label is illegible or missin
             background: !input.trim() ? theme.surfaceAlt : theme.accent,
             color: theme.accentInk, opacity: busy ? 0.5 : 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
           }}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M2 8l12-5-5 12-2-5-5-2z" stroke={theme.accentInk}
-                strokeWidth="1.6" strokeLinejoin="round" fill={theme.accentInk}/>
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <polygon points="3,3 21,12 3,21 8,12"
+                fill={theme.accentInk} stroke="none"/>
             </svg>
           </button>
         </div>
