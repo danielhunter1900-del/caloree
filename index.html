@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -9268,6 +9268,299 @@ function fieldStyle(theme) {
   };
 }
 
+// First-run onboarding. Collects the profile fields we need to give
+// honest macro estimates (name, sex, age, height, weight, activity,
+// goal) and seeds the user's targets + first weight entry.
+//
+// Uses Mifflin-St Jeor for BMR and a standard activity multiplier
+// for TDEE, then a goal delta (-18% / 0 / +12%). Protein scales
+// with bodyweight, fat is 25% of kcal (min 0.6 g/kg), carbs are
+// the remainder.
+function OnboardingSheet({ theme, onComplete }) {
+  const [step, setStep] = React.useState(0);
+  const [name, setName] = React.useState(() => localStorage.getItem('cal_display_name') || '');
+  const [sex, setSex] = React.useState('male'); // 'male' | 'female'
+  const [age, setAge] = React.useState('');
+  const [heightCm, setHeightCm] = React.useState('');
+  const [weightKg, setWeightKg] = React.useState('');
+  const [activity, setActivity] = React.useState('moderate');
+  const [goal, setGoal] = React.useState('maintain');
+
+  const ACTIVITY = {
+    sedentary:   { k: 'sedentary',   label: 'Sedentary',   hint: 'Desk job, little movement',           mult: 1.20 },
+    light:       { k: 'light',       label: 'Light',       hint: '1–3 sessions / week',                 mult: 1.375 },
+    moderate:    { k: 'moderate',    label: 'Moderate',    hint: '3–5 sessions / week',                 mult: 1.55 },
+    active:      { k: 'active',      label: 'Active',      hint: '6–7 sessions / week',                 mult: 1.725 },
+    very_active: { k: 'very_active', label: 'Very active', hint: 'Twice-a-day training or manual job',  mult: 1.90 },
+  };
+  const GOALS = {
+    cut:      { k: 'cut',      label: 'Lose weight', hint: '~0.3–0.6 kg/week deficit',          delta: 0.82 },
+    maintain: { k: 'maintain', label: 'Maintain',    hint: 'Hold current weight',               delta: 1.00 },
+    gain:     { k: 'gain',     label: 'Gain weight', hint: 'Add lean mass, modest surplus',     delta: 1.12 },
+  };
+
+  const computed = React.useMemo(() => {
+    const kg = +weightKg; const cm = +heightCm; const a = +age;
+    if (!kg || !cm || !a) return null;
+    const bmr = sex === 'male'
+      ? 10 * kg + 6.25 * cm - 5 * a + 5
+      : 10 * kg + 6.25 * cm - 5 * a - 161;
+    const tdee = bmr * (ACTIVITY[activity]?.mult || 1.55);
+    const goalKcal = tdee * (GOALS[goal]?.delta || 1);
+    const kcal = Math.round(goalKcal / 50) * 50;
+    const proteinPerKg = goal === 'cut' ? 2.0 : goal === 'gain' ? 1.8 : 1.6;
+    const p = Math.round((kg * proteinPerKg) / 5) * 5;
+    const fatKcal = kcal * 0.25;
+    const f = Math.max(Math.round(kg * 0.6 / 5) * 5, Math.round(fatKcal / 9 / 5) * 5);
+    const remaining = kcal - (p * 4) - (f * 9);
+    const c = Math.max(0, Math.round((remaining / 4) / 5) * 5);
+    return {
+      bmr: Math.round(bmr), tdee: Math.round(tdee),
+      kcal, c, p, f,
+      satFat: Math.max(15, Math.round(f * 0.35 / 5) * 5),
+      sugar:  50,
+      fibre:  Math.max(25, Math.round(kcal / 1000 * 14 / 5) * 5),
+      exKcal: goal === 'gain' ? 300 : 400,
+      exMin:  30,
+    };
+  }, [weightKg, heightCm, age, sex, activity, goal]);
+
+  const steps = [
+    {
+      title: 'Welcome to Caloree',
+      subtitle: 'A 60-second setup so the app can give you real numbers, not generic ones.',
+      content: null,
+      canNext: true,
+    },
+    {
+      title: "What should we call you?",
+      subtitle: 'Shown at the top of the Home screen.',
+      content: (
+        <input value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="Your name" autoFocus
+          style={fieldStyle(theme)}/>
+      ),
+      canNext: name.trim().length > 0,
+    },
+    {
+      title: 'About you',
+      subtitle: "Needed for calorie estimates. Won't be shown anywhere.",
+      content: (
+        <React.Fragment>
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+            color: theme.inkMute, letterSpacing: '0.1em', marginBottom: 6,
+          }}>SEX</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {['male','female'].map(s => (
+              <button key={s} onClick={() => setSex(s)} style={{
+                flex: 1, padding: '10px 0', borderRadius: theme.radius.btn,
+                border: `1px solid ${sex === s ? theme.ink : theme.line}`,
+                background: sex === s ? theme.ink : 'transparent',
+                color: sex === s ? theme.bg : theme.inkSoft,
+                fontFamily: theme.font, fontSize: 13, fontWeight: sex === s ? 700 : 500,
+                cursor: 'pointer', textTransform: 'capitalize',
+              }}>{s}</button>
+            ))}
+          </div>
+          <Field label="Age" theme={theme}>
+            <input type="number" inputMode="numeric" value={age}
+              onChange={(e) => setAge(e.target.value)} placeholder="e.g. 27"
+              style={fieldStyle(theme)}/>
+          </Field>
+        </React.Fragment>
+      ),
+      canNext: sex && +age > 0 && +age < 120,
+    },
+    {
+      title: 'Height',
+      subtitle: 'In centimetres.',
+      content: (
+        <input type="number" inputMode="numeric" value={heightCm}
+          onChange={(e) => setHeightCm(e.target.value)} placeholder="e.g. 178"
+          autoFocus
+          style={fieldStyle(theme)}/>
+      ),
+      canNext: +heightCm > 80 && +heightCm < 260,
+    },
+    {
+      title: 'Current weight',
+      subtitle: "We'll log this as your first weigh-in too.",
+      content: (
+        <input type="number" inputMode="decimal" value={weightKg}
+          onChange={(e) => setWeightKg(e.target.value)} placeholder="e.g. 72.5"
+          autoFocus step="0.1"
+          style={fieldStyle(theme)}/>
+      ),
+      canNext: +weightKg > 25 && +weightKg < 400,
+    },
+    {
+      title: 'How active are you?',
+      subtitle: 'Counts job + exercise combined.',
+      content: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {Object.values(ACTIVITY).map(a => (
+            <button key={a.k} onClick={() => setActivity(a.k)} style={{
+              padding: '12px 14px', borderRadius: theme.radius.btn,
+              border: `1.5px solid ${activity === a.k ? theme.ink : theme.line}`,
+              background: activity === a.k ? theme.surfaceAlt : 'transparent',
+              cursor: 'pointer', textAlign: 'left',
+            }}>
+              <div style={{ fontFamily: theme.font, fontSize: 14, fontWeight: 600, color: theme.ink }}>
+                {a.label}
+              </div>
+              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2 }}>
+                {a.hint} · ×{a.mult} TDEE
+              </div>
+            </button>
+          ))}
+        </div>
+      ),
+      canNext: !!activity,
+    },
+    {
+      title: "What's your goal?",
+      subtitle: 'Determines the calorie and protein targets.',
+      content: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {Object.values(GOALS).map(g => (
+            <button key={g.k} onClick={() => setGoal(g.k)} style={{
+              padding: '12px 14px', borderRadius: theme.radius.btn,
+              border: `1.5px solid ${goal === g.k ? theme.ink : theme.line}`,
+              background: goal === g.k ? theme.surfaceAlt : 'transparent',
+              cursor: 'pointer', textAlign: 'left',
+            }}>
+              <div style={{ fontFamily: theme.font, fontSize: 14, fontWeight: 600, color: theme.ink }}>
+                {g.label}
+              </div>
+              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2 }}>
+                {g.hint}
+              </div>
+            </button>
+          ))}
+        </div>
+      ),
+      canNext: !!goal,
+    },
+    {
+      title: 'Your plan',
+      subtitle: computed ? `${ACTIVITY[activity]?.label} × ${GOALS[goal]?.label.toLowerCase()} · maintenance ~${computed.tdee} kcal` : '',
+      content: computed ? (
+        <div style={{
+          background: theme.surfaceAlt, borderRadius: theme.radius.card,
+          padding: '14px 14px', display: 'grid',
+          gridTemplateColumns: '1fr 1fr', gap: '10px 12px',
+        }}>
+          {[
+            ['Calories',  `${computed.kcal}`],
+            ['Protein',   `${computed.p} g`],
+            ['Carbs',     `${computed.c} g`],
+            ['Fat',       `${computed.f} g`],
+            ['Sat fat',   `${computed.satFat} g`],
+            ['Sugar',     `${computed.sugar} g`],
+            ['Fibre',     `${computed.fibre} g`],
+            ['Exercise',  `${computed.exMin} min`],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+                color: theme.inkMute, letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}>{k}</div>
+              <div style={{
+                fontFamily: theme.numFont, fontSize: 16, fontWeight: theme.numWeight,
+                color: theme.ink, marginTop: 2,
+              }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      ) : null,
+      canNext: !!computed,
+    },
+  ];
+
+  const cur = steps[step];
+  const last = step === steps.length - 1;
+
+  const finish = () => {
+    if (!computed) return;
+    const profile = {
+      name: name.trim(),
+      sex, age: +age, heightCm: +heightCm, weightKg: +weightKg,
+      activity, goal,
+      onboardedAt: new Date().toISOString(),
+    };
+    const targets = {
+      kcal: computed.kcal, c: computed.c, p: computed.p, f: computed.f,
+      satFat: computed.satFat, sugar: computed.sugar, fibre: computed.fibre,
+      exKcal: computed.exKcal, exMin: computed.exMin,
+    };
+    localStorage.setItem('cal_display_name', profile.name);
+    onComplete({ profile, targets, firstWeightKg: +weightKg });
+  };
+
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10050,
+      background: theme.bg,
+      display: 'flex', flexDirection: 'column',
+      padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 20px calc(env(safe-area-inset-bottom, 0px) + 20px)',
+    }}>
+      {/* Progress dots */}
+      <div style={{
+        display: 'flex', gap: 4, marginBottom: 24, paddingTop: 6, flexShrink: 0,
+      }}>
+        {steps.map((_, i) => (
+          <div key={i} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: i <= step ? theme.ink : theme.line,
+            transition: 'background 0.2s',
+          }}/>
+        ))}
+      </div>
+
+      {/* Title */}
+      <div style={{
+        fontFamily: theme.titleFont,
+        fontSize: 26, fontWeight: theme.titleWeight,
+        color: theme.ink, letterSpacing: theme.letter, lineHeight: 1.15,
+      }}>{cur.title}</div>
+      {cur.subtitle && (
+        <div style={{
+          fontFamily: theme.font, fontSize: 13, color: theme.inkSoft,
+          marginTop: 6, marginBottom: 24, lineHeight: 1.4,
+        }}>{cur.subtitle}</div>
+      )}
+
+      {/* Step body */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {cur.content}
+      </div>
+
+      {/* Nav */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 16, flexShrink: 0 }}>
+        {step > 0 && (
+          <button onClick={() => setStep(s => s - 1)} style={{
+            padding: '14px 18px', border: `1px solid ${theme.line}`,
+            background: 'transparent', color: theme.inkSoft,
+            borderRadius: theme.radius.btn, fontFamily: theme.font,
+            fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>Back</button>
+        )}
+        <button onClick={() => last ? finish() : setStep(s => s + 1)}
+          disabled={!cur.canNext} style={{
+            flex: 1, padding: '14px 0', border: 'none',
+            background: cur.canNext ? theme.accent : theme.surfaceAlt,
+            color: cur.canNext ? theme.accentInk : theme.inkMute,
+            borderRadius: theme.radius.btn, fontFamily: theme.font,
+            fontSize: 15, fontWeight: 700, cursor: cur.canNext ? 'pointer' : 'default',
+            letterSpacing: theme.letter,
+          }}>{last ? 'Start using Caloree' : (step === 0 ? "Let's go" : 'Next')}</button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function AddPickerSheet({ theme, onClose, onManual, onAI, onBulk, onPaste, onExercise, onHistory }) {
   return (
     <div onClick={onClose} style={{
@@ -10354,6 +10647,18 @@ function App({ session }) {
       setWellnessMap(map);
 
       hydratingRef.current = false;
+
+      // If this user already has meals, exercise, weight, or custom targets,
+      // they're a returning user — silently mark onboarded so we don't force
+      // them through the intro. Truly empty accounts get the OnboardingSheet.
+      const hasExistingData = (logsR.data && logsR.data.length > 0)
+        || (exerciseR.data && exerciseR.data.length > 0)
+        || (weightR.data && weightR.data.length > 0)
+        || (profileR.data?.targets && profileR.data.targets.kcal && profileR.data.targets.kcal !== DEFAULT_TARGETS.kcal);
+      const prevSettings = profileR.data?.settings || {};
+      if (hasExistingData && !prevSettings.onboarded) {
+        setSettings({ ...prevSettings, onboarded: true });
+      }
     })();
   }, [session]);
 
@@ -10673,6 +10978,20 @@ function App({ session }) {
           {/* Tab bar */}
           <TabBar active={tab} setActive={setTab} theme={theme}
             onLogTap={() => setShowAddPicker(true)} />
+
+          {/* First-run onboarding. Only shows when we've hydrated and the
+              user truly has no history. */}
+          {session && !hydratingRef.current && settings && settings.onboarded !== true && (
+            <OnboardingSheet theme={theme} onComplete={({ profile, targets: newTargets, firstWeightKg }) => {
+              setSettings({ ...(settings || {}), onboarded: true, profile });
+              setTargets(newTargets);
+              if (firstWeightKg && (!weightLog || weightLog.length === 0)) {
+                const iso = new Date().toISOString().slice(0, 10);
+                setWeightLog([{ iso, kg: firstWeightKg }]);
+              }
+              if (profile.name) localStorage.setItem('cal_display_name', profile.name);
+            }}/>
+          )}
 
           {showAddPicker && (
             <AddPickerSheet theme={theme}
