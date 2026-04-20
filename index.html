@@ -2091,7 +2091,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate 
               style={{
                 fontFamily: theme.font, fontSize: 14, fontWeight: 500, color: theme.ink,
                 cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>{e.type}{e.distance ? ` · ${e.distance} km` : ''}
+              }}>{e.type}{e.type === 'Run' && e.details?.runType ? ` · ${e.details.runType}` : ''}{e.distance ? ` · ${e.distance} km` : ''}
               <span style={{ color: theme.inkMute, fontSize: 10 }}>✎</span>
             </div>
             {(e.notes || e.duration) && (
@@ -2119,6 +2119,8 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate 
   );
 }
 
+const RUN_SUBTYPES = ['Easy', 'Long', 'Speed', 'Steady'];
+
 function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
   const ICONS = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️', Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡' };
   const TYPES = Object.keys(ICONS);
@@ -2127,8 +2129,12 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
   const [distance, setDistance] = React.useState(entry.distance != null ? String(entry.distance) : '');
   const [kcal, setKcal] = React.useState(entry.kcal != null ? String(entry.kcal) : '');
   const [notes, setNotes] = React.useState(entry.notes || '');
+  const [runSubtype, setRunSubtype] = React.useState((entry.details && entry.details.runType) || null);
 
   const save = () => {
+    const detailsOut = type === 'Run'
+      ? { ...(entry.details || {}), runType: runSubtype || null }
+      : entry.details || null;
     onSave({
       ...entry,
       type,
@@ -2136,6 +2142,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
       distance: distance === '' ? null : parseFloat(distance),
       kcal: kcal === '' ? null : parseFloat(kcal),
       notes: notes.trim(),
+      details: detailsOut,
     });
   };
 
@@ -2174,6 +2181,31 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
             </button>
           ))}
         </div>
+
+        {type === 'Run' && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 8,
+            }}>Run type</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {RUN_SUBTYPES.map(s => {
+                const sel = runSubtype === s;
+                return (
+                  <button key={s} onClick={() => setRunSubtype(sel ? null : s)} style={{
+                    padding: '8px 14px', borderRadius: 999,
+                    border: `1.5px solid ${sel ? theme.ink : theme.line}`,
+                    background: sel ? theme.ink : 'transparent',
+                    color: sel ? theme.bg : theme.ink,
+                    fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer',
+                  }}>{s}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <Field label="Duration (min)" theme={theme}>
           <input type="number" inputMode="numeric" value={duration}
@@ -7104,6 +7136,7 @@ function ExerciseLogSheet({ theme, onClose, session, onSave }) {
   ];
   const [mode, setMode] = React.useState('manual'); // 'manual' | 'ai'
   const [type, setType] = React.useState('Run');
+  const [runSubtype, setRunSubtype] = React.useState(null);
   const [duration, setDuration] = React.useState('');
   const [distance, setDistance] = React.useState('');
   const [kcal, setKcal] = React.useState('');
@@ -7133,7 +7166,7 @@ function ExerciseLogSheet({ theme, onClose, session, onSave }) {
       distance: parseFloat(distance) || null,
       kcal: parseFloat(kcal) || null,
       notes: notes.trim() || '',
-      details: null,
+      details: type === 'Run' && runSubtype ? { runType: runSubtype } : null,
     };
     onSave(entry);
     onClose();
@@ -7162,7 +7195,11 @@ Rules:
 - If a single workout with mixed activities, return multiple entries.
 - distance_km only for Run/Cycling/Walk.
 - Estimate kcal using MET × weight(${weightKg}kg) × (duration_min/60). Run MET≈9.8, Cycling≈7.5, Walk≈3.8, Strength≈5.0, Calisthenics≈6.0, HIIT≈8.0, Mobility≈2.5.
-- details: for Strength, put {"sets":[{"name":"","reps":0,"weight_kg":0}, ...]}. For Calisthenics, put {"movements":[{"name":"","reps":0}, ...]}. Otherwise omit.
+- details:
+  - For Run, include {"runType":"Easy|Long|Speed|Steady"} when the description suggests one (e.g. "easy pace"/"recovery"→Easy, "long run"/"LSD"→Long, "intervals"/"tempo"/"sprint"/"speed"→Speed, "steady"/"moderate"→Steady). Omit runType if unclear.
+  - For Strength, {"sets":[{"name":"","reps":0,"weight_kg":0}, ...]}.
+  - For Calisthenics, {"movements":[{"name":"","reps":0}, ...]}.
+  - Otherwise omit details.
 
 Workout: ${aiText.trim()}`;
     try {
@@ -7267,6 +7304,24 @@ Workout: ${aiText.trim()}`;
                   );
                 })}
               </div>
+
+              {type === 'Run' && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {RUN_SUBTYPES.map(s => {
+                    const sel = runSubtype === s;
+                    return (
+                      <button key={s} onClick={() => setRunSubtype(sel ? null : s)} style={{
+                        padding: '6px 12px', borderRadius: 999,
+                        border: `1.5px solid ${sel ? theme.ink : theme.line}`,
+                        background: sel ? theme.ink : 'transparent',
+                        color: sel ? theme.bg : theme.ink,
+                        fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer',
+                      }}>{s}</button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <Field label="Min" theme={theme} style={{ flex: 1 }}>
