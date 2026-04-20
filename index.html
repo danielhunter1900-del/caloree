@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1685,12 +1685,16 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
     return () => document.removeEventListener('touchmove', onTouchMove);
   }, []);
 
-  return (
+  // Render via portal so `position: fixed` works regardless of the inner
+  // `overflow: auto` ancestor that App uses for the main scroll container.
+  // Without this, iOS Safari treats fixed-inside-overflow as absolute and
+  // the page behind keeps scrolling when you drag.
+  return ReactDOM.createPortal(
     <div onClick={onClose}
       style={{
         position: 'fixed', inset: 0,
         background: `rgba(0,0,0,${visible ? 0.4 : 0})`,
-        zIndex: 100, display: 'flex', alignItems: 'flex-end',
+        zIndex: 10000, display: 'flex', alignItems: 'flex-end',
         transition: 'background 0.25s ease-out',
       }}>
       <div ref={panelRef}
@@ -1772,7 +1776,8 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           );
         })}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -6639,6 +6644,177 @@ Rules:
   );
 }
 
+// ── Strava connection card ──
+// On mount: loads the user's strava_connections row via RLS.
+// Connect button: redirects to Strava OAuth. The app root watches the
+// URL for ?code=… after redirect and calls the strava-exchange edge
+// function to finish the handshake.
+const STRAVA_CLIENT_ID = '227929';
+const STRAVA_REDIRECT_URI = 'https://danielhunter1900-del.github.io/caloree/';
+const STRAVA_SCOPES = 'read,activity:read_all';
+
+function stravaAuthUrl() {
+  const u = new URL('https://www.strava.com/oauth/authorize');
+  u.searchParams.set('client_id', STRAVA_CLIENT_ID);
+  u.searchParams.set('redirect_uri', STRAVA_REDIRECT_URI);
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('approval_prompt', 'auto');
+  u.searchParams.set('scope', STRAVA_SCOPES);
+  return u.toString();
+}
+
+function StravaCard({ theme, session }) {
+  const [conn, setConn] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [lastResult, setLastResult] = React.useState(null);
+
+  const loadConn = React.useCallback(async () => {
+    try {
+      const { data } = await window.sb
+        .from('strava_connections')
+        .select('athlete_id, athlete_firstname, athlete_lastname, athlete_username, last_sync_at')
+        .maybeSingle();
+      setConn(data || null);
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  React.useEffect(() => { loadConn(); }, [loadConn]);
+
+  // Listen for the post-OAuth exchange completing elsewhere in the app,
+  // so this card re-fetches its status.
+  React.useEffect(() => {
+    const h = () => loadConn();
+    window.addEventListener('caloree:strava-connected', h);
+    return () => window.removeEventListener('caloree:strava-connected', h);
+  }, [loadConn]);
+
+  const connect = () => {
+    window.location.href = stravaAuthUrl();
+  };
+
+  const runFunction = async (slug, body = {}) => {
+    setBusy(true); setError(null);
+    try {
+      const r = await window.sb.functions.invoke(slug, { body });
+      if (r.error) throw new Error(r.error.message || 'function error');
+      return r.data;
+    } catch (e) {
+      setError(e.message || String(e));
+      return null;
+    } finally { setBusy(false); }
+  };
+
+  const sync = async (full = false) => {
+    const res = await runFunction('strava-sync', { full, weightKg: 75 });
+    if (res) {
+      setLastResult(res);
+      // The sync upserts into exercise_logs — prompt App to re-pull so the
+      // new rows appear without a full page reload.
+      window.dispatchEvent(new CustomEvent('caloree:strava-synced', { detail: res }));
+      loadConn();
+    }
+  };
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect Strava? Existing imported activities will remain in your log.')) return;
+    setBusy(true); setError(null);
+    try {
+      const { error: delErr } = await window.sb
+        .from('strava_connections').delete().neq('user_id', '00000000-0000-0000-0000-000000000000');
+      if (delErr) throw delErr;
+      setConn(null);
+      setLastResult(null);
+    } catch (e) { setError(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  const subtle = {
+    fontFamily: theme.font, fontSize: 12, color: theme.inkSoft,
+  };
+  const label = {
+    fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+    color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+  };
+
+  return (
+    <div style={{
+      margin: '0 16px 12px', padding: '18px 20px',
+      background: theme.surface, borderRadius: theme.radius.card,
+      border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={label}>Strava</div>
+        {conn && (
+          <div style={{ ...subtle, fontSize: 11 }}>
+            {conn.last_sync_at
+              ? `Synced ${new Date(conn.last_sync_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+              : 'Not synced yet'}
+          </div>
+        )}
+      </div>
+      {loading ? (
+        <div style={subtle}>Checking connection…</div>
+      ) : conn ? (
+        <React.Fragment>
+          <div style={{ fontFamily: theme.font, fontSize: 14, color: theme.ink, marginBottom: 10 }}>
+            Connected as <b>{[conn.athlete_firstname, conn.athlete_lastname].filter(Boolean).join(' ') || conn.athlete_username || conn.athlete_id}</b>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => sync(false)} disabled={busy} style={{
+              padding: '10px 14px', borderRadius: theme.radius.btn,
+              background: theme.ink, color: theme.surface, border: 'none',
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+              cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1,
+            }}>{busy ? 'Syncing…' : 'Sync now'}</button>
+            <button onClick={() => sync(true)} disabled={busy} style={{
+              padding: '10px 14px', borderRadius: theme.radius.btn,
+              background: 'transparent', color: theme.inkSoft,
+              border: `1px solid ${theme.line}`,
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+              cursor: busy ? 'default' : 'pointer',
+            }}>Re-sync last year</button>
+            <button onClick={disconnect} disabled={busy} style={{
+              padding: '10px 14px', borderRadius: theme.radius.btn,
+              background: 'transparent', color: '#B3261E',
+              border: `1px solid #F3CFCA`,
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+              cursor: busy ? 'default' : 'pointer',
+            }}>Disconnect</button>
+          </div>
+          {lastResult && (
+            <div style={{ ...subtle, marginTop: 10 }}>
+              Last sync: {lastResult.upserted} activities updated
+              {lastResult.details_fetched ? ` · ${lastResult.details_fetched} detailed pulls` : ''}
+              {lastResult.rate_limited ? ' · rate-limited, run again later to finish' : ''}
+            </div>
+          )}
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
+          <div style={{ ...subtle, marginBottom: 12 }}>
+            Import runs, rides, swims and workouts (with HR, pace, splits, laps) straight into your exercise log.
+          </div>
+          <button onClick={connect} style={{
+            padding: '12px 16px', borderRadius: theme.radius.btn,
+            background: '#FC4C02', color: '#FFFFFF', border: 'none',
+            fontFamily: theme.font, fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', letterSpacing: '0.02em',
+          }}>Connect Strava</button>
+        </React.Fragment>
+      )}
+      {error && (
+        <div style={{
+          marginTop: 10, padding: '10px 12px', borderRadius: 8,
+          background: '#FDECEA', color: '#B3261E', fontSize: 13, fontFamily: theme.font,
+        }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 function ApiKeyCard({ theme }) {
   const [value, setValue] = React.useState(() => localStorage.getItem('anthropic_api_key') || '');
   const [saved, setSaved] = React.useState(false);
@@ -6717,7 +6893,7 @@ function ApiKeyCard({ theme }) {
 const { useState: useStateProfile } = React;
 
 function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
-  weightLog, setWeightLog, settings, setSettings, log }) {
+  weightLog, setWeightLog, settings, setSettings, log, session }) {
 
   const [exportBusy, setExportBusy] = React.useState(false);
 
@@ -7025,6 +7201,9 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
 
       {/* Anthropic API key */}
       <ApiKeyCard theme={theme}/>
+
+      {/* Strava integration */}
+      <StravaCard theme={theme} session={session}/>
 
       {/* Footer actions */}
       <div style={{
@@ -8938,6 +9117,53 @@ function App({ session }) {
     })();
   }, [session]);
 
+  // Strava OAuth return handler. If the URL has ?code=... (Strava sends the
+  // user back here after consent), hand the code to the strava-exchange
+  // edge function, strip the code from the URL, and dispatch an event so
+  // the Profile card re-fetches its connection state.
+  React.useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const scope = params.get('scope');
+    if (!code) return;
+    (async () => {
+      try {
+        const r = await window.sb.functions.invoke('strava-exchange', { body: { code, scope } });
+        if (r.error) throw r.error;
+        // Clean the URL so reloads don't re-fire this.
+        const url = new URL(window.location.href);
+        ['code', 'scope', 'state'].forEach(k => url.searchParams.delete(k));
+        window.history.replaceState({}, '', url.pathname + (url.search ? url.search : '') + url.hash);
+        window.dispatchEvent(new CustomEvent('caloree:strava-connected', { detail: r.data }));
+        // Auto-kick an initial sync.
+        window.sb.functions.invoke('strava-sync', { body: { full: false, weightKg: 75 } })
+          .then(() => window.dispatchEvent(new CustomEvent('caloree:strava-synced')))
+          .catch(() => {});
+      } catch (e) {
+        console.warn('strava exchange:', e.message || e);
+      }
+    })();
+  }, [session]);
+
+  // After a Strava sync, re-pull exercise logs so new activities show up
+  // immediately without needing a full page reload.
+  React.useEffect(() => {
+    const refresh = async () => {
+      if (!session) return;
+      const r = await window.sb.from('exercise_logs').select('*').eq('user_id', session.user.id);
+      if (r.data) setExerciseLog(r.data.map(x => ({
+        id: x.id, date: x.date, type: x.type,
+        duration: x.duration_min != null ? +x.duration_min : null,
+        distance: x.distance_km != null ? +x.distance_km : null,
+        kcal: x.kcal != null ? +x.kcal : null,
+        notes: x.notes || '', details: x.details || null,
+      })));
+    };
+    window.addEventListener('caloree:strava-synced', refresh);
+    return () => window.removeEventListener('caloree:strava-synced', refresh);
+  }, [session]);
+
   // Push profile (targets/settings/theme)
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
@@ -9170,7 +9396,7 @@ function App({ session }) {
                 targets={targets} setTargets={setTargets}
                 weightLog={weightLog} setWeightLog={setWeightLog}
                 settings={settings} setSettings={setSettings}
-                log={log} />
+                log={log} session={session} />
             )}
           </div>
 
