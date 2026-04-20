@@ -1030,7 +1030,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setWellness, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise }) {
+function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setWellness, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -7766,7 +7766,8 @@ function App({ session }) {
                 exerciseLog={exerciseLog} setExerciseLog={setExerciseLog}
                 onAddMeal={openLog} onOpenFood={openDetail}
                 onOpenProfile={() => setTab('profile')}
-                onAddExercise={() => setShowExercise(true)} />
+                onAddExercise={() => setShowExercise(true)}
+                session={session} />
             )}
             {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
