@@ -1030,7 +1030,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
+function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1115,6 +1115,13 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
           }], { onConflict: 'id' });
           // Delete old log rows
           await window.sb.from('meal_logs').delete().in('id', [sourceId, targetId]);
+          // Insert the merged log row directly (don't depend on App push, which only handles today)
+          await window.sb.from('meal_logs').insert([{
+            id: newEntry.id, user_id: uid,
+            date: newEntry.date || new Date().toISOString().slice(0, 10),
+            meal: newEntry.meal, food_id: newEntry.foodId,
+            qty: newEntry.qty || 1, time: newEntry.time || null,
+          }]);
         } catch (err) { console.warn('merge sync:', err.message); }
       }
       window.dispatchEvent(new Event('caloree:foodschanged'));
@@ -1183,6 +1190,8 @@ function HomeScreen({ theme, log, setLog, targets, settings = {}, wellness, setW
   const todayIso = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = React.useState(todayIso);
   const dayLog = log.filter(e => (e.date || todayIso) === selectedDate);
+  // Resolve targets that were active on the selected date
+  const targets = targetsForDate ? targetsForDate(selectedDate) : baseTargets;
   const totals = sumMacros(dayLog);
   const dayExBurn = (exerciseLog || [])
     .filter(e => (e.date || todayIso) === selectedDate)
@@ -7533,10 +7542,35 @@ function App({ session }) {
   const [logScreenMeal, setLogScreenMeal] = useStateApp(null);
   const [detailFood, setDetailFood] = useStateApp(null);
 
-  const [targets, setTargets] = useStateApp(() => {
+  const [targets, setTargetsRaw] = useStateApp(() => {
     try { return JSON.parse(localStorage.getItem('cal_targets')) || DEFAULT_TARGETS; }
     catch { return DEFAULT_TARGETS; }
   });
+  const [targetHistory, setTargetHistory] = useStateApp(() => {
+    try { return JSON.parse(localStorage.getItem('cal_target_history')) || []; }
+    catch { return []; }
+  });
+  // Wrap setTargets so any change snapshots the new targets into history with today's from_date
+  const setTargets = (next) => {
+    setTargetsRaw(next);
+    const today = new Date().toISOString().slice(0, 10);
+    setTargetHistory(prev => {
+      // If today already has an entry, replace it; else append
+      const filtered = (prev || []).filter(h => h.from_date !== today);
+      return [...filtered, { from_date: today, targets: next }];
+    });
+  };
+  // Helper: targets that were active on `date`
+  const targetsForDate = (date) => {
+    const sorted = [...(targetHistory || [])]
+      .filter(h => h.from_date && h.targets)
+      .sort((a, b) => a.from_date.localeCompare(b.from_date));
+    let best = null;
+    for (const h of sorted) {
+      if (h.from_date <= date) best = h.targets;
+    }
+    return best || targets;
+  };
   const [weightLog, setWeightLog] = useStateApp(() => {
     try { return JSON.parse(localStorage.getItem('cal_weight')) || DEFAULT_WEIGHT; }
     catch { return DEFAULT_WEIGHT; }
@@ -7628,9 +7662,10 @@ function App({ session }) {
         })));
       }
       if (profileR.data) {
-        if (profileR.data.targets) setTargets(profileR.data.targets);
+        if (profileR.data.targets) setTargetsRaw(profileR.data.targets);
         if (profileR.data.settings) setSettings(profileR.data.settings);
         if (profileR.data.theme) setThemeKey(profileR.data.theme);
+        if (Array.isArray(profileR.data.target_history)) setTargetHistory(profileR.data.target_history);
       }
       if (weightR.data && weightR.data.length) {
         setWeightLog(weightR.data.map(w => ({ iso: w.iso, kg: +w.kg })));
@@ -7710,9 +7745,10 @@ function App({ session }) {
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
     window.sb.from('profiles').upsert({
-      user_id: session.user.id, targets, settings, theme: themeKey, updated_at: new Date().toISOString(),
+      user_id: session.user.id, targets, settings, theme: themeKey,
+      target_history: targetHistory, updated_at: new Date().toISOString(),
     }).then(r => r.error && console.warn('profile sync:', r.error.message));
-  }, [targets, settings, themeKey, session]);
+  }, [targets, settings, themeKey, targetHistory, session]);
 
   // Push weight
   React.useEffect(() => {
@@ -7791,6 +7827,7 @@ function App({ session }) {
   React.useEffect(() => { localStorage.setItem('cal_theme', themeKey); }, [themeKey]);
   React.useEffect(() => { localStorage.setItem('cal_tab', tab); }, [tab]);
   React.useEffect(() => { localStorage.setItem('cal_targets', JSON.stringify(targets)); window.TARGETS = targets; }, [targets]);
+  React.useEffect(() => { localStorage.setItem('cal_target_history', JSON.stringify(targetHistory)); }, [targetHistory]);
   React.useEffect(() => { localStorage.setItem('cal_weight', JSON.stringify(weightLog)); }, [weightLog]);
   React.useEffect(() => { localStorage.setItem('cal_settings', JSON.stringify(settings)); }, [settings]);
   React.useEffect(() => { localStorage.setItem('cal_exercise', JSON.stringify(exerciseLog)); }, [exerciseLog]);
@@ -7888,6 +7925,7 @@ function App({ session }) {
             {tab === 'home' && (
               <HomeScreen theme={theme} log={log} setLog={setLog}
                 targets={targets} settings={settings}
+                targetsForDate={targetsForDate}
                 wellness={wellness} setWellness={setWellness}
                 wellnessMap={wellnessMap}
                 exerciseLog={exerciseLog} setExerciseLog={setExerciseLog}
