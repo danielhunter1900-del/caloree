@@ -1491,7 +1491,13 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
           }}
           onAdd={() => onAddMeal(m)}
           onOpen={onOpenFood}
-          onMoveEntry={(id, newMeal) => setLog(log.map(e => e.id === id ? { ...e, meal: newMeal } : e))}
+          onMoveEntry={(id, newMeal) => {
+            setLog(log.map(e => e.id === id ? { ...e, meal: newMeal } : e));
+            if (window.sb && session) {
+              window.sb.from('meal_logs').update({ meal: newMeal }).eq('id', id)
+                .then(r => r.error && console.warn('meal move sync:', r.error.message));
+            }
+          }}
           onToggleFav={toggleFavourite}
           onCopyToDate={(id, date) => {
             const e = log.find(x => x.id === id);

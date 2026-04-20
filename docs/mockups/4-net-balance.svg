@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="400" height="280" rx="14" fill="#FFFFFF"/>
+  <text x="20" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">NET CALORIES · APR 12 — APR 18</text>
+  <text x="20" y="44" font-size="10" fill="#9A9A95">Intake − Burn. Above 0 = surplus, below 0 = deficit.</text>
+  <!-- Zero line -->
+  <line x1="20" y1="150" x2="380" y2="150" stroke="#0A0A0A" stroke-width="1.2"/>
+  <text x="376" y="146" font-size="9" font-weight="700" fill="#5C5C58" text-anchor="end">0 KCAL</text>
+  <!-- Bars: positive=red, negative=green -->
+  <g transform="translate(40 0)">
+    <!-- Day 1: -150 (deficit) -->
+    <rect x="0" y="150" width="22" height="35" rx="3" fill="#5C9A6E"/>
+    <text x="11" y="195" font-size="9" fill="#5C5C58" text-anchor="middle">−150</text>
+    <!-- Day 2: +200 (surplus) -->
+    <rect x="50" y="105" width="22" height="45" rx="3" fill="#D96B5C"/>
+    <text x="61" y="100" font-size="9" fill="#5C5C58" text-anchor="middle">+200</text>
+    <!-- Day 3: -300 -->
+    <rect x="100" y="150" width="22" height="70" rx="3" fill="#5C9A6E"/>
+    <text x="111" y="230" font-size="9" fill="#5C5C58" text-anchor="middle">−300</text>
+    <!-- Day 4: -50 -->
+    <rect x="150" y="150" width="22" height="12" rx="3" fill="#5C9A6E"/>
+    <text x="161" y="172" font-size="9" fill="#5C5C58" text-anchor="middle">−50</text>
+    <!-- Day 5: +400 -->
+    <rect x="200" y="60" width="22" height="90" rx="3" fill="#D96B5C"/>
+    <text x="211" y="55" font-size="9" fill="#5C5C58" text-anchor="middle">+400</text>
+    <!-- Day 6: -180 -->
+    <rect x="250" y="150" width="22" height="42" rx="3" fill="#5C9A6E"/>
+    <text x="261" y="202" font-size="9" fill="#5C5C58" text-anchor="middle">−180</text>
+    <!-- Day 7: -250 -->
+    <rect x="300" y="150" width="22" height="58" rx="3" fill="#5C9A6E"/>
+    <text x="311" y="218" font-size="9" fill="#5C5C58" text-anchor="middle">−250</text>
+    <g font-size="10" fill="#9A9A95" font-weight="500">
+      <text x="11" y="250" text-anchor="middle">M</text>
+      <text x="61" y="250" text-anchor="middle">T</text>
+      <text x="111" y="250" text-anchor="middle">W</text>
+      <text x="161" y="250" text-anchor="middle">T</text>
+      <text x="211" y="250" text-anchor="middle">F</text>
+      <text x="261" y="250" text-anchor="middle">S</text>
+      <text x="311" y="250" text-anchor="middle">S</text>
+    </g>
+  </g>
+  <text x="20" y="270" font-size="10" fill="#9A9A95">Combines food + exercise into one weight-relevant number.</text>
+</svg>

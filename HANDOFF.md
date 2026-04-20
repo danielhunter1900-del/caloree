@@ -215,13 +215,15 @@ All Claude API calls use `claude-sonnet-4-6` with `anthropic-dangerous-direct-br
 - Multiple drafts in Bulk Notes
 - AI trend analysis: only target-set proposals are wired today; Claude could also propose adding favourites, adjusting exercise entries, etc
 
-**Mockups for future Trends exercise chart redesigns** (PNG previews stored at `/tmp/chartmocks/` last session):
-1. Filter chips above stacked bars
-2. Side-by-side grouped bars per type
-3. Heatmap (types × days)
-4. Net calorie balance bar (intake − burn, red surplus / green deficit)
-5. Stacked total + per-type sparklines below
-6. Per-day donuts
+**Mockups for future Trends exercise chart redesigns** — committed to `docs/mockups/`:
+1. `1-filter-chips.{svg,png}` — Filter chips above current stacked bars
+2. `2-grouped-bars.{svg,png}` — Side-by-side thin bars per type per day
+3. `3-heatmap.{svg,png}` — Types × days grid, intensity by colour
+4. `4-net-balance.{svg,png}` — Single bar: intake − burn (red surplus / green deficit)
+5. `5-total-plus-sparklines.{svg,png}` — Stacked total + per-type sparklines below
+6. `6-donuts.{svg,png}` — Per-day donut, type slices, total in centre
+
+User is choosing between these. None have been built. To preview them: `open calorie-app/docs/mockups/*.png` or browse on GitHub.
 
 ---
 

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="400" height="280" rx="14" fill="#FFFFFF"/>
+  <text x="20" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">CALORIES BURNED · APR 12 — APR 18</text>
+  <!-- Legend -->
+  <g transform="translate(20 38)" font-size="9" font-weight="600">
+    <rect x="0" y="0" width="9" height="9" rx="2" fill="#5FA8C9"/><text x="14" y="9" fill="#5C5C58">Run</text>
+    <rect x="48" y="0" width="9" height="9" rx="2" fill="#D96B5C"/><text x="62" y="9" fill="#5C5C58">Strength</text>
+    <rect x="120" y="0" width="9" height="9" rx="2" fill="#E0A24A"/><text x="134" y="9" fill="#5C5C58">Calisthenics</text>
+    <rect x="208" y="0" width="9" height="9" rx="2" fill="#7A8BD1"/><text x="222" y="9" fill="#5C5C58">Cycling</text>
+  </g>
+  <line x1="20" y1="120" x2="380" y2="120" stroke="#9A9A95" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
+  <text x="376" y="115" font-size="9" font-weight="600" fill="#5C5C58" text-anchor="end">GOAL 400</text>
+  <!-- 7 days, each with up to 4 thin bars side by side -->
+  <g transform="translate(30 80)">
+    <g transform="translate(0,0)">
+      <rect x="0" y="40" width="6" height="100" rx="2" fill="#5FA8C9"/>
+      <rect x="8" y="80" width="6" height="60"  rx="2" fill="#D96B5C"/>
+      <rect x="16" y="120" width="6" height="20" rx="2" fill="#E0A24A"/>
+    </g>
+    <g transform="translate(50,0)">
+      <rect x="8" y="60" width="6" height="80"  rx="2" fill="#D96B5C"/>
+      <rect x="16" y="110" width="6" height="30" rx="2" fill="#E0A24A"/>
+    </g>
+    <g transform="translate(100,0)">
+      <rect x="0" y="20" width="6" height="120" rx="2" fill="#5FA8C9"/>
+      <rect x="24" y="100" width="6" height="40" rx="2" fill="#7A8BD1"/>
+    </g>
+    <g transform="translate(150,0)">
+      <rect x="8" y="100" width="6" height="40" rx="2" fill="#D96B5C"/>
+    </g>
+    <g transform="translate(200,0)">
+      <rect x="0" y="40" width="6" height="100" rx="2" fill="#5FA8C9"/>
+      <rect x="8" y="40" width="6" height="100" rx="2" fill="#D96B5C"/>
+      <rect x="16" y="90" width="6" height="50" rx="2" fill="#E0A24A"/>
+    </g>
+    <g transform="translate(250,0)">
+      <rect x="0" y="30" width="6" height="110" rx="2" fill="#5FA8C9"/>
+      <rect x="8" y="80" width="6" height="60"  rx="2" fill="#D96B5C"/>
+    </g>
+    <g transform="translate(300,0)">
+      <rect x="0" y="0"  width="6" height="140" rx="2" fill="#5FA8C9"/>
+      <rect x="24" y="60" width="6" height="80" rx="2" fill="#7A8BD1"/>
+    </g>
+    <g font-size="10" fill="#9A9A95" font-weight="500">
+      <text x="11" y="160" text-anchor="middle">M</text>
+      <text x="61" y="160" text-anchor="middle">T</text>
+      <text x="111" y="160" text-anchor="middle">W</text>
+      <text x="161" y="160" text-anchor="middle">T</text>
+      <text x="211" y="160" text-anchor="middle">F</text>
+      <text x="261" y="160" text-anchor="middle">S</text>
+      <text x="311" y="160" text-anchor="middle">S</text>
+    </g>
+  </g>
+  <text x="20" y="265" font-size="10" fill="#9A9A95">Per-type bars side-by-side. Compare types easily; can get crowded.</text>
+</svg>
