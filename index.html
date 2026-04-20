@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1708,7 +1708,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
           overscrollBehavior: 'contain',
           touchAction: 'pan-y',
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.52s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           willChange: 'transform',
         }}>
         <div style={{
@@ -1742,9 +1742,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
             <div key={r.entry.id} onClick={() => { onClose(); onOpenFood && onOpenFood(r.food.id); }}
               style={{
                 padding: '10px 0', borderBottom: `1px solid ${theme.line}`, cursor: 'pointer',
-                opacity: visible ? 1 : 0,
-                transform: visible ? 'translateY(0)' : 'translateY(14px)',
-                transition: `opacity 0.32s ease-out ${0.08 + i * 0.045}s, transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.08 + i * 0.045}s`,
+                opacity: 1,
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <div style={{
@@ -1763,8 +1761,7 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
                   background: theme.ring.track, overflow: 'hidden',
                 }}>
                   <div style={{
-                    width: visible ? `${pct}%` : '0%', height: '100%', background: drill.color,
-                    transition: `width 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.2 + i * 0.045}s`,
+                    width: `${pct}%`, height: '100%', background: drill.color,
                   }}/>
                 </div>
                 <div style={{
@@ -2152,6 +2149,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate,
   customTypes.forEach(c => { if (c && c.name) ICONS[c.name] = c.icon || '⚡'; });
   const TYPES = Object.keys(ICONS);
   const [editingFull, setEditingFull] = React.useState(null); // the entry being edited
+  const [detailEntry, setDetailEntry] = React.useState(null); // read-only detail view
   const [open, setOpen] = React.useState(true);
   const totalKcal = entries.reduce((s, e) => s + (+e.kcal || 0), 0);
   const totalMin = entries.reduce((s, e) => s + (+e.duration || 0), 0);
@@ -2211,12 +2209,12 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate,
         }}>
           <span style={{ fontSize: 20 }}>{ICONS[e.type] || '⚡'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div onClick={() => setEditingFull(e)}
+            <div onClick={() => setDetailEntry(e)}
               style={{
                 fontFamily: theme.font, fontSize: 14, fontWeight: 500, color: theme.ink,
                 cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>{e.type}{e.type === 'Run' && e.details?.runType ? ` · ${e.details.runType}` : ''}{e.distance ? ` · ${e.distance} km` : ''}
-              <span style={{ color: theme.inkMute, fontSize: 10 }}>✎</span>
+              }}>{e.type}{e.type === 'Run' && e.details?.runType ? ` · ${e.details.runType}` : ''}{e.distance ? ` · ${(+e.distance).toFixed(2)} km` : ''}
+              <span style={{ color: theme.inkMute, fontSize: 10 }}>›</span>
             </div>
             {(e.notes || e.duration) && (
               <div style={{
@@ -2239,13 +2237,321 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate,
           customTypes={customTypes}
           onAddCustomType={onAddCustomType}
           onClose={() => setEditingFull(null)}
-          onSave={(updated) => { onUpdate && onUpdate(updated); setEditingFull(null); }}/>
+          onSave={(updated) => { onUpdate && onUpdate(updated); setEditingFull(null); setDetailEntry(updated); }}/>
+      )}
+      {detailEntry && !editingFull && (
+        <ExerciseDetailSheet theme={theme} entry={detailEntry}
+          onClose={() => setDetailEntry(null)}
+          onEdit={() => setEditingFull(detailEntry)}
+          onDelete={(id) => { setDetailEntry(null); onDelete(id); }}/>
       )}
     </div>
   );
 }
 
 const RUN_SUBTYPES = ['Easy', 'Long', 'Speed', 'Steady'];
+
+// Read-only detail view for an exercise entry. Shows rich data
+// (HR, pace, splits, laps, best efforts, power, cadence, elevation)
+// for Strava-sourced activities; falls back to basic fields for
+// manually logged ones.
+function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
+  const [visible, setVisible] = React.useState(false);
+  React.useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
+
+  // Lock body scroll + swallow backdrop touchmoves (iOS scroll-trap fix).
+  const panelRef = React.useRef(null);
+  React.useEffect(() => {
+    const onTouchMove = (e) => {
+      const panel = panelRef.current;
+      if (panel && panel.contains(e.target)) {
+        if (panel.scrollHeight > panel.clientHeight + 1) return;
+      }
+      if (e.cancelable) e.preventDefault();
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => document.removeEventListener('touchmove', onTouchMove);
+  }, []);
+
+  const d = entry.details || {};
+  const ICONS = (window.EX_ICONS || {});
+  const icon = ICONS[entry.type] || '⚡';
+  const isStrava = d.source === 'strava';
+
+  const fmt2 = (n) => (n == null ? null : (+n).toFixed(2));
+  const fmtInt = (n) => (n == null ? null : Math.round(+n));
+  const fmtDuration = (min) => {
+    if (!min) return null;
+    const h = Math.floor(min / 60); const m = Math.round(min % 60);
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  };
+  const fmtPace = (s) => {
+    if (!s) return null;
+    const m = Math.floor(s / 60); const r = Math.round(s % 60);
+    return `${m}:${String(r).padStart(2, '0')}/km`;
+  };
+
+  // Big stats row
+  const hero = [
+    entry.duration ? { label: 'Duration', value: fmtDuration(+entry.duration) } : null,
+    entry.distance ? { label: 'Distance', value: `${fmt2(entry.distance)} km` } : null,
+    entry.kcal    ? { label: 'Calories', value: `${fmtInt(entry.kcal)}` } : null,
+  ].filter(Boolean);
+
+  // Secondary stats grid
+  const secondary = [
+    d.pace_sec_per_km    ? { k: 'Pace',         v: fmtPace(d.pace_sec_per_km) } : null,
+    d.average_heartrate  ? { k: 'Avg HR',       v: `${fmtInt(d.average_heartrate)} bpm` } : null,
+    d.max_heartrate      ? { k: 'Max HR',       v: `${fmtInt(d.max_heartrate)} bpm` } : null,
+    d.average_cadence    ? { k: 'Cadence',      v: `${fmtInt(d.average_cadence)}` } : null,
+    d.average_watts      ? { k: 'Avg power',    v: `${fmtInt(d.average_watts)} W` } : null,
+    d.max_watts          ? { k: 'Max power',    v: `${fmtInt(d.max_watts)} W` } : null,
+    d.elevation_gain_m   ? { k: 'Elev gain',    v: `${fmtInt(d.elevation_gain_m)} m` } : null,
+    d.suffer_score       ? { k: 'Effort',       v: `${fmtInt(d.suffer_score)}` } : null,
+    d.average_speed_mps && !d.pace_sec_per_km
+      ? { k: 'Avg speed',   v: `${(d.average_speed_mps * 3.6).toFixed(1)} km/h` } : null,
+  ].filter(Boolean);
+
+  const dateLabel = d.start_date_local
+    ? new Date(d.start_date_local).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : (entry.date || '');
+
+  const labelStyle = {
+    fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+    color: theme.inkSoft, letterSpacing: '0.08em', textTransform: 'uppercase',
+  };
+
+  return ReactDOM.createPortal(
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0,
+      background: `rgba(0,0,0,${visible ? 0.5 : 0})`,
+      zIndex: 10002, display: 'flex', alignItems: 'flex-end',
+      transition: 'background 0.25s ease-out',
+    }}>
+      <div ref={panelRef}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', background: theme.bg,
+          borderTopLeftRadius: 20, borderTopRightRadius: 20,
+          height: '92vh', overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+          transform: visible ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+          display: 'flex', flexDirection: 'column',
+        }}>
+        {/* Header */}
+        <div style={{ padding: '14px 18px 8px', borderBottom: `1px solid ${theme.line}` }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 12px' }}/>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 28 }}>{icon}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: theme.titleFont, fontSize: 18, fontWeight: theme.titleWeight,
+                  color: theme.ink, letterSpacing: theme.letter,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>{d.name || entry.type}</div>
+                <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2 }}>
+                  {entry.type}{d.runType ? ` · ${d.runType}` : ''}{isStrava ? ' · Strava' : ''}{dateLabel ? ` · ${dateLabel}` : ''}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background: 'none', border: 'none', color: theme.inkSoft, cursor: 'pointer',
+              fontSize: 22, padding: 4, lineHeight: 1, flexShrink: 0,
+            }}>×</button>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{ flex: 1, padding: '18px 18px 100px' }}>
+          {/* Hero stats */}
+          {hero.length > 0 && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: `repeat(${hero.length}, 1fr)`, gap: 12,
+              padding: '14px 16px', background: theme.surface,
+              borderRadius: theme.radius.card, marginBottom: 14,
+              border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+            }}>
+              {hero.map(h => (
+                <div key={h.label}>
+                  <div style={labelStyle}>{h.label}</div>
+                  <div style={{
+                    fontFamily: theme.numFont, fontSize: 22, fontWeight: theme.numWeight,
+                    color: theme.ink, letterSpacing: theme.letter, marginTop: 4,
+                  }}>{h.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Secondary stats */}
+          {secondary.length > 0 && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 14,
+            }}>
+              {secondary.map(s => (
+                <div key={s.k} style={{
+                  padding: '10px 12px', background: theme.surface,
+                  borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`,
+                }}>
+                  <div style={labelStyle}>{s.k}</div>
+                  <div style={{
+                    fontFamily: theme.numFont, fontSize: 15, fontWeight: theme.numWeight,
+                    color: theme.ink, letterSpacing: theme.letter, marginTop: 2,
+                  }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Notes */}
+          {entry.notes && (
+            <div style={{
+              marginBottom: 14, padding: '12px 14px',
+              background: theme.surface, borderRadius: theme.radius.btn,
+              border: `1px solid ${theme.line}`,
+            }}>
+              <div style={{ ...labelStyle, marginBottom: 4 }}>Notes</div>
+              <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.ink, lineHeight: 1.45 }}>
+                {entry.notes}
+              </div>
+            </div>
+          )}
+
+          {/* Splits */}
+          {Array.isArray(d.splits_km) && d.splits_km.length > 0 && (() => {
+            const paces = d.splits_km.map(s => s.pace_sec_per_km || 0).filter(p => p > 0);
+            const best = paces.length ? Math.min(...paces) : 0;
+            const worst = paces.length ? Math.max(...paces) : 1;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>Splits</div>
+                <div style={{
+                  background: theme.surface, borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`, overflow: 'hidden',
+                }}>
+                  {d.splits_km.map((s, i) => {
+                    const p = s.pace_sec_per_km || 0;
+                    const frac = worst > best && p ? (worst - p) / (worst - best) : 0;
+                    return (
+                      <div key={i} style={{
+                        position: 'relative',
+                        display: 'grid', gridTemplateColumns: '32px 1fr 80px 60px', gap: 10,
+                        padding: '8px 14px',
+                        borderTop: i > 0 ? `1px solid ${theme.line}` : 'none',
+                        alignItems: 'center',
+                      }}>
+                        <div style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: `${Math.round(frac * 100)}%`, background: theme.accent, opacity: 0.08,
+                        }}/>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, fontWeight: 600,
+                        }}>{s.km}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 13, color: theme.ink, fontWeight: theme.numWeight,
+                        }}>{fmtPace(p) || '—'}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                        }}>{s.avg_hr ? `${Math.round(s.avg_hr)} bpm` : ''}</div>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                        }}>{s.elev_diff != null ? `${s.elev_diff > 0 ? '+' : ''}${Math.round(s.elev_diff)}m` : ''}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Laps */}
+          {Array.isArray(d.laps) && d.laps.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>Laps</div>
+              <div style={{
+                background: theme.surface, borderRadius: theme.radius.btn,
+                border: `1px solid ${theme.line}`, overflow: 'hidden',
+              }}>
+                {d.laps.map((l, i) => (
+                  <div key={i} style={{
+                    display: 'grid', gridTemplateColumns: '1fr 70px 70px 60px', gap: 10,
+                    padding: '8px 14px',
+                    borderTop: i > 0 ? `1px solid ${theme.line}` : 'none',
+                    alignItems: 'center',
+                  }}>
+                    <div style={{
+                      fontFamily: theme.font, fontSize: 12, color: theme.ink, fontWeight: 500,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>{l.name || `Lap ${i + 1}`}</div>
+                    <div style={{
+                      fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                    }}>{l.moving_time ? fmtDuration(Math.round(l.moving_time / 60)) : ''}</div>
+                    <div style={{
+                      fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                    }}>{l.distance_m ? `${(l.distance_m / 1000).toFixed(2)} km` : ''}</div>
+                    <div style={{
+                      fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft, textAlign: 'right',
+                    }}>{l.avg_hr ? `${Math.round(l.avg_hr)} bpm` : ''}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Best efforts */}
+          {Array.isArray(d.best_efforts) && d.best_efforts.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>Best efforts</div>
+              <div style={{
+                background: theme.surface, borderRadius: theme.radius.btn,
+                border: `1px solid ${theme.line}`, overflow: 'hidden',
+              }}>
+                {d.best_efforts.map((b, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    padding: '8px 14px',
+                    borderTop: i > 0 ? `1px solid ${theme.line}` : 'none',
+                  }}>
+                    <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.ink }}>
+                      {b.name}{b.pr_rank ? ` · PR ${b.pr_rank}` : ''}
+                    </div>
+                    <div style={{ fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft }}>
+                      {b.moving_time ? fmtDuration(Math.round(b.moving_time / 60)) : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div style={{
+          position: 'sticky', bottom: 0, left: 0, right: 0,
+          padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 14px)',
+          background: theme.bg, borderTop: `1px solid ${theme.line}`,
+          display: 'flex', gap: 8,
+        }}>
+          <button onClick={() => onDelete(entry.id)} style={{
+            padding: '12px 18px', borderRadius: theme.radius.btn,
+            background: 'transparent', color: '#B3261E',
+            border: `1px solid #F3CFCA`,
+            fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Delete</button>
+          <button onClick={onEdit} style={{
+            flex: 1, padding: '12px 0', border: 'none',
+            background: theme.accent, color: theme.accentInk,
+            borderRadius: theme.radius.btn, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>Edit</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], onAddCustomType }) {
   const ICONS = { ...(window.EX_ICONS || {}) };
@@ -2254,7 +2560,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], on
   const [type, setType] = React.useState(entry.type);
   const [showNewType, setShowNewType] = React.useState(false);
   const [duration, setDuration] = React.useState(entry.duration != null ? String(entry.duration) : '');
-  const [distance, setDistance] = React.useState(entry.distance != null ? String(entry.distance) : '');
+  const [distance, setDistance] = React.useState(entry.distance != null ? (+entry.distance).toFixed(2) : '');
   const [kcal, setKcal] = React.useState(entry.kcal != null ? String(entry.kcal) : '');
   const [notes, setNotes] = React.useState(entry.notes || '');
   const [runSubtype, setRunSubtype] = React.useState((entry.details && entry.details.runType) || null);
@@ -6872,7 +7178,7 @@ function StravaReviewSheet({ theme, onClose }) {
         date: (d.start_date_local || d.start_date || new Date().toISOString()).slice(0, 10),
         type: d.mapped_type || row.type || 'Other',
         duration_min: d.duration_min || null,
-        distance_km: d.distance_km || null,
+        distance_km: d.distance_km != null ? +(+d.distance_km).toFixed(2) : null,
         kcal: d.kcal ?? null,
         notes: [d.name, d.description].filter(Boolean).join(' — ') || null,
         details: d,
