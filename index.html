@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7668,6 +7668,165 @@ function StravaReviewSheet({ theme, onClose }) {
 }
 
 // Ask Claude to suggest goal numbers based on the user's own data.
+// Inline-editable card showing the details captured during onboarding:
+// sex, age, height, activity level, goal. The user's display name lives
+// in the main header; weight lives in its own card on Trends.
+function ProfileDetailsCard({ theme, settings, setSettings, weightLog = [] }) {
+  const profile = settings?.profile || {};
+  const [editing, setEditing] = React.useState(null); // field key being edited
+
+  const ACTIVITY_LABELS = {
+    sedentary:   'Sedentary',
+    light:       'Light',
+    moderate:    'Moderate',
+    active:      'Active',
+    very_active: 'Very active',
+  };
+  const GOAL_LABELS = { cut: 'Lose', maintain: 'Maintain', gain: 'Gain' };
+
+  const patch = (k, v) => {
+    setSettings({
+      ...(settings || {}),
+      profile: { ...(profile || {}), [k]: v },
+    });
+  };
+
+  const latestWeight = weightLog.length ? +weightLog[weightLog.length - 1].kg : null;
+  const rows = [
+    {
+      k: 'sex', label: 'Sex',
+      display: profile.sex ? profile.sex[0].toUpperCase() + profile.sex.slice(1) : '—',
+      editor: (
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['male', 'female'].map(s => (
+            <button key={s} onClick={() => { patch('sex', s); setEditing(null); }} style={{
+              flex: 1, padding: '8px 0', borderRadius: theme.radius.btn,
+              border: `1px solid ${profile.sex === s ? theme.ink : theme.line}`,
+              background: profile.sex === s ? theme.ink : 'transparent',
+              color: profile.sex === s ? theme.bg : theme.inkSoft,
+              fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', textTransform: 'capitalize',
+            }}>{s}</button>
+          ))}
+        </div>
+      ),
+    },
+    {
+      k: 'age', label: 'Age',
+      display: profile.age ? `${profile.age}` : '—',
+      editor: (
+        <input type="number" inputMode="numeric"
+          defaultValue={profile.age || ''}
+          autoFocus
+          onBlur={(e) => { const v = +e.target.value; if (v > 0 && v < 120) patch('age', v); setEditing(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          style={fieldStyle(theme)}/>
+      ),
+    },
+    {
+      k: 'heightCm', label: 'Height',
+      display: profile.heightCm ? `${profile.heightCm} cm` : '—',
+      editor: (
+        <input type="number" inputMode="numeric"
+          defaultValue={profile.heightCm || ''}
+          autoFocus
+          onBlur={(e) => { const v = +e.target.value; if (v > 80 && v < 260) patch('heightCm', v); setEditing(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          style={fieldStyle(theme)}/>
+      ),
+    },
+    {
+      k: 'activity', label: 'Activity',
+      display: profile.activity ? ACTIVITY_LABELS[profile.activity] : '—',
+      editor: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {Object.entries(ACTIVITY_LABELS).map(([k, l]) => (
+            <button key={k} onClick={() => { patch('activity', k); setEditing(null); }} style={{
+              padding: '8px 10px', textAlign: 'left',
+              borderRadius: theme.radius.btn,
+              border: `1px solid ${profile.activity === k ? theme.ink : theme.line}`,
+              background: profile.activity === k ? theme.surfaceAlt : 'transparent',
+              fontFamily: theme.font, fontSize: 12,
+              fontWeight: profile.activity === k ? 700 : 500,
+              color: theme.ink, cursor: 'pointer',
+            }}>{l}</button>
+          ))}
+        </div>
+      ),
+    },
+    {
+      k: 'goal', label: 'Goal',
+      display: profile.goal ? GOAL_LABELS[profile.goal] : '—',
+      editor: (
+        <div style={{ display: 'flex', gap: 6 }}>
+          {Object.entries(GOAL_LABELS).map(([k, l]) => (
+            <button key={k} onClick={() => { patch('goal', k); setEditing(null); }} style={{
+              flex: 1, padding: '8px 0', borderRadius: theme.radius.btn,
+              border: `1px solid ${profile.goal === k ? theme.ink : theme.line}`,
+              background: profile.goal === k ? theme.ink : 'transparent',
+              color: profile.goal === k ? theme.bg : theme.inkSoft,
+              fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+            }}>{l}</button>
+          ))}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{
+      margin: '0 16px 12px', padding: '14px 18px',
+      background: theme.surface, borderRadius: theme.radius.card,
+      border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        marginBottom: 10,
+      }}>
+        <div style={{
+          fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+          color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>Your details</div>
+        {latestWeight != null && (
+          <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute }}>
+            Weight: <span style={{ color: theme.ink, fontWeight: 600 }}>{latestWeight.toFixed(1)} kg</span> · edit on Trends
+          </div>
+        )}
+      </div>
+      {rows.map(row => (
+        <div key={row.k} style={{
+          padding: '10px 0',
+          borderTop: `0.5px solid ${theme.line}`,
+        }}>
+          <div onClick={() => setEditing(editing === row.k ? null : row.k)} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            cursor: 'pointer',
+          }}>
+            <span style={{ fontFamily: theme.font, fontSize: 13, color: theme.inkSoft }}>
+              {row.label}
+            </span>
+            <span style={{
+              fontFamily: theme.font, fontSize: 14, fontWeight: 500, color: theme.ink,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+              {row.display}
+              <span style={{ color: theme.inkMute, fontSize: 10 }}>
+                {editing === row.k ? '▾' : '›'}
+              </span>
+            </span>
+          </div>
+          {editing === row.k && (
+            <div style={{ marginTop: 8 }}>
+              {row.editor}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AskClaudeGoalsButton({ theme, targets, log, weightLog, exerciseLog = [], wellnessMap = {}, onSuggest }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -8313,6 +8472,10 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
           )}
         </div>
       </div>
+
+      {/* Your details — populated by onboarding, editable here */}
+      <ProfileDetailsCard theme={theme} settings={settings} setSettings={setSettings}
+        weightLog={weightLog} />
 
       {/* Goals card */}
       <div style={{
