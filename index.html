@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7578,14 +7578,15 @@ function StravaReviewSheet({ theme, onClose }) {
 function AskClaudeGoalsButton({ theme, targets, log, weightLog, onSuggest }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
-  const [rationale, setRationale] = React.useState(null);
+  const [preview, setPreview] = React.useState(null); // { fields, why }
+  const [showFactors, setShowFactors] = React.useState(false);
 
   const run = async () => {
     const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
     if (!key) { setError('Set your Anthropic API key below first.'); return; }
-    setBusy(true); setError(null); setRationale(null);
+    setBusy(true); setError(null); setPreview(null);
     try {
-      // Build a compact 14-day snapshot from HISTORY so Claude has real numbers.
+      // 14-day snapshot from HISTORY so Claude has real numbers.
       const last14 = (window.HISTORY || []).slice(-14).map(d => ({
         date: d.iso, kcal: d.kcal, c: d.c, p: d.p, f: d.f,
         satFat: d.satFat, sugar: d.sugar, fibre: d.fibre,
@@ -7595,10 +7596,10 @@ function AskClaudeGoalsButton({ theme, targets, log, weightLog, onSuggest }) {
 Last 14 days of logged food: ${JSON.stringify(last14)}
 Recent weights: ${JSON.stringify(weights)}
 
-Suggest updated daily targets for this user based on what they're actually eating and their weight trend. Preserve fields they don't clearly need to change. Round kcal to the nearest 50, macros to the nearest 5.
+Suggest updated daily targets based on what they're actually eating and their weight trend. Preserve fields they don't clearly need to change. Round kcal to the nearest 50, macros to the nearest 5.
 
 Return ONLY JSON (no prose, no fences):
-{"kcal": N, "c": N, "p": N, "f": N, "satFat": N, "sugar": N, "fibre": N, "exKcal": N, "exMin": N, "why": "one short sentence"}`;
+{"kcal": N, "c": N, "p": N, "f": N, "satFat": N, "sugar": N, "fibre": N, "exKcal": N, "exMin": N, "why": "one short sentence explaining the key reason for the change"}`;
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -7608,8 +7609,7 @@ Return ONLY JSON (no prose, no fences):
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 500,
+          model: 'claude-sonnet-4-6', max_tokens: 500,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -7621,11 +7621,71 @@ Return ONLY JSON (no prose, no fences):
       if (!m) throw new Error("Couldn't parse response");
       const parsed = JSON.parse(m[0]);
       const { why, ...fields } = parsed;
-      onSuggest(fields);
-      setRationale(why || 'Suggested.');
+      setPreview({ fields, why: why || null });
     } catch (e) { setError(e.message || String(e)); }
     setBusy(false);
   };
+
+  const approve = () => {
+    if (!preview) return;
+    const prevTargets = { ...targets };
+    onSuggest(preview.fields);
+    const label = 'Applied Claude\'s macro suggestion';
+    setPreview(null);
+    if (window.showToast) {
+      window.showToast(label, () => { onSuggest(prevTargets); });
+    }
+  };
+  const decline = () => setPreview(null);
+
+  // Summarize what Claude "sees" so the suggestion isn't a black box.
+  const factors = [
+    {
+      k: 'Current daily targets',
+      v: `kcal ${targets.kcal} · c ${targets.c}g · p ${targets.p}g · f ${targets.f}g`
+        + (targets.satFat != null ? ` · satFat ${targets.satFat}g` : '')
+        + (targets.sugar  != null ? ` · sugar ${targets.sugar}g`   : '')
+        + (targets.fibre  != null ? ` · fibre ${targets.fibre}g`   : ''),
+    },
+    {
+      k: 'Last 14 days of food',
+      v: (() => {
+        const rows = (window.HISTORY || []).slice(-14);
+        const n = rows.length;
+        if (!n) return 'No food logged yet';
+        const avg = (key) => Math.round(rows.reduce((s, d) => s + (d[key] || 0), 0) / n);
+        return `${n} days · kcal avg ${avg('kcal')} · c ${avg('c')}g · p ${avg('p')}g · f ${avg('f')}g`;
+      })(),
+    },
+    {
+      k: 'Recent weights',
+      v: (() => {
+        const wl = (weightLog || []).slice(-10);
+        if (wl.length < 2) return wl.length === 1 ? `1 entry (${wl[0].kg} kg)` : 'No weigh-ins';
+        const first = +wl[0].kg, last = +wl[wl.length - 1].kg;
+        const delta = last - first;
+        return `${wl.length} entries · ${first.toFixed(1)} → ${last.toFixed(1)} kg (${delta > 0 ? '+' : ''}${delta.toFixed(1)})`;
+      })(),
+    },
+  ];
+
+  const fmt = (k, v) => {
+    if (v == null) return '—';
+    if (k === 'kcal') return Math.round(v).toLocaleString();
+    if (k === 'exKcal') return Math.round(v);
+    if (k === 'exMin') return Math.round(v) + ' min';
+    return Math.round(v) + ' g';
+  };
+  const LABELS = {
+    kcal: 'Calories', c: 'Carbs', p: 'Protein', f: 'Fat',
+    satFat: 'Sat fat', sugar: 'Sugar', fibre: 'Fibre',
+    exKcal: 'Ex kcal', exMin: 'Ex min',
+  };
+  const rowStyle = (delta) => ({
+    display: 'grid', gridTemplateColumns: '80px 1fr 12px 1fr 50px', gap: 8,
+    padding: '5px 0', alignItems: 'baseline',
+    fontFamily: theme.font, fontSize: 12,
+  });
 
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.line}` }}>
@@ -7642,15 +7702,95 @@ Return ONLY JSON (no prose, no fences):
             stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round"
             fill={theme.accent} fillOpacity="0.12"/>
         </svg>
-        {busy ? 'Asking Claude…' : 'Ask Claude to suggest macros from my data'}
+        {busy ? 'Asking Claude…' : preview ? 'Ask again' : 'Ask Claude to suggest macros from my data'}
       </button>
-      {rationale && (
+
+      <button onClick={() => setShowFactors(!showFactors)} style={{
+        marginTop: 6, background: 'none', border: 'none',
+        padding: '2px 4px', cursor: 'pointer',
+        fontFamily: theme.font, fontSize: 11, color: theme.inkMute,
+        letterSpacing: '0.04em',
+      }}>
+        {showFactors ? '▾' : '▸'} What Claude is looking at
+      </button>
+      {showFactors && (
         <div style={{
-          marginTop: 8, padding: '8px 10px', background: theme.surfaceAlt,
+          marginTop: 4, padding: '8px 10px', background: theme.surfaceAlt,
           borderRadius: theme.radius.btn,
-          fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, lineHeight: 1.4,
-        }}>{rationale}</div>
+        }}>
+          {factors.map(f => (
+            <div key={f.k} style={{
+              display: 'flex', flexDirection: 'column',
+              padding: '4px 0', borderBottom: `0.5px solid ${theme.line}`,
+            }}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+                color: theme.inkMute, letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>{f.k}</div>
+              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.ink }}>{f.v}</div>
+            </div>
+          ))}
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 6, lineHeight: 1.35,
+          }}>Claude does NOT have your height, age, or stated goal — it only balances what you're actually eating against your weight trend. Adjust manually after if you're cutting or bulking on purpose.</div>
+        </div>
       )}
+
+      {preview && (
+        <div style={{
+          marginTop: 10, padding: '12px 12px',
+          background: theme.bg, border: `1.5px solid ${theme.accent}`,
+          borderRadius: theme.radius.btn,
+        }}>
+          {preview.why && (
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, color: theme.ink,
+              marginBottom: 8, lineHeight: 1.4,
+            }}>{preview.why}</div>
+          )}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '80px 1fr 12px 1fr 50px', gap: 8,
+            paddingBottom: 4, borderBottom: `1px solid ${theme.line}`, marginBottom: 4,
+            fontFamily: theme.font, fontSize: 10, fontWeight: 600, color: theme.inkMute,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+          }}>
+            <span/><span>Current</span><span/><span>Suggested</span><span style={{ textAlign: 'right' }}>Δ</span>
+          </div>
+          {Object.keys(LABELS).map(k => {
+            const cur = targets[k];
+            const next = preview.fields[k];
+            if (next == null) return null;
+            const delta = (cur != null ? (next - cur) : null);
+            return (
+              <div key={k} style={rowStyle(delta)}>
+                <span style={{ color: theme.inkSoft, fontWeight: 600 }}>{LABELS[k]}</span>
+                <span style={{ color: theme.inkSoft }}>{fmt(k, cur)}</span>
+                <span style={{ color: theme.inkMute }}>→</span>
+                <span style={{ color: theme.ink, fontWeight: 600 }}>{fmt(k, next)}</span>
+                <span style={{
+                  textAlign: 'right', fontFamily: theme.numFont,
+                  color: delta == null ? theme.inkMute : (delta > 0 ? '#2B7A5C' : delta < 0 ? '#B3261E' : theme.inkMute),
+                }}>{delta == null ? '' : (delta > 0 ? '+' : '') + Math.round(delta)}</span>
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={decline} style={{
+              flex: 1, padding: '9px 0', border: `1px solid ${theme.line}`,
+              background: 'transparent', color: theme.inkSoft, cursor: 'pointer',
+              borderRadius: theme.radius.btn,
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+            }}>Decline</button>
+            <button onClick={approve} style={{
+              flex: 1, padding: '9px 0', border: 'none',
+              background: theme.accent, color: theme.accentInk, cursor: 'pointer',
+              borderRadius: theme.radius.btn,
+              fontFamily: theme.font, fontSize: 13, fontWeight: 700,
+            }}>Approve</button>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div style={{
           marginTop: 8, padding: '8px 10px', borderRadius: 8,
