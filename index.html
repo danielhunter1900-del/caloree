@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -6143,6 +6143,11 @@ function AIChat({ theme, onAddMany }) {
   const [pending, setPending] = React.useState(null); // {meals: [{meal, items, photo?}]}
   const [photo, setPhoto] = React.useState(null); // { dataUrl, mediaType }
   const [photoKind, setPhotoKind] = React.useState('food'); // 'food' | 'label'
+  // Meal to log everything under — user-overridable.
+  const [mealOverride, setMealOverride] = React.useState('Snack');
+  // Context kept so "Suggest change" can ask Claude to revise the
+  // current pending estimate with extra feedback, not start over.
+  const [lastContext, setLastContext] = React.useState(null);
   const taRef = React.useRef(null);
   const fileRef = React.useRef(null);
   const [listening, setListening] = React.useState(false);
@@ -6314,6 +6319,7 @@ Output a single item with the scaled values. If the label is illegible or missin
       const meals = parsed.meals || (parsed.meal && parsed.items ? [{ meal: parsed.meal, items: parsed.items }] : []);
       if (userPhoto && meals[0]) meals[0].photo = userPhoto.dataUrl;
       setPending({ meals, note: parsed.note });
+      setLastContext({ userText, photo: userPhoto, photoKind, prevJson: parsed });
       setMessages(m => [...m, {
         role: 'assistant', text: parsed.note || "Here's what I estimated:", parsed: { meals },
       }]);
@@ -6330,13 +6336,49 @@ Output a single item with the scaled values. If the label is illegible or missin
 
   const commit = () => {
     if (!pending) return;
-    onAddMany(pending);
-    const total = pending.meals.reduce((s, g) => s + g.items.length, 0);
-    const mealNames = [...new Set(pending.meals.map(g => g.meal))].join(' / ');
+    // Force every group to the meal the user picked in the selector —
+    // Claude's own guess (dinner / snack / whatever) is overridden.
+    const patched = {
+      ...pending,
+      meals: (pending.meals || []).map(g => ({ ...g, meal: mealOverride })),
+    };
+    onAddMany(patched);
+    const total = patched.meals.reduce((s, g) => s + g.items.length, 0);
     setMessages(m => [...m, {
-      role: 'system', text: `✓ Added ${total} item${total === 1 ? '' : 's'} to ${mealNames}.`,
+      role: 'system', text: `✓ Added ${total} item${total === 1 ? '' : 's'} to ${mealOverride}.`,
     }]);
     setPending(null);
+    setLastContext(null);
+  };
+
+  const revise = async (feedback) => {
+    const fb = (feedback || '').trim();
+    if (!fb || !lastContext || busy) return;
+    setMessages(m => [...m, { role: 'user', text: `Revise: ${fb}` }]);
+    setBusy(true);
+    try {
+      const contextText = `I previously described: "${lastContext.userText || '(photo)'}"
+You estimated the following JSON: ${JSON.stringify(lastContext.prevJson)}
+I'd like you to revise based on this feedback: "${fb}"
+Output a revised JSON in the SAME schema with corrected values. No prose outside the JSON.`;
+      const raw = await callAnthropic(contextText, lastContext.photo, lastContext.photoKind);
+      const clean = raw.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(clean);
+      const meals = parsed.meals || (parsed.meal && parsed.items ? [{ meal: parsed.meal, items: parsed.items }] : []);
+      if (lastContext.photo && meals[0]) meals[0].photo = lastContext.photo.dataUrl;
+      setPending({ meals, note: parsed.note });
+      setLastContext({ ...lastContext, prevJson: parsed });
+      setMessages(m => [...m, {
+        role: 'assistant', text: parsed.note || 'Revised estimate:', parsed: { meals },
+      }]);
+    } catch (e) {
+      setMessages(m => [...m, {
+        role: 'assistant',
+        text: `Couldn't revise. ${e && e.message ? '(' + e.message.slice(0, 120) + ')' : ''}`,
+        error: true,
+      }]);
+    }
+    setBusy(false);
   };
 
   return (
@@ -6358,7 +6400,10 @@ Output a single item with the scaled values. If the label is illegible or missin
 
         {pending && (
           <PendingCard pending={pending} theme={theme}
-            onCommit={commit} onCancel={() => setPending(null)} />
+            mealOverride={mealOverride} setMealOverride={setMealOverride}
+            onCommit={commit}
+            onCancel={() => { setPending(null); setLastContext(null); }}
+            onRevise={revise} canRevise={!!lastContext}/>
         )}
 
         {busy && (
@@ -6544,14 +6589,16 @@ function Msg({ msg, theme }) {
   );
 }
 
-function PendingCard({ pending, theme, onCommit, onCancel }) {
+function PendingCard({ pending, theme, onCommit, onCancel, mealOverride, setMealOverride, onRevise, canRevise }) {
   const groups = pending.meals || [];
   const allItems = groups.flatMap(g => g.items);
   const total = allItems.reduce((s, i) => s + (i.kcal || 0), 0);
   const totalC = allItems.reduce((s, i) => s + (i.c || 0), 0);
   const totalP = allItems.reduce((s, i) => s + (i.p || 0), 0);
   const totalF = allItems.reduce((s, i) => s + (i.f || 0), 0);
-  const mealNames = [...new Set(groups.map(g => g.meal))].join(' / ');
+  const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const [reviseOpen, setReviseOpen] = React.useState(false);
+  const [reviseText, setReviseText] = React.useState('');
 
   return (
     <div style={{
@@ -6565,12 +6612,29 @@ function PendingCard({ pending, theme, onCommit, onCancel }) {
         <div style={{
           fontFamily: theme.font, fontSize: 11, fontWeight: 600,
           color: theme.accent, letterSpacing: '0.1em', textTransform: 'uppercase',
-        }}>{mealNames}</div>
+        }}>Log to {mealOverride || 'Snack'}</div>
         <div style={{
           fontFamily: theme.numFont, fontSize: 18, fontWeight: theme.numWeight,
           color: theme.ink, letterSpacing: theme.letter,
         }}>{Math.round(total)} <span style={{ fontSize: 11, color: theme.inkMute, fontWeight: 400 }}>kcal</span></div>
       </div>
+      {setMealOverride && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+          {MEALS.map(m => {
+            const active = mealOverride === m;
+            return (
+              <button key={m} onClick={() => setMealOverride(m)} style={{
+                flex: 1, padding: '7px 0', borderRadius: theme.radius.btn,
+                border: `1px solid ${active ? theme.ink : theme.line}`,
+                background: active ? theme.ink : 'transparent',
+                color: active ? theme.bg : theme.inkSoft,
+                fontFamily: theme.font, fontSize: 11, fontWeight: active ? 700 : 500,
+                cursor: 'pointer',
+              }}>{m}</button>
+            );
+          })}
+        </div>
+      )}
 
       {groups.map((g, gi) => (
         <div key={gi} style={{ marginTop: gi > 0 ? 10 : 0 }}>
@@ -6625,15 +6689,66 @@ function PendingCard({ pending, theme, onCommit, onCancel }) {
         <MiniStat label="F" v={totalF} color={theme.macros.fat} theme={theme} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      {reviseOpen && (
+        <div style={{
+          marginTop: 10, padding: '10px 12px',
+          background: theme.bg, border: `1px solid ${theme.accent}`,
+          borderRadius: theme.radius.btn,
+        }}>
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginBottom: 6,
+          }}>What's off? (e.g. "portion was larger", "no butter", "used skim milk")</div>
+          <textarea
+            autoFocus
+            value={reviseText}
+            onChange={(e) => setReviseText(e.target.value)}
+            rows={2}
+            style={{
+              width: '100%', padding: '8px 10px',
+              border: `1px solid ${theme.line}`, borderRadius: theme.radius.btn,
+              fontFamily: theme.font, fontSize: 13, background: theme.surface,
+              color: theme.ink, outline: 'none', resize: 'vertical',
+            }}/>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button onClick={() => { setReviseOpen(false); setReviseText(''); }} style={{
+              padding: '7px 12px', border: `1px solid ${theme.line}`,
+              background: 'transparent', color: theme.inkSoft,
+              borderRadius: theme.radius.btn,
+              fontFamily: theme.font, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>Cancel</button>
+            <button onClick={() => {
+              const t = reviseText;
+              setReviseOpen(false); setReviseText('');
+              onRevise && onRevise(t);
+            }} disabled={!reviseText.trim()} style={{
+              flex: 1, padding: '7px 12px', border: 'none',
+              background: theme.accent, color: theme.accentInk,
+              borderRadius: theme.radius.btn,
+              fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+              cursor: reviseText.trim() ? 'pointer' : 'default',
+              opacity: reviseText.trim() ? 1 : 0.5,
+            }}>Send revision</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button onClick={onCancel} style={{
-          flex: 1, padding: '10px 0', border: `1px solid ${theme.line}`,
+          flex: 1, minWidth: 70, padding: '10px 0', border: `1px solid ${theme.line}`,
           background: 'transparent', color: theme.inkSoft, cursor: 'pointer',
           borderRadius: theme.radius.btn,
           fontFamily: theme.font, fontSize: 13, fontWeight: 600,
         }}>Cancel</button>
+        {canRevise && !reviseOpen && (
+          <button onClick={() => setReviseOpen(true)} style={{
+            flex: 1, minWidth: 100, padding: '10px 0', border: `1px solid ${theme.line}`,
+            background: 'transparent', color: theme.ink, cursor: 'pointer',
+            borderRadius: theme.radius.btn,
+            fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+          }}>Suggest change</button>
+        )}
         <button onClick={onCommit} style={{
-          flex: 2, padding: '10px 0', border: 'none',
+          flex: 2, minWidth: 120, padding: '10px 0', border: 'none',
           background: theme.accent, color: theme.accentInk, cursor: 'pointer',
           borderRadius: theme.radius.btn,
           fontFamily: theme.font, fontSize: 13, fontWeight: 600,
