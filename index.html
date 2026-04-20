@@ -3777,6 +3777,27 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
             </div>
           </div>
         )}
+
+        {weightLog.length > 0 && (
+          <button onClick={async () => {
+            const n = weightLog.length;
+            if (!confirm(`Delete all ${n} weight ${n === 1 ? 'entry' : 'entries'}? This cannot be undone.`)) return;
+            try {
+              const u = (await window.sb.auth.getUser()).data?.user;
+              if (u) {
+                const r = await window.sb.from('weight_logs').delete().eq('user_id', u.id);
+                if (r.error) { alert('Cloud delete failed: ' + r.error.message); return; }
+              }
+              setWeightLog([]);
+              try { localStorage.removeItem('cal_weight'); } catch {}
+            } catch (e) { alert('Delete failed: ' + e.message); }
+          }} style={{
+            marginTop: 10, padding: '6px 10px', border: 'none',
+            background: 'transparent', color: theme.inkMute, cursor: 'pointer',
+            fontFamily: theme.font, fontSize: 11, fontWeight: 500,
+            textDecoration: 'underline', textUnderlineOffset: 3,
+          }}>Clear weight history</button>
+        )}
       </div>
 
       {askWeight && (
