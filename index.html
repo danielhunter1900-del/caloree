@@ -1046,7 +1046,7 @@ function WellnessCard({ theme, wellness, setWellness }) {
   );
 }
 
-function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session, logDate, setLogDate }) {
+function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, setSettings, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, onAddMeal, onOpenFood, onOpenProfile, onAddExercise, session, logDate, setLogDate }) {
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1423,6 +1423,13 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, t
       {/* Exercise card */}
       <ExerciseCard theme={theme}
         entries={(exerciseLog || []).filter(e => (e.date || todayIso) === selectedDate)}
+        customTypes={settings.customExerciseTypes || []}
+        onAddCustomType={(t) => {
+          if (!setSettings) return;
+          const next = [...(settings.customExerciseTypes || []), t];
+          applyCustomExerciseTypes([t]);
+          setSettings({ ...settings, customExerciseTypes: next });
+        }}
         onAdd={onAddExercise}
         onUpdateType={(id, type) => {
           setExerciseLog && setExerciseLog(exerciseLog.map(e => e.id === id ? { ...e, type } : e));
@@ -2016,16 +2023,55 @@ function ThemeBadge({ theme }) {
 // ─────────────────────────────────────────────────────────────
 // Meal section — collapsible, swipe-to-delete entries
 // ─────────────────────────────────────────────────────────────
-// Shared exercise type → color map
+// Shared exercise type → color / icon / MET maps.
+// Mutated at runtime to merge in user-defined custom types from settings.
 const EX_COLORS = {
   Run: '#5FA8C9', Cycling: '#7A8BD1', Walk: '#A0725A',
   Strength: '#D96B5C', Calisthenics: '#E0A24A',
   HIIT: '#C25A8E', Mobility: '#5C9A6E', Other: '#8A8A8A',
 };
+const EX_ICONS = {
+  Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️',
+  Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡',
+};
+const EX_METS = {
+  Run: 9.8, Cycling: 7.5, Walk: 3.8, Strength: 5.0,
+  Calisthenics: 6.0, HIIT: 8.0, Mobility: 2.5, Other: 5.0,
+};
+// Palette used to auto-assign colors to newly added custom types
+const EX_PALETTE = [
+  '#6DAF6D', '#3FA3C2', '#B87A3A', '#9B7AD6',
+  '#D6A74A', '#5570A8', '#8FA33F', '#DC8A6E',
+  '#6BAF92', '#C47A9A',
+];
 window.EX_COLORS = EX_COLORS;
+window.EX_ICONS = EX_ICONS;
+window.EX_METS = EX_METS;
 
-function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate }) {
-  const ICONS = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️', Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡' };
+// Apply user-defined custom types (from settings.customExerciseTypes)
+// into the global maps so existing render paths auto-pick them up.
+function applyCustomExerciseTypes(custom) {
+  (custom || []).forEach(c => {
+    if (!c || !c.name) return;
+    EX_COLORS[c.name] = c.color || EX_PALETTE[0];
+    EX_ICONS[c.name]  = c.icon  || '⚡';
+    EX_METS[c.name]   = +c.met  || 5.0;
+  });
+}
+window.applyCustomExerciseTypes = applyCustomExerciseTypes;
+
+function nextCustomExerciseColor(custom, defaults = EX_COLORS) {
+  const used = new Set([
+    ...Object.values(defaults),
+    ...(custom || []).map(c => c.color).filter(Boolean),
+  ]);
+  return EX_PALETTE.find(c => !used.has(c)) || EX_PALETTE[(custom || []).length % EX_PALETTE.length];
+}
+window.nextCustomExerciseColor = nextCustomExerciseColor;
+
+function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate, customTypes = [], onAddCustomType }) {
+  const ICONS = { ...(window.EX_ICONS || {}) };
+  customTypes.forEach(c => { if (c && c.name) ICONS[c.name] = c.icon || '⚡'; });
   const TYPES = Object.keys(ICONS);
   const [editingFull, setEditingFull] = React.useState(null); // the entry being edited
   const [open, setOpen] = React.useState(true);
@@ -2112,6 +2158,8 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate 
       ))}
       {editingFull && (
         <ExerciseEditSheet theme={theme} entry={editingFull}
+          customTypes={customTypes}
+          onAddCustomType={onAddCustomType}
           onClose={() => setEditingFull(null)}
           onSave={(updated) => { onUpdate && onUpdate(updated); setEditingFull(null); }}/>
       )}
@@ -2121,10 +2169,12 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate 
 
 const RUN_SUBTYPES = ['Easy', 'Long', 'Speed', 'Steady'];
 
-function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
-  const ICONS = { Run: '🏃', Cycling: '🚴', Walk: '🚶', Strength: '🏋️', Calisthenics: '🤸', HIIT: '🔥', Mobility: '🧘', Other: '⚡' };
+function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], onAddCustomType }) {
+  const ICONS = { ...(window.EX_ICONS || {}) };
+  customTypes.forEach(c => { if (c && c.name) ICONS[c.name] = c.icon || '⚡'; });
   const TYPES = Object.keys(ICONS);
   const [type, setType] = React.useState(entry.type);
+  const [showNewType, setShowNewType] = React.useState(false);
   const [duration, setDuration] = React.useState(entry.duration != null ? String(entry.duration) : '');
   const [distance, setDistance] = React.useState(entry.distance != null ? String(entry.distance) : '');
   const [kcal, setKcal] = React.useState(entry.kcal != null ? String(entry.kcal) : '');
@@ -2147,6 +2197,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
   };
 
   return (
+    <React.Fragment>
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200,
       display: 'flex', alignItems: 'flex-end',
@@ -2180,6 +2231,18 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
               <span style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 600 }}>{t}</span>
             </button>
           ))}
+          {onAddCustomType && (
+            <button onClick={() => setShowNewType(true)} style={{
+              padding: '10px 4px',
+              border: `1.5px dashed ${theme.line}`, background: 'transparent',
+              color: theme.inkSoft, cursor: 'pointer',
+              borderRadius: theme.radius.btn,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+            }}>
+              <span style={{ fontSize: 18 }}>＋</span>
+              <span style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 600 }}>New</span>
+            </button>
+          )}
         </div>
 
         {type === 'Run' && (
@@ -2240,6 +2303,18 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave }) {
         </div>
       </div>
     </div>
+    {showNewType && (
+      <NewExerciseTypeSheet theme={theme}
+        existing={TYPES}
+        customTypes={customTypes}
+        onClose={() => setShowNewType(false)}
+        onSave={(t) => {
+          onAddCustomType && onAddCustomType(t);
+          setType(t.name);
+          setShowNewType(false);
+        }}/>
+    )}
+    </React.Fragment>
   );
 }
 
@@ -3848,6 +3923,7 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
 // Exercise calendar — Week / Month / Year views with filter chips
 // ─────────────────────────────────────────────────────────────
 function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate }) {
+  const [chipExpanded, setChipExpanded] = React.useState(false);
   if (!bucket || !bucket.bars || !bucket.bars.length) return null;
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -4123,41 +4199,69 @@ function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSel
 
       {gridNode}
 
-      {types.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{
-            fontFamily: theme.font, fontSize: 10, fontWeight: 600,
-            color: theme.inkMute, letterSpacing: '0.1em', marginBottom: 8,
-          }}>TAP TO FILTER</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {types.map(t => {
-              const active = selectedType === t;
-              const color = EX_COLOR_MAP[t] || '#8A8A8A';
-              return (
-                <button key={t}
-                  onClick={() => setSelectedType(active ? null : t)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '6px 12px', borderRadius: 14,
-                    background: active ? color : 'transparent',
-                    border: `1px solid ${active ? color : theme.line}`,
-                    cursor: 'pointer',
-                    fontFamily: theme.font, fontSize: 12,
-                    fontWeight: active ? 700 : 600,
-                    color: active ? '#FFFFFF' : theme.inkSoft,
-                    letterSpacing: '0.02em',
-                  }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: 4,
-                    background: active ? '#FFFFFF' : color,
-                  }}/>
-                  {t} · {fmtChipValue(t)}
-                </button>
-              );
-            })}
+      {types.length > 0 && (() => {
+        const MAX_VISIBLE = 6;
+        const [expanded, setExpanded] = [chipExpanded, setChipExpanded];
+        const visible = expanded ? types : types.slice(0, MAX_VISIBLE);
+        const hiddenCount = types.length - visible.length;
+        // Always keep the selected chip visible even if it's past the cap
+        const withSelected = selectedType && !visible.includes(selectedType)
+          ? [...visible, selectedType]
+          : visible;
+        return (
+          <div style={{ marginTop: 16 }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+              color: theme.inkMute, letterSpacing: '0.1em', marginBottom: 8,
+            }}>TAP TO FILTER</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {withSelected.map(t => {
+                const active = selectedType === t;
+                const color = EX_COLOR_MAP[t] || '#8A8A8A';
+                return (
+                  <button key={t}
+                    onClick={() => setSelectedType(active ? null : t)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 14,
+                      background: active ? color : 'transparent',
+                      border: `1px solid ${active ? color : theme.line}`,
+                      cursor: 'pointer',
+                      fontFamily: theme.font, fontSize: 12,
+                      fontWeight: active ? 700 : 600,
+                      color: active ? '#FFFFFF' : theme.inkSoft,
+                      letterSpacing: '0.02em',
+                    }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: 4,
+                      background: active ? '#FFFFFF' : color,
+                    }}/>
+                    {t} · {fmtChipValue(t)}
+                  </button>
+                );
+              })}
+              {hiddenCount > 0 && !expanded && (
+                <button onClick={() => setExpanded(true)} style={{
+                  padding: '6px 12px', borderRadius: 14,
+                  background: 'transparent', border: `1px dashed ${theme.line}`,
+                  cursor: 'pointer',
+                  fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+                  color: theme.inkSoft,
+                }}>+{hiddenCount} more</button>
+              )}
+              {expanded && types.length > MAX_VISIBLE && (
+                <button onClick={() => setExpanded(false)} style={{
+                  padding: '6px 12px', borderRadius: 14,
+                  background: 'transparent', border: `1px dashed ${theme.line}`,
+                  cursor: 'pointer',
+                  fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+                  color: theme.inkSoft,
+                }}>Show less</button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -7123,8 +7227,8 @@ function HistorySheet({ theme, session, log, setLog, onClose }) {
   );
 }
 
-function ExerciseLogSheet({ theme, onClose, session, onSave }) {
-  const TYPES = [
+function ExerciseLogSheet({ theme, onClose, session, onSave, customTypes = [], onAddCustomType }) {
+  const DEFAULT_TYPES = [
     { k: 'Run',           met: 9.8,  icon: '🏃' },
     { k: 'Cycling',       met: 7.5,  icon: '🚴' },
     { k: 'Walk',          met: 3.8,  icon: '🚶' },
@@ -7134,6 +7238,11 @@ function ExerciseLogSheet({ theme, onClose, session, onSave }) {
     { k: 'Mobility',      met: 2.5,  icon: '🧘' },
     { k: 'Other',         met: 5.0,  icon: '⚡' },
   ];
+  const TYPES = [
+    ...DEFAULT_TYPES,
+    ...customTypes.map(c => ({ k: c.name, met: +c.met || 5.0, icon: c.icon || '⚡' })),
+  ];
+  const [showNewType, setShowNewType] = React.useState(false);
   const [mode, setMode] = React.useState('manual'); // 'manual' | 'ai'
   const [type, setType] = React.useState('Run');
   const [runSubtype, setRunSubtype] = React.useState(null);
@@ -7240,6 +7349,7 @@ Workout: ${aiText.trim()}`;
   };
 
   return (
+    <React.Fragment>
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200,
       display: 'flex', alignItems: 'flex-end',
@@ -7303,6 +7413,15 @@ Workout: ${aiText.trim()}`;
                     </button>
                   );
                 })}
+                {onAddCustomType && (
+                  <button onClick={() => setShowNewType(true)} style={{
+                    flex: '0 0 auto', padding: '8px 14px',
+                    border: `1.5px dashed ${theme.line}`, background: 'transparent',
+                    color: theme.inkSoft, cursor: 'pointer',
+                    borderRadius: 999, whiteSpace: 'nowrap',
+                    fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+                  }}>+ New</button>
+                )}
               </div>
 
               {type === 'Run' && (
@@ -7388,6 +7507,89 @@ Workout: ${aiText.trim()}`;
             borderRadius: theme.radius.btn,
             fontFamily: theme.font, fontSize: 14, fontWeight: 600, opacity: busy ? 0.5 : 1,
           }}>{busy ? 'Working…' : (mode === 'manual' ? 'Save' : 'Parse & save')}</button>
+        </div>
+      </div>
+    </div>
+    {showNewType && (
+      <NewExerciseTypeSheet theme={theme}
+        existing={TYPES.map(t => t.k)}
+        customTypes={customTypes}
+        onClose={() => setShowNewType(false)}
+        onSave={(t) => {
+          onAddCustomType && onAddCustomType(t);
+          setType(t.name);
+          setShowNewType(false);
+        }}/>
+    )}
+    </React.Fragment>
+  );
+}
+
+function NewExerciseTypeSheet({ theme, existing, customTypes, onClose, onSave }) {
+  const [name, setName] = React.useState('');
+  const [icon, setIcon] = React.useState('');
+  const [met, setMet]   = React.useState('5.0');
+  const [err, setErr]   = React.useState(null);
+  const save = () => {
+    const n = name.trim();
+    if (!n) { setErr('Name required.'); return; }
+    if ((existing || []).includes(n)) { setErr('That name already exists.'); return; }
+    const color = nextCustomExerciseColor(customTypes);
+    onSave({ name: n, icon: icon.trim() || '⚡', met: +met || 5.0, color });
+  };
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 210,
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        padding: '18px 18px 22px',
+      }}>
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 14px' }}/>
+        <div style={{
+          fontFamily: theme.titleFont, fontSize: 18, fontWeight: theme.titleWeight,
+          color: theme.ink, marginBottom: 4,
+        }}>New exercise type</div>
+        <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginBottom: 14 }}>
+          Appears in the picker + filter chips everywhere. Color is auto-picked.
+        </div>
+
+        <Field label="Name (e.g. Badminton)" theme={theme}>
+          <input value={name} onChange={e => setName(e.target.value)}
+            placeholder="Badminton"
+            autoFocus
+            style={fieldStyle(theme)}/>
+        </Field>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Field label="Icon" theme={theme} style={{ flex: 1 }}>
+            <input value={icon} onChange={e => setIcon(e.target.value)}
+              placeholder="🏸" maxLength={4}
+              style={fieldStyle(theme)}/>
+          </Field>
+          <Field label="MET (calorie estimate)" theme={theme} style={{ flex: 2 }}>
+            <input type="number" inputMode="decimal" step="0.1" value={met}
+              onChange={e => setMet(e.target.value)} style={fieldStyle(theme)}/>
+          </Field>
+        </div>
+
+        {err && <div style={{
+          marginTop: 4, padding: '10px 12px', borderRadius: 8,
+          background: '#FDECEA', color: '#B3261E', fontSize: 13, fontFamily: theme.font,
+        }}>{err}</div>}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button onClick={onClose} style={{
+            padding: '12px 18px', border: `1px solid ${theme.line}`,
+            background: 'transparent', color: theme.inkSoft,
+            borderRadius: theme.radius.btn, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Cancel</button>
+          <button onClick={save} style={{
+            flex: 1, padding: '12px 0', border: 'none',
+            background: theme.accent, color: theme.accentInk,
+            borderRadius: theme.radius.btn, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>Add type</button>
         </div>
       </div>
     </div>
@@ -8338,9 +8540,10 @@ function App({ session }) {
     try {
       return JSON.parse(localStorage.getItem('cal_settings')) || {
         reminders: true, haptics: true, quickAdd: true, weeklySummary: false,
+        customExerciseTypes: [],
       };
     } catch {
-      return { reminders: true, haptics: true, quickAdd: true, weeklySummary: false };
+      return { reminders: true, haptics: true, quickAdd: true, weeklySummary: false, customExerciseTypes: [] };
     }
   });
 
@@ -8591,6 +8794,11 @@ function App({ session }) {
   React.useEffect(() => { localStorage.setItem('cal_theme', themeKey); }, [themeKey]);
   React.useEffect(() => { localStorage.setItem('cal_tab', tab); }, [tab]);
   React.useEffect(() => { localStorage.setItem('cal_targets', JSON.stringify(targets)); window.TARGETS = targets; }, [targets]);
+  // Merge user's custom exercise types into the global color/icon/met maps
+  // so every render path (picker, calendar, chart) picks them up automatically.
+  React.useEffect(() => {
+    applyCustomExerciseTypes(settings.customExerciseTypes || []);
+  }, [settings.customExerciseTypes]);
   React.useEffect(() => { localStorage.setItem('cal_target_history', JSON.stringify(targetHistory)); }, [targetHistory]);
   React.useEffect(() => { localStorage.setItem('cal_weight', JSON.stringify(weightLog)); }, [weightLog]);
   React.useEffect(() => { localStorage.setItem('cal_settings', JSON.stringify(settings)); }, [settings]);
@@ -8709,7 +8917,7 @@ function App({ session }) {
           }}>
             {tab === 'home' && (
               <HomeScreen theme={theme} log={log} setLog={setLog}
-                targets={targets} settings={settings}
+                targets={targets} settings={settings} setSettings={setSettings}
                 targetsForDate={targetsForDate}
                 wellness={wellness} setWellness={setWellness}
                 wellnessMap={wellnessMap}
@@ -8750,6 +8958,12 @@ function App({ session }) {
 
           {showExercise && (
             <ExerciseLogSheet theme={theme} session={session}
+              customTypes={settings.customExerciseTypes || []}
+              onAddCustomType={(t) => {
+                const next = [...(settings.customExerciseTypes || []), t];
+                applyCustomExerciseTypes([t]);
+                setSettings({ ...settings, customExerciseTypes: next });
+              }}
               onClose={() => setShowExercise(false)}
               onSave={(entry) => setExerciseLog(prev => [...prev, entry])}/>
           )}
