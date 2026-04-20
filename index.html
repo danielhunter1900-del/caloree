@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1657,32 +1657,41 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
   const total = contributors.reduce((s, r) => s + r.amount, 0);
 
   // State-driven slide-up so the animation is reliable across browsers.
-  // Start off-screen, commit the final state on the next frame so CSS
-  // transitions take effect.
   const [visible, setVisible] = React.useState(false);
   React.useEffect(() => {
     const id = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // iOS Safari scroll-trap fix: lock body while the sheet is open.
-  React.useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
   const panelRef = React.useRef(null);
+
+  // iOS Safari scroll lock. The page behind the sheet uses an inner
+  // `overflow: auto` container (not document.body), so toggling
+  // body.style.overflow does nothing there. Intercept touchmove at
+  // document level and preventDefault everything that isn't inside
+  // the panel; inside the panel, let native scroll work.
+  React.useEffect(() => {
+    const onTouchMove = (e) => {
+      const panel = panelRef.current;
+      if (panel && panel.contains(e.target)) {
+        // Inside the panel — allow iOS to scroll the list.
+        return;
+      }
+      // Backdrop or anything else — swallow the gesture so the page
+      // behind can't scroll.
+      if (e.cancelable) e.preventDefault();
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => document.removeEventListener('touchmove', onTouchMove);
+  }, []);
 
   return (
     <div onClick={onClose}
-      onTouchMove={(e) => { if (e.target === e.currentTarget && e.cancelable) e.preventDefault(); }}
       style={{
         position: 'fixed', inset: 0,
         background: `rgba(0,0,0,${visible ? 0.4 : 0})`,
         zIndex: 100, display: 'flex', alignItems: 'flex-end',
         transition: 'background 0.25s ease-out',
-        touchAction: 'none',
       }}>
       <div ref={panelRef}
         onClick={(e) => e.stopPropagation()}
@@ -3909,27 +3918,60 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
           }}>Log weight</button>
         </div>
 
-        {weightLog.length > 0 && (
-          <div style={{
-            marginTop: 18, height: 80, position: 'relative',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 4,
-          }}>
-            {weightLog.map((w, i) => {
-              const h = wMax > wMin ? ((w.kg - wMin) / (wMax - wMin)) * 100 : 50;
-              const isLast = i === weightLog.length - 1;
-              return (
-                <div key={w.iso + '_' + i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
-                  <div style={{
-                    width: 6, height: `${h}%`,
-                    background: isLast ? theme.accent : theme.surfaceAlt,
-                    border: isLast ? 'none' : `1px solid ${theme.line}`,
-                    borderRadius: theme.name === 'Editorial' ? 0 : 3,
-                  }}/>
+        {weightLog.length > 0 && (() => {
+          // SVG line chart — reads much better than bars for a monotonic trend.
+          const W = 300, H = 80, padX = 4, padY = 6;
+          const n = weightLog.length;
+          const xAt = (i) => n === 1 ? W / 2 : padX + (i / (n - 1)) * (W - padX * 2);
+          const yAt = (kg) => {
+            if (wMax === wMin) return H / 2;
+            return padY + (1 - (kg - wMin) / (wMax - wMin)) * (H - padY * 2);
+          };
+          const pts = weightLog.map((w, i) => `${xAt(i)},${yAt(w.kg)}`);
+          const linePath = 'M' + pts.join(' L');
+          const areaPath = linePath + ` L${xAt(n - 1)},${H} L${xAt(0)},${H} Z`;
+          const latest = weightLog[n - 1];
+          const first = weightLog[0];
+          return (
+            <div style={{ marginTop: 18, width: '100%' }}>
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+                style={{ display: 'block', width: '100%', height: 80 }}>
+                <defs>
+                  <linearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={theme.accent} stopOpacity="0.22"/>
+                    <stop offset="100%" stopColor={theme.accent} stopOpacity="0"/>
+                  </linearGradient>
+                </defs>
+                {n >= 2 && <path d={areaPath} fill="url(#weightFill)"/>}
+                {n >= 2 && (
+                  <path d={linePath}
+                    fill="none" stroke={theme.accent} strokeWidth="1.8"
+                    strokeLinejoin="round" strokeLinecap="round"/>
+                )}
+                {weightLog.map((w, i) => {
+                  const isLast = i === n - 1;
+                  return (
+                    <circle key={w.iso + '_' + i}
+                      cx={xAt(i)} cy={yAt(w.kg)}
+                      r={isLast ? 3.5 : 2}
+                      fill={isLast ? theme.accent : theme.surface}
+                      stroke={theme.accent} strokeWidth={isLast ? 0 : 1.4}/>
+                  );
+                })}
+              </svg>
+              {n >= 2 && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', marginTop: 4,
+                  fontFamily: theme.font, fontSize: 10, color: theme.inkMute,
+                  letterSpacing: '0.04em',
+                }}>
+                  <span>{first.iso}</span>
+                  <span>{latest.iso}</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })()}
 
         {weightLog.length >= 2 && (
           <button onClick={() => setAskWeight(true)} style={{
