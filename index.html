@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1414,31 +1414,39 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
                 : `${Math.round(totals.kcal)} kcal logged · keep going or mark done`}
             </div>
           </div>
-          <button onClick={() => setComplete(true)} style={{
+          <button onClick={() => {
+            setComplete(true);
+            if (selectMode) exitSelectMode();
+          }} style={{
             padding: '8px 12px', border: `1px solid ${theme.line}`,
             background: theme.surface, color: theme.ink, cursor: 'pointer',
             borderRadius: theme.radius.chip,
             fontFamily: theme.font, fontSize: 12, fontWeight: 600,
             whiteSpace: 'nowrap',
-          }}>Mark done</button>
+          }}>Finish for today</button>
         </div>
       )}
-      {dayStatus === 'complete' && markedComplete && (
+      {markedComplete && (
         <div style={{
           margin: '0 16px 12px', padding: '10px 16px',
           background: '#E8F5E9', border: `1px solid #A8D5AE`,
           borderRadius: theme.radius.card,
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <span style={{ width: 8, height: 8, borderRadius: 4, background: '#2B7A5C' }}/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M6 11V8a6 6 0 1112 0v3M4 11h16v10H4z" stroke="#2B7A5C" strokeWidth="2" strokeLinejoin="round"/>
+          </svg>
           <div style={{
             flex: 1, fontFamily: theme.font, fontSize: 12, color: '#1C5A3F', fontWeight: 600,
-          }}>Day marked complete</div>
+          }}>
+            {isToday ? 'Today is locked' : 'Day is locked'} · no changes can be made
+          </div>
           <button onClick={() => setComplete(false)} style={{
-            border: 'none', background: 'none', color: '#2B7A5C', cursor: 'pointer',
-            fontFamily: theme.font, fontSize: 12, fontWeight: 600,
-            textDecoration: 'underline', padding: 0,
-          }}>Undo</button>
+            padding: '6px 10px', border: `1px solid #A8D5AE`,
+            background: '#FFFFFF', color: '#2B7A5C', cursor: 'pointer',
+            borderRadius: theme.radius.chip,
+            fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+          }}>Unlock</button>
         </div>
       )}
 
@@ -1484,8 +1492,8 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           });
         }}/>
 
-      {/* Edit toggle */}
-      {dayLog.length > 0 && (
+      {/* Edit toggle — hidden when the day is locked */}
+      {dayLog.length > 0 && !markedComplete && (
         <div style={{
           margin: '0 16px 8px', display: 'flex', justifyContent: 'flex-end',
         }}>
@@ -1501,8 +1509,9 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
 
       {/* Meal sections */}
       {meals.map(m => (
-        <MealSection key={m + favBump + (selectMode ? '_s' : '')} meal={m} theme={theme}
+        <MealSection key={m + favBump + (selectMode ? '_s' : '') + (markedComplete ? '_l' : '')} meal={m} theme={theme}
           entries={dayLog.filter(e => e.meal === m)}
+          locked={markedComplete}
           selectMode={selectMode}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
@@ -2789,7 +2798,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], on
   );
 }
 
-function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry, onToggleFav, onCopyToDate, selectMode, selectedIds, onToggleSelect }) {
+function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntry, onToggleFav, onCopyToDate, selectMode, selectedIds, onToggleSelect, locked }) {
   const subtotal = sumMacros(entries);
   const hasItems = entries.length > 0;
   const [dragOver, setDragOver] = React.useState(false);
@@ -2849,13 +2858,15 @@ function MealSection({ meal, theme, entries, onDelete, onAdd, onOpen, onMoveEntr
             }}>{Math.round(subtotal.kcal)} kcal</span>
           )}
         </div>
-        <button onClick={onAdd} style={{
-          width: 26, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
-          background: theme.surfaceAlt,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: theme.ink, fontFamily: theme.font, fontSize: 18, lineHeight: 1,
-          paddingBottom: 2,
-        }}>+</button>
+        {!locked && (
+          <button onClick={onAdd} style={{
+            width: 26, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+            background: theme.surfaceAlt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: theme.ink, fontFamily: theme.font, fontSize: 18, lineHeight: 1,
+            paddingBottom: 2,
+          }}>+</button>
+        )}
       </div>
 
       {hasItems && entries.map((e, i) => (
@@ -3198,13 +3209,30 @@ window.HomeScreen = HomeScreen;
 
 const { useState: useStateLog, useMemo: useMemoLog, useEffect: useEffectLog } = React;
 
-function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood, onUseAI }) {
+function LogScreen({ theme, defaultMeal, onClose, onAdd, onOpenFood, onUseAI, log = [] }) {
   const [meal, setMeal] = useStateLog(defaultMeal || 'Snack');
   const [query, setQuery] = useStateLog('');
   const [focused, setFocused] = useStateLog(false);
 
   const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-  const recent = useMemoLog(() => ['f3','f6','f8','f1','f15'].map(foodById), []);
+  // Real "recent" — the user's most recently logged foods (most recent date
+  // first, then most recent position in the array), de-duped by food id.
+  const recent = useMemoLog(() => {
+    const sorted = [...log].sort((a, b) =>
+      (b.date || '').localeCompare(a.date || '')
+    );
+    const seen = new Set();
+    const out = [];
+    for (const e of sorted) {
+      if (!e.foodId || seen.has(e.foodId)) continue;
+      const f = foodById(e.foodId);
+      if (!f) continue;
+      seen.add(e.foodId);
+      out.push(f);
+      if (out.length >= 8) break;
+    }
+    return out;
+  }, [log]);
 
   const results = useMemoLog(() => {
     if (!query.trim()) return [];
@@ -6399,7 +6427,8 @@ Output a single item with the scaled values. If the label is illegible or missin
       const parsed = JSON.parse(clean);
       // Normalise: accept legacy {meal, items} shape too
       const meals = parsed.meals || (parsed.meal && parsed.items ? [{ meal: parsed.meal, items: parsed.items }] : []);
-      if (userPhoto && meals[0]) meals[0].photo = userPhoto.dataUrl;
+      // Label photos are just a scan aid — don't persist them to the meal log.
+      if (userPhoto && meals[0] && photoKind !== 'label') meals[0].photo = userPhoto.dataUrl;
       setPending({ meals, note: parsed.note });
       setLastContext({ userText, photo: userPhoto, photoKind, prevJson: parsed });
       setMessages(m => [...m, {
@@ -11193,6 +11222,7 @@ function App({ session }) {
           {/* Modals */}
           {logScreenMeal && (
             <LogScreen theme={theme} defaultMeal={logScreenMeal}
+              log={log}
               onClose={closeLog} onAdd={addEntry} onOpenFood={openDetail}
               onUseAI={(meal) => { closeLog(); setTab('ai'); }} />
           )}
