@@ -254,7 +254,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1636,33 +1636,36 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
           <div onClick={(e) => e.stopPropagation()} style={{
-            width: '100%', maxWidth: 280, background: theme.surface,
-            borderRadius: 12, padding: '14px 14px 14px',
+            width: '100%', maxWidth: 260, background: theme.surface,
+            borderRadius: 10, padding: 12, boxSizing: 'border-box',
           }}>
             <div style={{
-              fontFamily: theme.titleFont, fontSize: 15, fontWeight: theme.titleWeight,
+              fontFamily: theme.titleFont, fontSize: 14, fontWeight: theme.titleWeight,
               color: theme.ink, marginBottom: 2,
             }}>{pickAction === 'copy' ? 'Copy to' : 'Move to'}</div>
             <div style={{
-              fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginBottom: 10,
-            }}>{selectedIds.size} selected · {pickAction === 'copy' ? 'duplicates them on the new date' : 'moves them off this date'}</div>
+              fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginBottom: 8,
+            }}>{selectedIds.size} selected</div>
             <input type="date" value={pickDate} onChange={(e) => setPickDate(e.target.value)}
               style={{
-                width: '100%', padding: '7px 10px', marginBottom: 10,
-                border: `1px solid ${theme.line}`, borderRadius: 8,
+                width: '100%', padding: '6px 8px', marginBottom: 8,
+                border: `1px solid ${theme.line}`, borderRadius: 6,
                 fontSize: 13, outline: 'none', background: theme.bg, color: theme.ink,
                 boxSizing: 'border-box',
+                WebkitAppearance: 'none', appearance: 'none',
+                minHeight: 30, lineHeight: '18px',
+                fontFamily: theme.font,
               }}/>
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={() => setPickAction(null)} style={{
-                flex: 1, padding: '8px 0', border: `1px solid ${theme.line}`,
+                flex: 1, padding: '7px 0', border: `1px solid ${theme.line}`,
                 background: 'transparent', color: theme.inkSoft,
-                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}>Cancel</button>
               <button onClick={performAction} style={{
-                flex: 1, padding: '8px 0', border: 'none',
+                flex: 1, padding: '7px 0', border: 'none',
                 background: theme.accent, color: theme.accentInk,
-                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
               }}>{pickAction === 'copy' ? 'Copy' : 'Move'}</button>
             </div>
           </div>
@@ -4900,6 +4903,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const [range, setRange] = useStateProg('Week');
   const [offset, setOffset] = useStateProg(0);
   const [selIdx, setSelIdx] = useStateProg(null); // index within bucket
+  const [selSet, setSelSet] = useStateProg(() => new Set()); // multi-select
   const [askOpen, setAskOpen] = React.useState(false);
   const [trendDrill, setTrendDrill] = React.useState(null); // { key, label, unit, color }
   const [chartMetric, setChartMetric] = React.useState('kcal'); // 'kcal' | 'exKcal' | 'exMin'
@@ -4941,7 +4945,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const avg = data.length ? Math.round(data.reduce((s, d) => s + valueOf(d), 0) / data.length) : 0;
   const maxK = Math.max(...data.map(valueOf), chartGoal);
 
-  React.useEffect(() => { setSelIdx(null); }, [range, offset]);
+  React.useEffect(() => { setSelIdx(null); setSelSet(new Set()); }, [range, offset]);
 
   const canGoForward = offset > 0;
   const canGoBack = bucketFor(range, offset + 1) != null;
@@ -5133,7 +5137,14 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                 })).filter(s => s.v > 0)
               : null;
             return (
-              <div key={i} onClick={() => setSelIdx(i)} style={{
+              <div key={i} onClick={() => {
+                setSelIdx(i);
+                setSelSet(prev => {
+                  const next = new Set(prev);
+                  if (next.has(i)) next.delete(i); else next.add(i);
+                  return next;
+                });
+              }} style={{
                 flex: 1, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', gap: 6, cursor: 'pointer', height: '100%',
                 justifyContent: 'flex-end', minWidth: 0,
