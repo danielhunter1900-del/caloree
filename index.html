@@ -351,6 +351,75 @@ const HISTORY = [];
 // Sample weight log — last value is ~2 weeks old (prompt should trigger)
 const DEFAULT_WEIGHT = [];
 
+// Food emoji fallback — used on meal rows when no photo is attached.
+// Veggie-friendly: protein-heavy foods default to 🫘 (beans) not a meat icon.
+const FOOD_EMOJI_LOOKUP = (() => {
+  const map = {
+    // fruit
+    apple: '🍎', banana: '🍌', orange: '🍊', lemon: '🍋', pear: '🍐',
+    grape: '🍇', grapes: '🍇', strawberry: '🍓', berry: '🫐', berries: '🫐',
+    blueberry: '🫐', raspberry: '🍓', peach: '🍑', cherry: '🍒', cherries: '🍒',
+    mango: '🥭', pineapple: '🍍', watermelon: '🍉', melon: '🍈',
+    kiwi: '🥝', avocado: '🥑', coconut: '🥥',
+    // veg
+    carrot: '🥕', broccoli: '🥦', tomato: '🍅', potato: '🥔', sweet_potato: '🍠',
+    corn: '🌽', onion: '🧅', garlic: '🧄', cucumber: '🥒', pepper: '🫑',
+    lettuce: '🥬', salad: '🥗', spinach: '🥬', kale: '🥬', mushroom: '🍄',
+    aubergine: '🍆', eggplant: '🍆',
+    // grain / carb
+    bread: '🍞', toast: '🍞', baguette: '🥖', croissant: '🥐', bagel: '🥯',
+    pasta: '🍝', noodle: '🍜', noodles: '🍜', ramen: '🍜', rice: '🍚',
+    sushi: '🍣', dumpling: '🥟', pretzel: '🥨', pancake: '🥞', waffle: '🧇',
+    cereal: '🥣', oats: '🥣', porridge: '🥣', oatmeal: '🥣', granola: '🥣',
+    muesli: '🥣',
+    // legume / plant protein (veggie defaults)
+    beans: '🫘', bean: '🫘', lentil: '🫘', lentils: '🫘', chickpea: '🫘',
+    chickpeas: '🫘', hummus: '🫘', tofu: '🧆', tempeh: '🧆', falafel: '🧆',
+    nut: '🥜', nuts: '🥜', peanut: '🥜', almond: '🥜', cashew: '🥜',
+    seed: '🌱', seeds: '🌱', edamame: '🫛', pea: '🫛', peas: '🫛',
+    // dairy / egg
+    milk: '🥛', cheese: '🧀', yogurt: '🥛', yoghurt: '🥛', butter: '🧈',
+    egg: '🥚', eggs: '🥚', omelette: '🍳', omelet: '🍳',
+    // prepared
+    pizza: '🍕', burger: '🍔', sandwich: '🥪', taco: '🌮', burrito: '🌯',
+    wrap: '🌯', soup: '🍲', curry: '🍛', stew: '🍲',
+    fries: '🍟', chips: '🍟',
+    // sweet
+    cake: '🍰', cookie: '🍪', biscuit: '🍪', chocolate: '🍫', candy: '🍬',
+    icecream: '🍦', ice_cream: '🍦', donut: '🍩', doughnut: '🍩',
+    honey: '🍯', jam: '🍯',
+    // drink
+    water: '💧', coffee: '☕', tea: '🍵', juice: '🧃',
+    smoothie: '🥤', shake: '🥤', beer: '🍺', wine: '🍷',
+    // meat / fish (kept for non-veg users; protein default below is veggie)
+    chicken: '🍗', beef: '🥩', steak: '🥩', pork: '🥓', bacon: '🥓',
+    fish: '🐟', salmon: '🐟', tuna: '🐟', shrimp: '🍤', prawn: '🍤',
+  };
+  return map;
+})();
+function foodEmoji(food) {
+  if (!food) return '🍽️';
+  const name = (food.name || '').toLowerCase();
+  // Token match — prefer longest matching word
+  const tokens = name.split(/[^a-z]+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  for (const t of tokens) {
+    if (FOOD_EMOJI_LOOKUP[t]) return FOOD_EMOJI_LOOKUP[t];
+  }
+  // Underscore/hyphen composites
+  const compact = name.replace(/[\s-]+/g, '_');
+  if (FOOD_EMOJI_LOOKUP[compact]) return FOOD_EMOJI_LOOKUP[compact];
+  // Macro-based fallback. Grams of protein/carb/fat per 100g serving.
+  const p = +food.p || 0, c = +food.c || 0, f = +food.f || 0;
+  const total = p + c + f;
+  if (total > 0) {
+    if (p / total > 0.35) return '🫘'; // veggie-friendly protein
+    if (c / total > 0.55) return '🍞';
+    if (f / total > 0.45) return '🥑';
+  }
+  return '🍽️';
+}
+window.foodEmoji = foodEmoji;
+
 // Helpers
 function foodById(id) { return FOODS.find(x => x.id === id); }
 
@@ -389,7 +458,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1041,7 +1110,7 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
   React.useEffect(() => { localStorage.setItem('cal_wellness_open', open ? '1' : '0'); }, [open]);
 
   const [reordering, setReordering] = React.useState(false);
-  const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility'];
+  const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility','restDay'];
   const savedOrder = (settings && Array.isArray(settings.wellnessRowOrder)) ? settings.wellnessRowOrder : null;
   const rowOrder = (() => {
     if (!savedOrder) return DEFAULT_ROW_ORDER;
@@ -1340,6 +1409,26 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
             );
           })}
         </div>
+      </div>
+
+      {/* Rest day — flags the day; exercises can still be logged */}
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('restDay') }}>
+        <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('restDay')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          <div style={iconBox}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 9a5 5 0 0 1-6.5-6.5A5.5 5.5 0 1 0 12 9z" stroke={theme.ink} strokeWidth="1.3" fill="none" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          Rest day
+        </div>
+        <button onClick={() => setWellness({ ...w, restDay: !w.restDay })} style={{
+          padding: '8px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
+          background: w.restDay ? '#7A8BD1' : theme.surfaceAlt,
+          color: w.restDay ? '#FFFFFF' : theme.inkSoft,
+          fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+          letterSpacing: '0.02em',
+        }}>{w.restDay ? 'Rest ✓' : 'Active'}</button>
       </div>
       </div>}
     </div>
@@ -1738,9 +1827,31 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
       {/* Wellness quick-log */}
       <WellnessCard theme={theme}
         locked={markedComplete}
-        wellness={wellnessMap[selectedDate] || { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0, rehab: false, mobility: {} }}
+        wellness={wellnessMap[selectedDate] || { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0, rehab: false, mobility: {}, restDay: false }}
         setWellness={(patch) => setWellness(selectedDate, patch)}
         settings={settings} setSettings={setSettings}/>
+
+      {/* Rest day banner — above exercise card when today is flagged as rest */}
+      {(wellnessMap[selectedDate] && wellnessMap[selectedDate].restDay) && (
+        <div style={{
+          margin: '0 16px 12px', padding: '10px 14px',
+          background: 'linear-gradient(90deg, rgba(122,139,209,0.14), rgba(122,139,209,0.06))',
+          border: '1px solid rgba(122,139,209,0.35)',
+          borderRadius: theme.radius.card,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>🌙</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+              color: '#4A5A9E', letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}>Rest day</div>
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
+            }}>Light moves still count. Logged exercise won't change this flag.</div>
+          </div>
+        </div>
+      )}
 
       {/* Exercise card */}
       <ExerciseCard theme={theme}
@@ -2657,7 +2768,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate,
               style={{
                 fontFamily: theme.font, fontSize: 14, fontWeight: 500, color: theme.ink,
                 cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>{e.type}{e.type === 'Run' && e.details?.runType ? ` · ${e.details.runType}` : ''}{e.distance ? ` · ${(+e.distance).toFixed(2)} km` : ''}
+              }}>{e.details?.name || e.type}{e.details?.name ? ` · ${e.type}` : ''}{e.type === 'Run' && e.details?.runType ? ` · ${e.details.runType}` : ''}{e.distance ? ` · ${(+e.distance).toFixed(2)} km` : ''}
               <span style={{ color: theme.inkMute, fontSize: 10 }}>›</span>
             </div>
             {(e.notes || e.duration) && (
@@ -3074,6 +3185,7 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], on
   const TYPES = Object.keys(ICONS);
   const [type, setType] = React.useState(entry.type);
   const [showNewType, setShowNewType] = React.useState(false);
+  const [name, setName] = React.useState((entry.details && entry.details.name) || '');
   const [duration, setDuration] = React.useState(entry.duration != null ? String(entry.duration) : '');
   const [distance, setDistance] = React.useState(entry.distance != null ? (+entry.distance).toFixed(2) : '');
   const [kcal, setKcal] = React.useState(entry.kcal != null ? String(entry.kcal) : '');
@@ -3081,9 +3193,12 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], on
   const [runSubtype, setRunSubtype] = React.useState((entry.details && entry.details.runType) || null);
 
   const save = () => {
+    const baseDetails = { ...(entry.details || {}) };
+    if (name.trim()) baseDetails.name = name.trim();
+    else delete baseDetails.name;
     const detailsOut = type === 'Run'
-      ? { ...(entry.details || {}), runType: runSubtype || null }
-      : entry.details || null;
+      ? { ...baseDetails, runType: runSubtype || null }
+      : (Object.keys(baseDetails).length ? baseDetails : null);
     onSave({
       ...entry,
       type,
@@ -3111,6 +3226,11 @@ function ExerciseEditSheet({ theme, entry, onClose, onSave, customTypes = [], on
           fontFamily: theme.titleFont, fontSize: 18, fontWeight: theme.titleWeight,
           color: theme.ink, marginBottom: 14,
         }}>Edit exercise</div>
+
+        <Field label="Name (optional — e.g. Calisthenics)" theme={theme}>
+          <input type="text" value={name} placeholder={entry.type}
+            onChange={e => setName(e.target.value)} style={fieldStyle(theme)}/>
+        </Field>
 
         <div style={{
           fontFamily: theme.font, fontSize: 11, fontWeight: 600,
@@ -3572,7 +3692,7 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
             }}/>
           </div>
         )}
-        {food.photo && (
+        {food.photo ? (
           <img src={food.photo} alt=""
             onClick={(e) => {
               e.stopPropagation();
@@ -3584,6 +3704,13 @@ function SwipeRow({ entry, theme, onDelete, onTap, isLast, draggable, onToggleFa
               width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0,
               cursor: 'pointer',
             }}/>
+        ) : (
+          <div style={{
+            width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+            background: theme.surfaceAlt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22, lineHeight: 1,
+          }}>{foodEmoji(food)}</div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -4104,6 +4231,43 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd, entryId, log
             textTransform: theme.name === 'Editorial' ? 'uppercase' : 'none',
           }}>{food.name}</div>
         </div>
+
+        {/* Photo preview + remove */}
+        {food.photo && (
+          <div style={{
+            margin: '0 16px 16px', padding: 10,
+            background: theme.surface, borderRadius: theme.radius.card,
+            border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+            display: 'flex', gap: 12, alignItems: 'center',
+          }}>
+            <img src={food.photo} alt="" style={{
+              width: 72, height: 72, borderRadius: 10, objectFit: 'cover',
+            }}/>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 12, color: theme.inkSoft,
+                marginBottom: 6,
+              }}>Attached photo</div>
+              <button onClick={async () => {
+                if (!confirm('Remove photo from this food?')) return;
+                food.photo = null;
+                food.photoPath = null;
+                setBump(b => b + 1);
+                if (window.sb && session) {
+                  const r = await window.sb.from('foods')
+                    .update({ photo_path: null }).eq('id', food.id);
+                  if (r.error) console.warn('photo remove:', r.error.message);
+                }
+                window.dispatchEvent(new Event('caloree:foodschanged'));
+              }} style={{
+                padding: '6px 12px', border: `1px solid ${theme.line}`,
+                background: 'transparent', color: '#D96B5C',
+                borderRadius: 999, cursor: 'pointer',
+                fontFamily: theme.font, fontSize: 12, fontWeight: 600,
+              }}>Remove photo</button>
+            </div>
+          </div>
+        )}
 
         {/* Big calorie display + macro split bar */}
         <div style={{
@@ -4843,6 +5007,12 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
   const daysSince = lastDate ? Math.floor((todayMs - lastDate.getTime()) / 86400000) : null;
   const stale = daysSince != null && daysSince > 7;
   const needsUpdate = daysSince != null && daysSince >= 10;
+  // Next weigh-in = last weigh-in + 7 days. Red when overdue, highlight on due-day.
+  const nextWeighIsoStr = lastDate
+    ? todayLocalIso(new Date(lastDate.getTime() + 7 * 86400000)) : null;
+  const daysUntilNext = daysSince != null ? (7 - daysSince) : null;
+  const weighInToday = daysUntilNext === 0;
+  const weighInOverdue = daysUntilNext != null && daysUntilNext < 0;
 
   const weightTrend = (() => {
     if (weightLog.length < 2) return null;
@@ -5066,6 +5236,37 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
           </div>
         )}
 
+        {/* Next weigh-in reminder */}
+        {lastDate && nextWeighIsoStr && (
+          <div onClick={() => setShowWeightEntry(true)} style={{
+            marginTop: 10, padding: '10px 12px', cursor: 'pointer',
+            background: weighInOverdue
+              ? 'rgba(217,107,92,0.12)'
+              : (weighInToday ? 'rgba(224,162,74,0.14)' : theme.surfaceAlt),
+            border: `1px solid ${weighInOverdue ? 'rgba(217,107,92,0.45)'
+              : (weighInToday ? 'rgba(224,162,74,0.5)' : theme.line)}`,
+            borderRadius: theme.radius.btn,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+          }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+              color: weighInOverdue ? '#B23A2A' : (weighInToday ? '#8A5A1F' : theme.inkSoft),
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+            }}>{weighInOverdue ? 'Overdue'
+              : weighInToday ? 'Weigh in today'
+              : 'Next weigh-in'}</div>
+            <div style={{
+              fontFamily: theme.numFont, fontSize: 13, fontWeight: 600,
+              color: weighInOverdue ? '#B23A2A' : (weighInToday ? '#8A5A1F' : theme.ink),
+            }}>
+              {weighInOverdue
+                ? `${Math.abs(daysUntilNext)}d late`
+                : weighInToday ? 'Tap to log'
+                : `in ${daysUntilNext}d · ${nextWeighIsoStr}`}
+            </div>
+          </div>
+        )}
+
         {weightLog.length > 0 && (
           <button onClick={async () => {
             const n = weightLog.length;
@@ -5112,7 +5313,7 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
 // ─────────────────────────────────────────────────────────────
 // Exercise calendar — Week / Month / Year views with filter chips
 // ─────────────────────────────────────────────────────────────
-function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate }) {
+function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate, restDays = new Set() }) {
   const [chipExpanded, setChipExpanded] = React.useState(false);
   if (!bucket || !bucket.bars || !bucket.bars.length) return null;
   const todayIso = todayLocalIso();
@@ -5168,27 +5369,34 @@ function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSel
       : [];
     const isToday = iso === todayIso;
     const isFuture = iso > todayIso;
+    const isRest = restDays.has(iso);
     const hasSelected = selectedType && dayTypes.includes(selectedType);
     const anyLogged = dayTypes.length > 0;
     const dimCell = selectedType && anyLogged && !hasSelected;
     const borderColor = hasSelected
       ? (EX_COLOR_MAP[selectedType] || theme.accent)
-      : (isToday ? theme.ink : theme.line);
-    const borderWidth = hasSelected || isToday ? 1.5 : 1;
+      : (isToday ? theme.ink : (isRest ? '#7A8BD1' : theme.line));
+    const borderWidth = hasSelected || isToday || isRest ? 1.5 : 1;
     return (
       <div
         onClick={() => !isFuture && onOpenDate && onOpenDate(iso)}
         style={{
           width: size, height: size,
-          background: isFuture ? theme.bg : theme.surface,
+          background: isFuture ? theme.bg : (isRest ? 'rgba(122,139,209,0.12)' : theme.surface),
           border: `${borderWidth}px ${isToday ? 'dashed' : 'solid'} ${borderColor}`,
           borderRadius: 8, position: 'relative',
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? 0.5 : (dimCell ? 0.5 : 1),
           transition: 'opacity 0.15s, border 0.15s',
         }}
-        title={anyLogged ? `${iso} · ${dayTypes.join(', ')}` : iso}
+        title={`${iso}${isRest ? ' · Rest day' : ''}${anyLogged ? ` · ${dayTypes.join(', ')}` : ''}`}
       >
+        {isRest && (
+          <div style={{
+            position: 'absolute', top: 2, right: 3,
+            fontSize: Math.max(8, fontSize - 2), lineHeight: 1,
+          }}>🌙</div>
+        )}
         <div style={{
           position: 'absolute', top: 3, left: 5,
           fontFamily: theme.font, fontSize,
@@ -5456,7 +5664,7 @@ function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSel
   );
 }
 
-function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], setWeightLog, log = [], setTab, setLogDate, settings = {}, setSettings }) {
+function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLog = [], setWeightLog, log = [], setTab, setLogDate, settings = {}, setSettings, wellnessMap = {} }) {
   const [range, setRange] = useStateProg('Week');
   const [offset, setOffset] = useStateProg(0);
   const [selIdx, setSelIdx] = useStateProg(null); // index within bucket
@@ -5792,6 +6000,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           selectedType={selectedExType}
           setSelectedType={setSelectedExType}
           EX_COLOR_MAP={EX_COLOR_MAP}
+          restDays={new Set(Object.entries(wellnessMap).filter(([,w]) => w && w.restDay).map(([d]) => d))}
           onOpenDate={(iso) => {
             if (setLogDate) setLogDate(iso);
             if (setTab) setTab('home');
@@ -6094,6 +6303,9 @@ function AskCoachSheet({ theme, range, bucketLabel, data, targets, setTargets, e
       exercise_kcal: ex ? Math.round(ex.kcal) : 0,
       exercise_km: ex && ex.km ? +ex.km.toFixed(1) : 0,
       exercise_types: ex && ex.byType ? Object.keys(ex.byType) : [],
+      rehab_done: d.rehab != null ? !!d.rehab : null,
+      mobility_checkins: d.mobility != null ? +d.mobility : null, // 0-3
+      rest_day: d.restDay != null ? !!d.restDay : null,
       weight_kg: w ? +w.kg.toFixed(1) : null,
     };
   });
@@ -6113,10 +6325,12 @@ function AskCoachSheet({ theme, range, bucketLabel, data, targets, setTargets, e
     exTypeTotals[t].count += 1;
     sessions.push({
       date: e.date, type: t,
+      name: e.details?.name || null,
       duration_min: +e.duration || null,
       distance_km:  +e.distance || null,
       kcal: +e.kcal || null,
       runType: e.details?.runType || null,
+      source: e.details?.source || null,
       notes: e.notes || null,
     });
   });
@@ -6147,9 +6361,17 @@ Weight: ${weightCtx ? JSON.stringify(weightCtx) : 'no weigh-ins in range'}
 
 Rules:
 - You have the FULL dataset above: every macro (incl. sat fat, sugar, fibre), every
-  wellness metric (incl. reading minutes), every exercise session (incl. run subtype
-  and distance), and weight history. Use it. Do not claim data is "missing" unless a
-  specific field is literally null across the range.
+  wellness metric (incl. reading minutes, rehab done/not done, mobility check-ins 0-3,
+  rest_day flag), every exercise session (incl. run subtype, distance, user-given
+  name, source like 'strava' or manual), and weight history. Use it.
+- Exercises named "Rehab", "Mobility", or similar are distinct practices from main
+  workouts — factor them into recovery/consistency commentary, not raw training
+  volume.
+- Rest days matter: when computing training averages (minutes/week, kcal/week),
+  EXCLUDE rest days from the denominator if the user asks about training load per
+  active day. Clearly state whether you're averaging over calendar days or active days.
+- Do not claim data is "missing" unless a specific field is literally null across the
+  range.
 - Be specific. Cite numbers from the data.
 - Be concise (under 150 words unless asked for more).
 - If asked for a "recap" or "summary", give: kcal avg vs goal, protein adherence,
@@ -6362,7 +6584,12 @@ If — and only if — you are recommending a specific, concrete change that wou
 function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset, canGoBack, canGoForward, offset, exerciseLog = [], settings = {}, setSettings }) {
   const [reordering, setReordering] = React.useState(false);
   const [drill, setDrill] = React.useState(null);
-  const [hidden, setHidden] = React.useState(() => new Set()); // keys of faded metrics
+  // Persisted hidden metrics live in settings.wellnessHidden (array of keys).
+  // Local fade toggle is a separate state — tap-label fades but doesn't remove.
+  const hiddenPersisted = React.useMemo(() =>
+    new Set((settings && Array.isArray(settings.wellnessHidden)) ? settings.wellnessHidden : []),
+    [settings && settings.wellnessHidden]);
+  const [faded, setFaded] = React.useState(() => new Set());
 
   // Index exercise minutes by date (YYYY-MM-DD)
   const exByDate = React.useMemo(() => {
@@ -6385,8 +6612,10 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
     readingMin:  { k: 'readingMin', label: 'Reading', unit: 'min',  color: '#B87A3A', min: 0, max: 60,   fmt: v => Math.round(+v || 0) },
     stress:      { k: 'stress',    label: 'Stress',   unit: '/5',   color: '#D96B5C', min: 1, max: 5,    fmt: v => (+v || 0).toFixed(1) },
     kcal:        { k: 'kcal',      label: 'Calories', unit: '',     color: '#8A8A8A', min: 1400, max: 2700, fmt: v => Math.round(+v || 0) },
+    mobility:    { k: 'mobility',  label: 'Mobility', unit: '/3',   color: '#6BAF92', min: 0, max: 3,    fmt: v => Math.round(+v || 0) },
+    rehab:       { k: 'rehab',     label: 'Rehab',    unit: '',     color: '#2B7A5C', min: 0, max: 1,    fmt: v => (+v ? 'Done' : '—') },
   };
-  const DEFAULT_ORDER = ['energy','sleepHrs','exerciseMin','coffees','water','readingMin','stress','kcal'];
+  const DEFAULT_ORDER = ['energy','sleepHrs','exerciseMin','coffees','water','readingMin','stress','kcal','mobility','rehab'];
   const savedOrder = (settings && Array.isArray(settings.wellnessOrder)) ? settings.wellnessOrder : null;
   const order = (() => {
     if (!savedOrder) return DEFAULT_ORDER;
@@ -6396,23 +6625,39 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
     return savedOrder.filter(k => METRICS_BY_KEY[k])
       .concat(DEFAULT_ORDER.filter(k => !seen.has(k)));
   })();
-  const metrics = order.map((k, i) => {
+  const visibleOrder = order.filter(k => !hiddenPersisted.has(k));
+  const metrics = visibleOrder.map((k, i) => {
     const base = METRICS_BY_KEY[k];
     return { ...base, hero: i === 0 };
   });
-
-  const moveMetric = (fromIdx, dir) => {
+  const hiddenMetrics = order.filter(k => hiddenPersisted.has(k))
+    .map(k => METRICS_BY_KEY[k]).filter(Boolean);
+  const toggleHidden = (key) => {
     if (!setSettings) return;
-    const toIdx = fromIdx + dir;
-    if (toIdx < 0 || toIdx >= order.length) return;
+    const cur = new Set(hiddenPersisted);
+    if (cur.has(key)) cur.delete(key); else cur.add(key);
+    setSettings({ ...(settings || {}), wellnessHidden: [...cur] });
+  };
+
+  const moveMetric = (fromVisIdx, dir) => {
+    if (!setSettings) return;
+    const toVisIdx = fromVisIdx + dir;
+    if (toVisIdx < 0 || toVisIdx >= visibleOrder.length) return;
+    const fromKey = visibleOrder[fromVisIdx];
+    const toKey = visibleOrder[toVisIdx];
     const next = order.slice();
-    [next[fromIdx], next[toIdx]] = [next[toIdx], next[fromIdx]];
+    const a = next.indexOf(fromKey), b = next.indexOf(toKey);
+    [next[a], next[b]] = [next[b], next[a]];
     setSettings({ ...(settings || {}), wellnessOrder: next });
   };
   const resetOrder = () => {
     if (!setSettings) return;
-    setSettings({ ...(settings || {}), wellnessOrder: DEFAULT_ORDER });
+    setSettings({ ...(settings || {}), wellnessOrder: DEFAULT_ORDER, wellnessHidden: [] });
   };
+
+  // If true, exercise-minute averages skip rest-day entries in the denominator.
+  // Default true — the user's "active-day" view.
+  const excludeRest = !(settings && settings.includeRestInAverages);
 
   // Normalize data to row objects per day/bucket
   const rows = (range === 'Year')
@@ -6420,15 +6665,24 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
         const monthDays = HISTORY.filter(x => x.y === d.y && x.m === d.m);
         const avg = (key) => monthDays.length
           ? monthDays.reduce((s, x) => s + (x[key] || 0), 0) / monthDays.length : 0;
-        // Average exercise minutes for days in this month
-        const exAvg = monthDays.length
-          ? monthDays.reduce((s, x) => s + (exByDate[x.iso] || 0), 0) / monthDays.length : 0;
+        // Average exercise minutes across the month — optionally excluding rest days.
+        const exDays = excludeRest ? monthDays.filter(x => !x.restDay) : monthDays;
+        const exAvg = exDays.length
+          ? exDays.reduce((s, x) => s + (exByDate[x.iso] || 0), 0) / exDays.length : 0;
         const o = { label: d.barLabel, exerciseMin: exAvg };
         metrics.forEach(m => { if (m.k !== 'exerciseMin') o[m.k] = avg(m.k); });
         return o;
       })
     : data.map(d => {
-        const o = { label: d.barLabel, exerciseMin: d.iso ? (exByDate[d.iso] || 0) : 0 };
+        const isRest = !!d.restDay;
+        const minsToday = d.iso ? (exByDate[d.iso] || 0) : 0;
+        const o = {
+          label: d.barLabel,
+          // Non-Year ranges show per-day value, not an average — but when
+          // excludeRest is on, zero out rest-day minutes so the strip doesn't
+          // mislead. The raw log still preserves the actual session data.
+          exerciseMin: (excludeRest && isRest) ? 0 : minsToday,
+        };
         metrics.forEach(m => { if (m.k !== 'exerciseMin') o[m.k] = d[m.k] || 0; });
         return o;
       });
@@ -6502,6 +6756,19 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
               fontFamily: theme.font, fontSize: 10, fontWeight: 600,
             }}>Reset</button>
           )}
+          {reordering && setSettings && (
+            <button onClick={() => setSettings({
+              ...(settings || {}), includeRestInAverages: !settings?.includeRestInAverages,
+            })} title="Toggle whether rest days count in exercise averages"
+            style={{
+              padding: '3px 8px',
+              border: `1px solid ${settings?.includeRestInAverages ? theme.ink : theme.line}`,
+              background: settings?.includeRestInAverages ? theme.ink : 'transparent',
+              color: settings?.includeRestInAverages ? theme.bg : theme.inkSoft,
+              borderRadius: 999, cursor: 'pointer',
+              fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+            }}>Rest: {settings?.includeRestInAverages ? 'in' : 'out'}</button>
+          )}
         </div>
         {setRange && (
           <div style={{
@@ -6559,6 +6826,29 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
         fontFamily: theme.font, fontSize: 12, color: theme.inkMute, marginBottom: 14,
       }}>All metrics on one timeline. Scan for patterns — does energy dip with poor sleep?</div>
 
+      {reordering && hiddenMetrics.length > 0 && (
+        <div style={{
+          marginBottom: 12, padding: '10px 12px',
+          background: theme.surfaceAlt, borderRadius: theme.radius.btn,
+        }}>
+          <div style={{
+            fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+            marginBottom: 8,
+          }}>Hidden · tap to restore</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {hiddenMetrics.map(hm => (
+              <button key={hm.k} onClick={() => toggleHidden(hm.k)} style={{
+                padding: '4px 10px', border: `1px dashed ${hm.color}`,
+                background: 'transparent', color: hm.color,
+                borderRadius: 999, cursor: 'pointer',
+                fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+              }}>+ {hm.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Strip chart SVG */}
       <svg width="100%" viewBox={`0 0 ${STRIP_W} ${TOTAL_H}`}
         preserveAspectRatio="xMidYMid meet"
@@ -6585,7 +6875,7 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
 
         {metrics.map((m, mi) => {
           const isHero = !!m.hero;
-          const isHidden = hidden.has(m.k);
+          const isHidden = faded.has(m.k);
           const stripH = isHero ? HERO_H : STRIP_H;
           const yTop = isHero ? 0 : HERO_H + 10 + (STRIP_H + 6) * (mi - 1);
           const yBottom = yTop + stripH;
@@ -6648,9 +6938,9 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
                 <rect x={0} y={yTop} width={PAD_L} height={stripH}
                   fill="transparent" pointerEvents="all"
                   onClick={() => {
-                    const next = new Set(hidden);
+                    const next = new Set(faded);
                     if (next.has(m.k)) next.delete(m.k); else next.add(m.k);
-                    setHidden(next);
+                    setFaded(next);
                   }}
                   style={{ cursor: 'pointer' }}/>
               )}
@@ -6673,6 +6963,14 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
                     <path d={`M${PAD_L - 16},${yTop + stripH - 9} l-5,-5 l10,0 z`}
                       fill={mi < metrics.length - 1 ? theme.ink : theme.inkMute}
                       opacity={mi < metrics.length - 1 ? 1 : 0.5}/>
+                  </g>
+                  {/* Remove (×) — right side */}
+                  <g onClick={() => toggleHidden(m.k)} style={{ cursor: 'pointer' }}>
+                    <rect x={STRIP_W - PAD_R - 20} y={yTop + stripH/2 - 9}
+                      width={18} height={18} rx="9"
+                      fill="rgba(217,107,92,0.15)"/>
+                    <path d={`M${STRIP_W - PAD_R - 15},${yTop + stripH/2 - 4} l8,8 M${STRIP_W - PAD_R - 7},${yTop + stripH/2 - 4} l-8,8`}
+                      stroke="#D96B5C" strokeWidth="1.6" strokeLinecap="round"/>
                   </g>
                 </React.Fragment>
               )}
@@ -11372,7 +11670,7 @@ function App({ session }) {
     } catch {}
     return {};
   });
-  const wellnessDefaults = { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0, rehab: false, mobility: {} };
+  const wellnessDefaults = { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0, rehab: false, mobility: {}, restDay: false };
   const wellness = (date) => wellnessMap[date] || { ...wellnessDefaults };
   const setWellness = (date, patch) => {
     setWellnessMap(prev => ({
@@ -11494,6 +11792,10 @@ function App({ session }) {
           stress: w.stress || 0,
           energy: w.energy || 0,
           readingMin: +w.reading_min || 0,
+          rehab: (w.extras && w.extras.rehab) ? 1 : 0,
+          mobility: (w.extras && w.extras.mobility)
+            ? Object.values(w.extras.mobility).filter(Boolean).length : 0,
+          restDay: (w.extras && w.extras.restDay) ? 1 : 0,
         });
       });
 
@@ -11510,6 +11812,7 @@ function App({ session }) {
           readingMin: +w.reading_min || 0,
           rehab: !!extras.rehab,
           mobility: extras.mobility || {},
+          restDay: !!extras.restDay,
         };
       });
       setWellnessMap(map);
@@ -11612,6 +11915,7 @@ function App({ session }) {
       extras: {
         rehab: !!w.rehab,
         mobility: w.mobility || {},
+        restDay: !!w.restDay,
       },
     }));
     if (!rows.length) return;
@@ -11856,6 +12160,7 @@ function App({ session }) {
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
               exerciseLog={exerciseLog} weightLog={weightLog} setWeightLog={setWeightLog} log={log}
               setTab={setTab} setLogDate={setLogDate}
+              wellnessMap={wellnessMap || {}}
               settings={settings} setSettings={setSettings} />}
             {tab === 'profile' && (
               <ProfileScreen theme={theme}
