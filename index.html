@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -8555,7 +8555,8 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
               )}
 
               {/* Area fill */}
-              {n > 1 && <path d={areaPath} fill={`url(#${gradId})`}/>}
+              {n > 1 && <path d={areaPath} fill={`url(#${gradId})`}
+                pointerEvents="none"/>}
 
               {/* Line */}
               {n > 1 && (
@@ -8563,7 +8564,8 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
                   stroke={m.color}
                   strokeWidth={isHero ? 2 : 1.5}
                   strokeLinecap="round" strokeLinejoin="round"
-                  opacity={isHero ? 1 : 0.85}/>
+                  opacity={isHero ? 1 : 0.85}
+                  pointerEvents="none"/>
               )}
 
               {/* Hover dot */}
