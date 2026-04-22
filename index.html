@@ -378,7 +378,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1579,7 +1579,8 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
     }}>
       {/* Header: greeting + date scrub */}
       <Header theme={theme} onOpenProfile={onOpenProfile}
-        selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+        selectedDate={selectedDate} setSelectedDate={setSelectedDate}
+        log={log} settings={settings} setSettings={setSettings} />
 
       {/* HERO — Calorie ring */}
       <div style={{
@@ -2113,7 +2114,77 @@ function UnsyncedBadge({ theme }) {
   );
 }
 
-function Header({ theme, onOpenProfile, selectedDate, setSelectedDate }) {
+// Streak-tier definitions. Kept close to Header so both the tier logic
+// and the chip colours live in one place. Outer flame colour + optional
+// brighter "core" layer + chip bg tint + chip text colour. Size in px
+// for the flame svg; chip scales to fit.
+const STREAK_TIERS = [
+  { min: 730, size: 22, outer: '#F2A400', core: '#FFFFFF', bg: '#FFEA8A',  fg: '#4F3807', label: '2 years'  },
+  { min: 365, size: 20, outer: '#E8A80F', core: '#FFFBE0', bg: '#FFF3BE',  fg: '#4F3807', label: '1 year'   },
+  { min: 180, size: 18, outer: '#F0A81A', core: '#FFF0B3', bg: '#FFEB9E',  fg: '#634208', label: '6 months' },
+  { min: 100, size: 17, outer: '#F08C10', core: '#FFDE5C', bg: '#FFE08F',  fg: '#5A3F0B', label: '100 days' },
+  { min:  60, size: 16, outer: '#F26A0F', core: '#FFD15E', bg: '#FFD09E',  fg: '#5A2F0F', label: '2 months' },
+  { min:  30, size: 15, outer: '#E86F28', core: null,      bg: '#FFDDB3',  fg: '#5A2F0F', label: '1 month'  },
+  { min:  14, size: 14, outer: '#E38817', core: null,      bg: '#FFE9C2',  fg: '#6B4415', label: '2 weeks'  },
+  { min:   7, size: 13, outer: '#E0A24A', core: null,      bg: '#FFF4E5',  fg: '#8A5A1F', label: '1 week'   },
+  { min:   3, size: 12, outer: '#C6C3BC', core: null,      bg: '#F2EFE4',  fg: '#5C5C58', label: null       }, // falls back to "N days"
+];
+function streakTier(days) {
+  return STREAK_TIERS.find(t => days >= t.min) || null;
+}
+// Short-label generator. < 30 days = N days. 30-364 = months. 365+ = years.
+function streakShortLabel(days) {
+  if (days < 30) return `${days} ${days === 1 ? 'day' : 'days'}`;
+  if (days < 365) {
+    const m = Math.floor(days / 30);
+    return `${m} ${m === 1 ? 'month' : 'months'}`;
+  }
+  const y = Math.floor(days / 365);
+  return `${y} ${y === 1 ? 'year' : 'years'}`;
+}
+
+function StreakChip({ theme, streak, todayLogged, settings, setSettings }) {
+  if (!streak || streak < 3) return null;
+  const tier = streakTier(streak);
+  if (!tier) return null;
+  // At-risk state: streak alive but nothing yet logged today, after 9pm.
+  const now = new Date();
+  const atRisk = !todayLogged && now.getHours() >= 21;
+  const mode = (settings && settings.streakLabelMode) || 'short';
+  const labelText = mode === 'days'
+    ? `${streak} ${streak === 1 ? 'day' : 'days'}`
+    : (tier.label || `${streak} days`);
+  const displayText = atRisk ? `${streak} · at risk` : labelText;
+  const bg = atRisk ? '#FDECEA' : tier.bg;
+  const fg = atRisk ? '#B3261E' : tier.fg;
+  const outer = atRisk ? '#D96B5C' : tier.outer;
+  const core = atRisk ? null : tier.core;
+  const toggle = () => {
+    if (!setSettings) return;
+    setSettings({ ...(settings || {}), streakLabelMode: mode === 'short' ? 'days' : 'short' });
+  };
+  const flamePath = 'M 6 24 c -4 -4 -3 -11 2 -14 c 0 3 2 4 3 4 c 0 -4 4 -6 6 -10 c 0 8 6 10 6 16 c 0 5 -4 8 -8 8 c -4 0 -9 -2 -9 -4 z';
+  const corePath = 'M 9 22 c -2 -2 -2 -6 1 -8 c 0 2 1 2 2 2 c 0 -2 3 -3 4 -5 c 0 4 3 5 3 9 c 0 3 -2 4 -5 4 c -3 0 -5 -1 -5 -2 z';
+  return (
+    <button onClick={toggle} title={mode === 'short' ? 'Show day count' : 'Show label'} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '5px 12px 5px 8px',
+      borderRadius: 999, border: 'none',
+      background: bg, color: fg,
+      fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+      letterSpacing: '0.02em', cursor: 'pointer',
+      whiteSpace: 'nowrap',
+    }}>
+      <svg width={tier.size} height={tier.size + 2} viewBox="0 0 24 28">
+        <path d={flamePath} fill={outer}/>
+        {core && <path d={corePath} fill={core}/>}
+      </svg>
+      {displayText}
+    </button>
+  );
+}
+
+function Header({ theme, onOpenProfile, selectedDate, setSelectedDate, log = [], settings, setSettings }) {
   const [calOpen, setCalOpen] = React.useState(false);
   const displayName = localStorage.getItem('cal_display_name') || 'You';
   const headerInitials = displayName.split(/\s+/).filter(Boolean)
@@ -2160,6 +2231,24 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate }) {
           }}>{selectedDate === todayIso ? (isEditorial ? 'Today' : 'Good morning') : 'Day view'}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {(() => {
+            // Consecutive days ending today (or yesterday, if today not
+            // logged yet) that have at least one meal.
+            const hasLog = new Set(log.map(e => e.date || todayIso));
+            const todayLogged = hasLog.has(todayIso);
+            let streak = 0;
+            const cur = new Date(todayIso + 'T00:00:00');
+            // If today isn't logged yet but yesterday was, keep the streak
+            // alive (don't display as zero during the daytime).
+            if (!todayLogged) cur.setDate(cur.getDate() - 1);
+            while (true) {
+              const iso = cur.toISOString().slice(0, 10);
+              if (hasLog.has(iso)) { streak++; cur.setDate(cur.getDate() - 1); }
+              else break;
+            }
+            return <StreakChip theme={theme} streak={streak} todayLogged={todayLogged}
+              settings={settings} setSettings={setSettings}/>;
+          })()}
           <UnsyncedBadge theme={theme} />
           <button onClick={onOpenProfile} style={{
             width: 36, height: 36, borderRadius: 18, border: 'none', cursor: 'pointer',
