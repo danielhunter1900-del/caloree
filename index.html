@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1133,7 +1133,7 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
   React.useEffect(() => { localStorage.setItem('cal_wellness_open', open ? '1' : '0'); }, [open]);
 
   const [reordering, setReordering] = React.useState(false);
-  const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility','restDay'];
+  const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility'];
   const savedOrder = (settings && Array.isArray(settings.wellnessRowOrder)) ? settings.wellnessRowOrder : null;
   const rowOrder = (() => {
     if (!savedOrder) return DEFAULT_ROW_ORDER;
@@ -1434,25 +1434,6 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
         </div>
       </div>
 
-      {/* Rest day — flags the day; exercises can still be logged */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('restDay') }}>
-        <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('restDay')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
-          <div style={iconBox}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M12 9a5 5 0 0 1-6.5-6.5A5.5 5.5 0 1 0 12 9z" stroke={theme.ink} strokeWidth="1.3" fill="none" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          Rest day
-        </div>
-        <button onClick={() => setWellness({ ...w, restDay: !w.restDay })} style={{
-          padding: '8px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
-          background: w.restDay ? '#7A8BD1' : theme.surfaceAlt,
-          color: w.restDay ? '#FFFFFF' : theme.inkSoft,
-          fontFamily: theme.font, fontSize: 12, fontWeight: 700,
-          letterSpacing: '0.02em',
-        }}>{w.restDay ? 'Rest ✓' : 'Active'}</button>
-      </div>
       </div>}
     </div>
   );
@@ -10198,7 +10179,7 @@ function HistorySheet({ theme, session, log, setLog, onClose }) {
   );
 }
 
-function ExerciseLogSheet({ theme, onClose, session, onSave, customTypes = [], onAddCustomType }) {
+function ExerciseLogSheet({ theme, onClose, session, onSave, customTypes = [], onAddCustomType, date, isRestDay = false, onToggleRestDay }) {
   const DEFAULT_TYPES = [
     { k: 'Run',           met: 9.8,  icon: '🏃' },
     { k: 'Cycling',       met: 7.5,  icon: '🚴' },
@@ -10236,7 +10217,7 @@ function ExerciseLogSheet({ theme, onClose, session, onSave, customTypes = [], o
     }
   }, [type, duration]);
 
-  const today = todayLocalIso();
+  const today = date || todayLocalIso();
 
   const saveManual = async () => {
     if (!duration && !kcal) { setError('Enter at least duration or calories.'); return; }
@@ -10338,10 +10319,26 @@ Workout: ${aiText.trim()}`;
             fontFamily: theme.titleFont, fontSize: 18, fontWeight: theme.titleWeight,
             color: theme.ink, letterSpacing: theme.letter,
           }}>Log exercise</div>
-          <button onClick={onClose} style={{
-            border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 22, color: theme.inkMute, padding: 4, lineHeight: 1,
-          }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {onToggleRestDay && (
+              <button onClick={onToggleRestDay} title="Flag this day as a rest day"
+                style={{
+                  padding: '6px 12px', borderRadius: 999, cursor: 'pointer',
+                  border: `1px solid ${isRestDay ? '#7A8BD1' : theme.line}`,
+                  background: isRestDay ? 'rgba(122,139,209,0.15)' : 'transparent',
+                  color: isRestDay ? '#4A5A9E' : theme.inkSoft,
+                  fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                <span style={{ fontSize: 14, lineHeight: 1 }}>🌙</span>
+                {isRestDay ? 'Rest day ✓' : 'Rest day'}
+              </button>
+            )}
+            <button onClick={onClose} style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 22, color: theme.inkMute, padding: 4, lineHeight: 1,
+            }}>×</button>
+          </div>
         </div>
 
         {/* Mode tabs */}
@@ -12366,6 +12363,12 @@ function App({ session }) {
                 const next = [...(settings.customExerciseTypes || []), t];
                 applyCustomExerciseTypes([t]);
                 setSettings({ ...settings, customExerciseTypes: next });
+              }}
+              date={logDate || todayLocalIso()}
+              isRestDay={!!(wellnessMap[logDate || todayLocalIso()] || {}).restDay}
+              onToggleRestDay={() => {
+                const d = logDate || todayLocalIso();
+                setWellness(d, { restDay: !(wellnessMap[d] || {}).restDay });
               }}
               onClose={() => setShowExercise(false)}
               onSave={(entry) => setExerciseLog(prev => [...prev, entry])}/>
