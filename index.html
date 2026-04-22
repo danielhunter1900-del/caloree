@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1098,25 +1098,36 @@ function SummaryChip({ theme, icon, value, color }) {
   );
 }
 
-function ReorderArrows({ idx, total, onMove, theme }) {
+function ReorderArrows({ idx, total, onMove, theme, onHide }) {
   const canUp = idx > 0;
   const canDown = idx < total - 1;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 6 }}>
-      <button onClick={() => canUp && onMove(idx, -1)} disabled={!canUp} style={{
-        width: 22, height: 14, padding: 0, lineHeight: 1,
-        border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
-        borderRadius: 4, cursor: canUp ? 'pointer' : 'default',
-        opacity: canUp ? 1 : 0.3, fontSize: 10, color: theme.ink,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>▲</button>
-      <button onClick={() => canDown && onMove(idx, 1)} disabled={!canDown} style={{
-        width: 22, height: 14, padding: 0, lineHeight: 1,
-        border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
-        borderRadius: 4, cursor: canDown ? 'pointer' : 'default',
-        opacity: canDown ? 1 : 0.3, fontSize: 10, color: theme.ink,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>▼</button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <button onClick={() => canUp && onMove(idx, -1)} disabled={!canUp} style={{
+          width: 22, height: 14, padding: 0, lineHeight: 1,
+          border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+          borderRadius: 4, cursor: canUp ? 'pointer' : 'default',
+          opacity: canUp ? 1 : 0.3, fontSize: 10, color: theme.ink,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>▲</button>
+        <button onClick={() => canDown && onMove(idx, 1)} disabled={!canDown} style={{
+          width: 22, height: 14, padding: 0, lineHeight: 1,
+          border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+          borderRadius: 4, cursor: canDown ? 'pointer' : 'default',
+          opacity: canDown ? 1 : 0.3, fontSize: 10, color: theme.ink,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>▼</button>
+      </div>
+      {onHide && (
+        <button onClick={onHide} title="Hide from Home + Trends" style={{
+          width: 22, height: 22, padding: 0, lineHeight: 1,
+          border: '1px solid rgba(217,107,92,0.4)', background: 'rgba(217,107,92,0.12)',
+          borderRadius: 11, cursor: 'pointer',
+          color: '#D96B5C', fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>×</button>
+      )}
     </div>
   );
 }
@@ -1133,6 +1144,26 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
   React.useEffect(() => { localStorage.setItem('cal_wellness_open', open ? '1' : '0'); }, [open]);
 
   const [reordering, setReordering] = React.useState(false);
+  // Home row key → Trends metric key (settings.wellnessHidden uses Trends keys
+  // so toggles here sync with the Trends signals edit UI automatically).
+  const HOME_TO_TRENDS_KEY = {
+    coffee: 'coffees', water: 'water', sleep: 'sleepHrs',
+    reading: 'readingMin', stress: 'stress', energy: 'energy',
+    rehab: 'rehab', mobility: 'mobility',
+  };
+  const HOME_ROW_LABELS = {
+    coffee: 'Coffee', water: 'Water', sleep: 'Sleep', reading: 'Reading',
+    stress: 'Stress', energy: 'Energy', rehab: 'Rehab', mobility: 'Mobility',
+  };
+  const hiddenSet = new Set((settings && settings.wellnessHidden) || []);
+  const isHiddenHome = (homeKey) => hiddenSet.has(HOME_TO_TRENDS_KEY[homeKey]);
+  const toggleHidden = (homeKey) => {
+    if (!setSettings) return;
+    const tKey = HOME_TO_TRENDS_KEY[homeKey];
+    const next = new Set(hiddenSet);
+    if (next.has(tKey)) next.delete(tKey); else next.add(tKey);
+    setSettings({ ...(settings || {}), wellnessHidden: [...next] });
+  };
   const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility'];
   const savedOrder = (settings && Array.isArray(settings.wellnessRowOrder)) ? settings.wellnessRowOrder : null;
   const rowOrder = (() => {
@@ -1243,9 +1274,12 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
                 color: reordering ? theme.bg : theme.inkSoft,
                 borderRadius: 999, cursor: 'pointer',
                 fontFamily: theme.font, fontSize: 10, fontWeight: 700,
-              }}>{reordering ? 'Done' : 'Reorder'}</button>
+              }}>{reordering ? 'Done' : 'Edit'}</button>
               {reordering && (
-                <button onClick={resetRowOrder} style={{
+                <button onClick={() => {
+                  resetRowOrder();
+                  setSettings({ ...(settings || {}), wellnessHidden: [] });
+                }} style={{
                   padding: '3px 8px', border: `1px solid ${theme.line}`,
                   background: 'transparent', color: theme.inkSoft,
                   borderRadius: 999, cursor: 'pointer',
@@ -1280,10 +1314,38 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {open && <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {reordering && (() => {
+        const hiddenHomeKeys = Object.keys(HOME_TO_TRENDS_KEY)
+          .filter(k => isHiddenHome(k));
+        if (!hiddenHomeKeys.length) return null;
+        return (
+          <div style={{
+            order: -1,
+            padding: '10px 0 4px',
+            borderTop: `1px solid ${theme.line}`,
+          }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>Hidden · tap to restore</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {hiddenHomeKeys.map(k => (
+                <button key={k} onClick={() => toggleHidden(k)} style={{
+                  padding: '4px 10px', border: `1px dashed ${theme.line}`,
+                  background: 'transparent', color: theme.inkSoft,
+                  borderRadius: 999, cursor: 'pointer',
+                  fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+                }}>+ {HOME_ROW_LABELS[k]}</button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {/* Coffee */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('coffee') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('coffee'), display: isHiddenHome('coffee') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('coffee')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('coffee')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('coffee')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 6h9v3a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" stroke={theme.ink} strokeWidth="1.5"/>
@@ -1299,9 +1361,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Water */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('water') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('water'), display: isHiddenHome('water') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('water')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('water')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('water')}/>}
           <div style={iconBox}>
             <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
               <path d="M7 1s5 5 5 9a5 5 0 01-10 0c0-4 5-9 5-9z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1315,9 +1377,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Sleep */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('sleep') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('sleep'), display: isHiddenHome('sleep') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('sleep')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('sleep')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('sleep')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M13 9A5 5 0 017 3a5 5 0 106 6z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1331,9 +1393,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Reading */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('reading') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('reading'), display: isHiddenHome('reading') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('reading')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('reading')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('reading')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M2 3.5h5a2 2 0 012 2V13a1.5 1.5 0 00-1.5-1.5H2V3.5zM14 3.5H9a2 2 0 00-2 2V13a1.5 1.5 0 011.5-1.5H14V3.5z"
@@ -1348,9 +1410,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Stress */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('stress') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('stress'), display: isHiddenHome('stress') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('stress')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('stress')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('stress')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 10c1-2 3-3 5-3s4 1 5 3" stroke={theme.ink} strokeWidth="1.5" strokeLinecap="round"/>
@@ -1364,9 +1426,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Energy */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('energy') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('energy'), display: isHiddenHome('energy') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('energy')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('energy')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('energy')}/>}
           <div style={iconBox}>
             <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
               <path d="M8 1L2 9h4l-1 6 6-8H7l1-6z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1378,9 +1440,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Rehab — did you do it today? */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('rehab') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('rehab'), display: isHiddenHome('rehab') ? 'none' : 'flex' }}>
         <div style={label}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('rehab')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('rehab')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('rehab')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M5 10l2 2 4-5" stroke={theme.ink} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1399,9 +1461,9 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
       </div>
 
       {/* Mobility — morning / lunch / afternoon check-ins */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, alignItems: 'flex-start', order: rowOrder.indexOf('mobility') }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, alignItems: 'flex-start', order: rowOrder.indexOf('mobility'), display: isHiddenHome('mobility') ? 'none' : 'flex' }}>
         <div style={{ ...label, paddingTop: 4 }}>
-          {reordering && <ReorderArrows idx={rowOrder.indexOf('mobility')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('mobility')} total={rowOrder.length} onMove={moveRow} theme={theme} onHide={() => toggleHidden('mobility')}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="3.5" r="1.8" stroke={theme.ink} strokeWidth="1.3" fill="none"/>
@@ -1517,25 +1579,27 @@ const PLAN_TEMPLATES = {
 function generatePlan(templateKey, startDateIso) {
   const tmpl = PLAN_TEMPLATES[templateKey];
   if (!tmpl) return null;
+  // Anchor week 1 to the Monday of the week containing startDateIso.
+  // Sessions that fall before startDateIso are skipped — so starting
+  // mid-week just shortens week 1 rather than delaying everything.
   const start = new Date(startDateIso + 'T00:00:00');
-  // Align start to the nearest upcoming Monday (dow 1)
-  const shift = (8 - start.getDay()) % 7;
-  start.setDate(start.getDate() + (shift || 7));
+  const startDow = start.getDay() || 7;           // Sun = 7, Mon = 1
+  const monday = new Date(start);
+  monday.setDate(start.getDate() - (startDow - 1));
   const sessions = [];
   for (let w = 0; w < tmpl.weeks; w++) {
     tmpl.shape.forEach(block => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + w * 7 + ((block.dow - 1 + 7) % 7));
-      sessions.push({
-        date: todayLocalIso(d),
-        week: w + 1,
-        ...block,
-      });
+      const blockDow = block.dow === 0 ? 7 : block.dow; // Sun = 7
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + w * 7 + (blockDow - 1));
+      const iso = todayLocalIso(d);
+      if (iso < startDateIso) return;               // pre-plan-start: skip
+      sessions.push({ date: iso, week: w + 1, ...block });
     });
   }
   return {
     template: templateKey,
-    start_date: todayLocalIso(start),
+    start_date: startDateIso,
     weeks: tmpl.weeks,
     sessions,
     prefs: {
@@ -1567,11 +1631,37 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
   const plan = settings && settings.trainingPlan;
   const [pickingTemplate, setPickingTemplate] = React.useState(false);
   const [templateChoice, setTemplateChoice] = React.useState('hybrid-runner');
+  // Start-date option: 'today' | 'tomorrow' | 'next-mon'
+  const [startChoice, setStartChoice] = React.useState('today');
+  // Week offset from selectedDate's calendar week (0 = this week, +1 next, -1 last)
+  const [weekOffset, setWeekOffset] = React.useState(0);
 
-  const startPlan = (key) => {
-    const newPlan = generatePlan(key, todayLocalIso());
+  // ISO of the Monday of a given date's calendar week.
+  const weekMonday = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    const dow = d.getDay() || 7;                    // Sun = 7
+    d.setDate(d.getDate() - (dow - 1));
+    return todayLocalIso(d);
+  };
+  const addDaysIso = (iso, n) => {
+    const d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return todayLocalIso(d);
+  };
+
+  const startPlan = (key, startKind) => {
+    let startIso = todayLocalIso();
+    if (startKind === 'tomorrow') startIso = addDaysIso(startIso, 1);
+    else if (startKind === 'next-mon') {
+      const t = new Date(startIso + 'T00:00:00');
+      const dow = t.getDay() || 7;
+      const shift = dow === 1 ? 7 : (8 - dow);
+      startIso = addDaysIso(startIso, shift);
+    }
+    const newPlan = generatePlan(key, startIso);
     setSettings({ ...(settings || {}), trainingPlan: newPlan });
     setPickingTemplate(false);
+    setWeekOffset(0);
   };
   const clearPlan = () => {
     if (!confirm('Discard current plan? This keeps your logged workouts but removes the schedule.')) return;
@@ -1624,8 +1714,41 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
               </div>
             );
           })}
-          <button onClick={() => startPlan(templateChoice)} style={{
-            width: '100%', marginTop: 8, padding: 14, border: 'none',
+          {/* Start date picker */}
+          <div style={{
+            margin: '12px 0 4px', fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+          }}>Start on</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              ['today', 'Today'],
+              ['tomorrow', 'Tomorrow'],
+              ['next-mon', 'Next Mon'],
+            ].map(([k, label]) => {
+              const on = startChoice === k;
+              return (
+                <button key={k} onClick={() => setStartChoice(k)} style={{
+                  flex: 1, padding: '10px 0',
+                  border: `1.5px solid ${on ? theme.ink : theme.line}`,
+                  background: on ? theme.ink : 'transparent',
+                  color: on ? theme.bg : theme.ink,
+                  borderRadius: 10, fontFamily: theme.font,
+                  fontSize: 12, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                }}>{label}</button>
+              );
+            })}
+          </div>
+          <div style={{
+            marginTop: 6, padding: '8px 10px', background: theme.surfaceAlt,
+            borderRadius: 8, fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, lineHeight: 1.4,
+          }}>
+            {startChoice === 'today' && 'Plan begins today. If you start mid-week, week 1 is shorter — no wasted days.'}
+            {startChoice === 'tomorrow' && 'Plan begins tomorrow. Good if today already has other things scheduled.'}
+            {startChoice === 'next-mon' && 'Plan begins next Monday — full weeks from day one. Best for structured starts.'}
+          </div>
+
+          <button onClick={() => startPlan(templateChoice, startChoice)} style={{
+            width: '100%', marginTop: 12, padding: 14, border: 'none',
             background: theme.ink, color: theme.bg, borderRadius: 12,
             fontFamily: theme.font, fontSize: 14, fontWeight: 600, cursor: 'pointer',
           }}>{plan ? 'Switch to this plan' : 'Start this plan →'}</button>
@@ -1644,14 +1767,27 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
   // ── Plan exists ──
   const tmpl = PLAN_TEMPLATES[plan.template];
   const todaySess = plan.sessions.find(s => s.date === selectedDate);
-  // Week that selectedDate belongs to
-  const weekOf = todaySess ? todaySess.week : (() => {
-    // Fall back to the first week with future sessions
-    const future = plan.sessions.find(s => s.date >= selectedDate);
-    return future ? future.week : 1;
-  })();
-  const weekSessions = plan.sessions.filter(s => s.week === weekOf)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  // The Monday we're showing (this week ± offset).
+  const viewMondayIso = addDaysIso(weekMonday(selectedDate), weekOffset * 7);
+  // All 7 calendar days of that week — filter plan sessions into them.
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDaysIso(viewMondayIso, i));
+  const weekSessions = weekDays
+    .map(iso => ({ date: iso, session: plan.sessions.find(s => s.date === iso) }))
+    .filter(x => x.session);
+  // Plan-week number of the first session in the current view (for label).
+  const planWeekNumber = weekSessions[0]?.session?.week || null;
+  const thisWeekHasAny = weekSessions.length > 0;
+  const planFirstDate = plan.sessions[0]?.date;
+  const planLastDate = plan.sessions[plan.sessions.length - 1]?.date;
+  const planStartsInFuture = planFirstDate && planFirstDate > selectedDate;
+  const planAlreadyEnded = planLastDate && planLastDate < selectedDate;
+  const jumpToFirstWeek = () => {
+    if (!planFirstDate) return;
+    const fromMon = weekMonday(selectedDate);
+    const toMon = weekMonday(planFirstDate);
+    const diff = Math.round((new Date(toMon) - new Date(fromMon)) / 86400000 / 7);
+    setWeekOffset(diff);
+  };
 
   // Completion: match plan sessions against exerciseLog by date + kind
   const matchLog = (sess) => {
@@ -1674,7 +1810,7 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
     });
     return m;
   })();
-  const thisWeekProgress = completionsByWeek[weekOf] || { total: 0, done: 0 };
+  const thisWeekProgress = planWeekNumber ? (completionsByWeek[planWeekNumber] || { total: 0, done: 0 }) : { total: 0, done: 0 };
   const matched = todaySess ? matchLog(todaySess) : null;
   const nrc = todaySess ? findNRCMatch(todaySess) : null;
   const kindStyle = todaySess ? PLAN_KIND_STYLE[todaySess.kind] : null;
@@ -1811,24 +1947,62 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
         )}
       </div>
 
-      {/* This week ribbon */}
+      {/* Week ribbon + nav arrows */}
       <div style={{ padding: '20px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
-            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            This week
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <button onClick={() => setWeekOffset(o => o - 1)} style={{
+            width: 26, height: 26, borderRadius: 13, border: `1px solid ${theme.line}`,
+            background: theme.surface, cursor: 'pointer', fontSize: 12, color: theme.ink,
+          }}>‹</button>
+          <div style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+            }}>
+              {weekOffset === 0 ? 'This week' : weekOffset > 0 ? `+${weekOffset} wk` : `${weekOffset} wk`}
+              {planWeekNumber && ` · plan wk ${planWeekNumber}`}
+            </div>
+            <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 1 }}>
+              {new Date(viewMondayIso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {' – '}
+              {new Date(addDaysIso(viewMondayIso, 6) + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              {thisWeekHasAny && ` · ${thisWeekProgress.done}/${thisWeekProgress.total} done`}
+            </div>
           </div>
-          <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>
-            {thisWeekProgress.done}/{thisWeekProgress.total} done
-          </div>
+          <button onClick={() => setWeekOffset(o => o + 1)} style={{
+            width: 26, height: 26, borderRadius: 13, border: `1px solid ${theme.line}`,
+            background: theme.surface, cursor: 'pointer', fontSize: 12, color: theme.ink,
+          }}>›</button>
         </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-          {weekSessions.map(s => {
+          {weekDays.map(iso => {
+            const match = weekSessions.find(x => x.date === iso);
+            const s = match?.session;
+            const isToday = iso === selectedDate;
+            if (!s) {
+              return (
+                <div key={iso} style={{
+                  aspectRatio: '1/1', borderRadius: 8,
+                  background: theme.surfaceAlt, border: `1px dashed ${theme.line}`,
+                  position: 'relative',
+                  outline: isToday ? `2px solid ${theme.ink}` : 'none',
+                  outlineOffset: -1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: theme.inkMute, fontSize: 14,
+                }}>
+                  <span>·</span>
+                  <span style={{
+                    position: 'absolute', top: 2, left: 4, fontSize: 8, fontWeight: 700,
+                    color: theme.inkMute, letterSpacing: '0.06em',
+                  }}>{isoWeekdayLabel(iso)[0]}</span>
+                </div>
+              );
+            }
             const done = !!matchLog(s);
-            const isToday = s.date === selectedDate;
             const st = PLAN_KIND_STYLE[s.kind] || PLAN_KIND_STYLE.rest;
             return (
-              <div key={s.date} style={{
+              <div key={iso} style={{
                 aspectRatio: '1/1', borderRadius: 8,
                 background: st.color, position: 'relative',
                 opacity: done ? 0.85 : (isToday ? 1 : 0.55),
@@ -1841,7 +2015,7 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
                 <span style={{
                   position: 'absolute', top: 2, left: 4, fontSize: 8, fontWeight: 700,
                   color: 'rgba(255,255,255,0.9)', letterSpacing: '0.06em',
-                }}>{isoWeekdayLabel(s.date)[0]}</span>
+                }}>{isoWeekdayLabel(iso)[0]}</span>
                 {done && (
                   <span style={{
                     position: 'absolute', bottom: 2, right: 3, fontSize: 9, fontWeight: 700,
@@ -1852,6 +2026,41 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
             );
           })}
         </div>
+
+        {!thisWeekHasAny && planStartsInFuture && (
+          <div style={{
+            marginTop: 10, padding: '10px 12px',
+            background: 'linear-gradient(90deg, rgba(90,61,158,0.1), rgba(90,61,158,0.04))',
+            border: '1px solid rgba(90,61,158,0.3)',
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+                color: '#5A3D9E', letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>Plan starts {new Date(planFirstDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+              <div style={{
+                fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2,
+              }}>Jump ahead to see the first week's sessions.</div>
+            </div>
+            <button onClick={jumpToFirstWeek} style={{
+              padding: '6px 10px', border: 'none',
+              background: '#5A3D9E', color: '#fff',
+              borderRadius: 999, cursor: 'pointer',
+              fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+            }}>Jump →</button>
+          </div>
+        )}
+        {!thisWeekHasAny && planAlreadyEnded && (
+          <div style={{
+            marginTop: 10, padding: '10px 12px',
+            background: theme.surfaceAlt, border: `1px solid ${theme.line}`,
+            borderRadius: 10, fontSize: 12, color: theme.inkSoft, lineHeight: 1.5,
+          }}>
+            Plan finished on {planLastDate}. Change template to start a new one.
+          </div>
+        )}
       </div>
 
       {/* Quick actions */}
@@ -2279,22 +2488,37 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
 
   const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
-  // Floating switch pill — shown on both tracker and planner views.
-  const switchPill = (
-    <button onClick={() => setPlannerMode(m => !m)} style={{
-      position: 'fixed', left: '50%', transform: 'translateX(-50%)',
-      bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
-      padding: '10px 18px', borderRadius: 999, border: 'none',
-      background: plannerMode ? theme.ink : '#5A3D9E',
-      color: '#fff', cursor: 'pointer',
-      boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      fontFamily: theme.font, fontSize: 13, fontWeight: 700,
-      zIndex: 50, letterSpacing: '0.01em',
+  // Top-left toggle between tracker and planner. Segmented pill: Track | Plan.
+  const modeToggle = (
+    <div style={{
+      margin: '4px 16px 4px', alignSelf: 'flex-start',
+      display: 'inline-flex', gap: 2, padding: 2, width: 'fit-content',
+      background: theme.surfaceAlt, border: `1px solid ${theme.line}`,
+      borderRadius: 999,
     }}>
-      <span style={{ fontSize: 14 }}>{plannerMode ? '🍽️' : '📋'}</span>
-      {plannerMode ? 'Back to tracker' : 'View today\u2019s plan'}
-    </button>
+      <button onClick={() => setPlannerMode(false)} style={{
+        padding: '5px 11px', border: 'none',
+        background: !plannerMode ? theme.surface : 'transparent',
+        color: !plannerMode ? theme.ink : theme.inkSoft,
+        borderRadius: 999, cursor: 'pointer',
+        fontFamily: theme.font, fontSize: 11, fontWeight: !plannerMode ? 700 : 500,
+        boxShadow: !plannerMode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 11 }}>🍽️</span>Track
+      </button>
+      <button onClick={() => setPlannerMode(true)} style={{
+        padding: '5px 11px', border: 'none',
+        background: plannerMode ? theme.surface : 'transparent',
+        color: plannerMode ? '#5A3D9E' : theme.inkSoft,
+        borderRadius: 999, cursor: 'pointer',
+        fontFamily: theme.font, fontSize: 11, fontWeight: plannerMode ? 700 : 500,
+        boxShadow: plannerMode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 11 }}>📋</span>Plan
+      </button>
+    </div>
   );
 
   if (plannerMode) {
@@ -2304,6 +2528,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
         <Header theme={theme} onOpenProfile={onOpenProfile}
           selectedDate={selectedDate} setSelectedDate={setSelectedDate}
           log={log} settings={settings} setSettings={setSettings} />
+        {modeToggle}
         <PlannerView theme={theme}
           settings={settings} setSettings={setSettings}
           exerciseLog={exerciseLog}
@@ -2315,7 +2540,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
             settings={settings} setSettings={setSettings}
             onClose={() => setShowPlanPrefs(false)} />
         )}
-        {switchPill}
+        {modeToggle}
       </div>
     );
   }
@@ -2328,6 +2553,8 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
       <Header theme={theme} onOpenProfile={onOpenProfile}
         selectedDate={selectedDate} setSelectedDate={setSelectedDate}
         log={log} settings={settings} setSettings={setSettings} />
+
+      {modeToggle}
 
       {/* HERO — Calorie ring */}
       <div style={{
@@ -2722,8 +2949,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           </div>
         </div>
       )}
-      {switchPill}
-    </div>
+          </div>
   );
 }
 
@@ -8139,11 +8365,14 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
                   </g>
                 </React.Fragment>
               )}
-              {/* Plot-area click: open drilldown */}
-              <rect x={PAD_L} y={yTop} width={STRIP_W - PAD_L} height={stripH}
-                fill="transparent" pointerEvents="all"
-                onClick={() => setDrill(m)}
-                style={{ cursor: 'pointer' }}/>
+              {/* Plot-area click: open drilldown — disabled in edit mode
+                  so the × button isn't swallowed by the row click. */}
+              {!reordering && (
+                <rect x={PAD_L} y={yTop} width={STRIP_W - PAD_L} height={stripH}
+                  fill="transparent" pointerEvents="all"
+                  onClick={() => setDrill(m)}
+                  style={{ cursor: 'pointer' }}/>
+              )}
 
               {/* Area fill */}
               {n > 1 && <path d={areaPath} fill={`url(#${gradId})`}/>}
