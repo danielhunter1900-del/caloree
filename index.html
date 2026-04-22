@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -6878,14 +6878,23 @@ function CorrelationCard({ theme, data, bucketLabel, range, setRange, setOffset,
             color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
           }}>Wellness signals</div>
           {setSettings && (
-            <button onClick={() => setReordering(!reordering)} title="Reorder rows"
+            <button onClick={() => setReordering(!reordering)} title="Edit: reorder, remove, or add signals"
               style={{
-                padding: '3px 8px', border: `1px solid ${reordering ? theme.ink : theme.line}`,
+                padding: '3px 10px', border: `1px solid ${reordering ? theme.ink : theme.line}`,
                 background: reordering ? theme.ink : 'transparent',
                 color: reordering ? theme.bg : theme.inkSoft,
                 borderRadius: 999, cursor: 'pointer',
                 fontFamily: theme.font, fontSize: 10, fontWeight: 700,
-              }}>{reordering ? 'Done' : 'Reorder'}</button>
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}>
+              {!reordering && (
+                <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                  <path d="M10 1l3 3-9 9H1v-3l9-9z" stroke="currentColor" strokeWidth="1.4"
+                    strokeLinejoin="round" fill="none"/>
+                </svg>
+              )}
+              {reordering ? 'Done' : 'Edit'}
+            </button>
           )}
           {reordering && (
             <button onClick={resetOrder} style={{

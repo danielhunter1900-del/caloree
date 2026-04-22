@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Strava detail views — 3 schematics</title>
+<style>
+  :root {
+    --bg: #F5F3EE;
+    --surface: #FFFFFF;
+    --surfaceAlt: #EDE9E0;
+    --line: #D8D4C8;
+    --ink: #1A1A1A;
+    --inkSoft: #5C5A54;
+    --inkMute: #8A867C;
+    --accent: #2B7A5C;
+    --strava: #FC4C02;
+    --blue: #5FA8C9;
+    --red: #D96B5C;
+    --amber: #E0A24A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; }
+  .row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 24px; max-width: 1280px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card h2 {
+    margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt);
+  }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .pill-strava { background: var(--strava); color: #fff; }
+  .phone {
+    width: 340px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    display: flex; flex-direction: column; min-height: 680px;
+  }
+  .phone-header {
+    padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .handle {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: 6px auto 10px; display: block;
+  }
+  .title-name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .title-meta { font-size: 11px; color: var(--inkSoft); }
+  .ex-icon { width: 32px; height: 32px; border-radius: 9px; background: var(--surfaceAlt);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .section { padding: 12px 16px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 6px; }
+  .hero-stats { display: flex; gap: 14px; }
+  .hero-stat { flex: 1; }
+  .hero-stat .v { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .hero-stat .u { font-size: 11px; color: var(--inkSoft); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 14px; }
+  .kv { font-size: 12px; display: flex; justify-content: space-between; align-items: baseline; }
+  .kv span:first-child { color: var(--inkSoft); }
+  .kv span:last-child { font-weight: 600; }
+  .map-tile {
+    height: 120px; background:
+      linear-gradient(135deg, #C9DDD0 0%, #A8C9B8 100%);
+    position: relative; overflow: hidden;
+  }
+  .map-tile svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .map-overlay {
+    position: absolute; left: 12px; bottom: 10px; background: rgba(255,255,255,0.9);
+    padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 600;
+  }
+  .split-strip { display: flex; align-items: flex-end; gap: 3px; height: 60px; }
+  .split-bar { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0;
+    position: relative; display: flex; align-items: flex-end; justify-content: center;
+    min-height: 6px; }
+  .split-bar.fast { background: var(--strava); }
+  .split-bar.slow { background: var(--blue); }
+  .split-bar::after {
+    content: attr(data-label); position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: var(--inkSoft); white-space: nowrap;
+  }
+  .hr-donut { width: 88px; height: 88px; position: relative; margin: 0 auto; }
+  .hr-donut svg { transform: rotate(-90deg); }
+  .hr-center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: 10px; color: var(--inkSoft);
+  }
+  .hr-center strong { font-size: 16px; color: var(--ink); }
+  .zones-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11px; }
+  .zones-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; margin-right: 6px; vertical-align: middle; }
+  .sparkline { width: 100%; height: 36px; display: block; }
+  .narr-summary {
+    padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px;
+    font-size: 13px; line-height: 1.5; color: var(--ink);
+    border-left: 3px solid var(--accent);
+  }
+  .narr-summary .tag { color: var(--accent); font-weight: 700; }
+  details.section { padding: 0; }
+  details.section > summary {
+    padding: 12px 16px; cursor: pointer; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+    list-style: none;
+  }
+  details.section > summary::-webkit-details-marker { display: none; }
+  details.section > summary::after { content: '›'; color: var(--inkMute); font-size: 16px; }
+  details.section[open] > summary::after { transform: rotate(90deg); }
+  details.section .inner { padding: 0 16px 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .compare-row {
+    display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 8px 0;
+    border-top: 1px solid var(--line);
+  }
+  .compare-row:first-child { border-top: none; }
+  .compare-row .metric { flex: 1; color: var(--inkSoft); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .compare-row .cur { font-weight: 700; width: 70px; text-align: right; }
+  .compare-row .spark { width: 90px; }
+  .compare-row .delta { width: 54px; text-align: right; font-size: 11px; font-weight: 600; }
+  .delta-up { color: var(--accent); }
+  .delta-down { color: var(--red); }
+  .delta-flat { color: var(--inkMute); }
+  .lap-row {
+    display: grid; grid-template-columns: 24px 1fr 54px 54px 54px;
+    gap: 8px; font-size: 11px; padding: 6px 0; border-top: 1px solid var(--line);
+  }
+  .lap-row:first-of-type { border-top: none; }
+  .lap-row .n { color: var(--inkMute); }
+  .lap-row .v { font-variant-numeric: tabular-nums; text-align: right; }
+  .notes {
+    font-size: 13px; color: var(--ink); background: var(--bg);
+    padding: 10px 12px; border-radius: 8px; font-style: italic;
+  }
+  .annotations {
+    padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10;
+  }
+  .annotations b { color: #5A3B08; }
+</style>
+</head>
+<body>
+
+<h1>Strava workout detail — 3 schematics</h1>
+<p class="sub">All three show the same ride (Saturday 22 km bike, 48 min, 520 kcal, avg HR 148).
+Tap through on your phone — these are previews of how the detail sheet could look.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — SESSION CARD             -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · Session card <span class="pill pill-strava">Strava-like</span></h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 0;">
+        <span class="handle"></span>
+        <div style="display: flex; gap: 10px; align-items: center; width: 100%;">
+          <div class="ex-icon">🚴</div>
+          <div style="flex: 1; min-width: 0;">
+            <div class="title-name">Weekend loop to Richmond</div>
+            <div class="title-meta">Cycling · Strava · Sat 10:12</div>
+          </div>
+          <div style="font-size: 18px; color: var(--inkMute); padding: 4px;">×</div>
+        </div>
+      </div>
+
+      <div class="map-tile">
+        <svg viewBox="0 0 320 120" preserveAspectRatio="none">
+          <path d="M20,95 C60,80 80,40 130,55 C170,65 180,95 220,85 C260,75 290,50 300,25"
+            fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="20" cy="95" r="4" fill="#2B7A5C"/>
+          <circle cx="300" cy="25" r="4" fill="#D96B5C"/>
+        </svg>
+        <div class="map-overlay">22.1 km · 4 km/h↑</div>
+      </div>
+
+      <div class="section">
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="v">48</div><div class="u">min</div></div>
+          <div class="hero-stat"><div class="v">22.1</div><div class="u">km</div></div>
+          <div class="hero-stat"><div class="v">520</div><div class="u">kcal</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Splits (km)</div>
+        <div class="split-strip">
+          <div class="split-bar" style="height: 32px" data-label="2:10"></div>
+          <div class="split-bar fast" style="height: 48px" data-label="1:58"></div>
+          <div class="split-bar fast" style="height: 56px" data-label="1:52"></div>
+          <div class="split-bar" style="height: 38px" data-label="2:05"></div>
+          <div class="split-bar slow" style="height: 28px" data-label="2:22"></div>
+          <div class="split-bar" style="height: 40px" data-label="2:08"></div>
+          <div class="split-bar" style="height: 42px" data-label="2:04"></div>
+          <div class="split-bar slow" style="height: 30px" data-label="2:18"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display: flex; gap: 18px; align-items: center;">
+          <div class="hr-donut">
+            <svg width="88" height="88" viewBox="0 0 40 40">
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--surfaceAlt)" stroke-width="5"/>
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--blue)" stroke-width="5"
+                stroke-dasharray="15 100" stroke-dashoffset="0"/>
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--accent)" stroke-width="5"
+                stroke-dasharray="42 100" stroke-dashoffset="-15"/>
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--amber)" stroke-width="5"
+                stroke-dasharray="28 100" stroke-dashoffset="-57"/>
+              <circle cx="20" cy="20" r="16" fill="none" stroke="var(--strava)" stroke-width="5"
+                stroke-dasharray="15 100" stroke-dashoffset="-85"/>
+            </svg>
+            <div class="hr-center"><strong>148</strong>avg bpm</div>
+          </div>
+          <div class="zones-legend" style="flex: 1;">
+            <div><span class="dot" style="background: var(--blue)"></span>Z1 7m</div>
+            <div><span class="dot" style="background: var(--accent)"></span>Z2 20m</div>
+            <div><span class="dot" style="background: var(--amber)"></span>Z3 13m</div>
+            <div><span class="dot" style="background: var(--strava)"></span>Z4 7m</div>
+            <div><span class="dot" style="background: #aaa"></span>Z5 1m</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Elevation</div>
+        <svg class="sparkline" viewBox="0 0 300 36" preserveAspectRatio="none">
+          <path d="M0,28 L30,26 L60,18 L90,8 L130,4 L170,12 L210,22 L260,30 L300,28"
+            fill="none" stroke="var(--inkSoft)" stroke-width="1.5"/>
+          <path d="M0,28 L30,26 L60,18 L90,8 L130,4 L170,12 L210,22 L260,30 L300,28 L300,36 L0,36 Z"
+            fill="var(--surfaceAlt)"/>
+        </svg>
+        <div class="grid3" style="margin-top: 4px;">
+          <div class="kv"><span>Gain</span><span>412 m</span></div>
+          <div class="kv"><span>Max HR</span><span>174</span></div>
+          <div class="kv"><span>Avg pwr</span><span>182 W</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Good for:</b> visual/spatial thinkers. Map + splits + HR at a glance — closest to the
+      real Strava app feel. <b>Most work to build</b> (polyline rendering, split parsing, zones).
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — NARRATIVE                -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · Narrative <span class="pill" style="background: var(--accent); color: #fff;">Lightest</span></h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 0;">
+        <span class="handle"></span>
+        <div style="display: flex; gap: 10px; align-items: center; width: 100%;">
+          <div class="ex-icon">🚴</div>
+          <div style="flex: 1; min-width: 0;">
+            <div class="title-name">Weekend loop to Richmond</div>
+            <div class="title-meta">Cycling · Strava · Sat 10:12</div>
+          </div>
+          <div style="font-size: 18px; color: var(--inkMute); padding: 4px;">×</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display: flex; gap: 14px; align-items: baseline; margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1;">48<span style="font-size: 14px; color: var(--inkSoft); font-weight: 400;"> min</span></div>
+            <div style="font-size: 12px; color: var(--inkSoft); margin-top: 2px;">22.1 km · 520 kcal</div>
+          </div>
+        </div>
+        <div class="narr-summary">
+          <span class="tag">Steady Z2</span> for most of the loop, with a harder
+          <span class="tag">10-min push</span> on the Richmond climb. HR drifted up
+          <span class="tag">+4 bpm</span> over the final 2 km — mild fatigue, normal
+          for this distance.
+        </div>
+      </div>
+
+      <details class="section" open>
+        <summary>Hero stats <span style="color: var(--inkMute); font-weight: 400;">6 fields</span></summary>
+        <div class="inner">
+          <div class="grid2">
+            <div class="kv"><span>Duration</span><span>48 min</span></div>
+            <div class="kv"><span>Distance</span><span>22.1 km</span></div>
+            <div class="kv"><span>Kcal</span><span>520</span></div>
+            <div class="kv"><span>Avg HR</span><span>148 bpm</span></div>
+            <div class="kv"><span>Max HR</span><span>174 bpm</span></div>
+            <div class="kv"><span>Avg power</span><span>182 W</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>Splits <span style="color: var(--inkMute); font-weight: 400;">8 km</span></summary>
+        <div class="inner" style="font-size: 12px; color: var(--inkSoft);">Tap to expand — per-km pace with z-scored colour.</div>
+      </details>
+
+      <details class="section">
+        <summary>Heart rate zones <span style="color: var(--inkMute); font-weight: 400;">Z2 dominant</span></summary>
+        <div class="inner" style="font-size: 12px; color: var(--inkSoft);">Donut + per-zone minutes.</div>
+      </details>
+
+      <details class="section">
+        <summary>Elevation & power <span style="color: var(--inkMute); font-weight: 400;">412 m gain</span></summary>
+        <div class="inner" style="font-size: 12px; color: var(--inkSoft);">Gain/loss, avg/max watts, cadence.</div>
+      </details>
+
+      <details class="section">
+        <summary>Laps <span style="color: var(--inkMute); font-weight: 400;">4</span></summary>
+        <div class="inner">
+          <div class="lap-row"><span class="n">1</span><span>Warmup</span><span class="v">12:04</span><span class="v">5.8 km</span><span class="v">128</span></div>
+          <div class="lap-row"><span class="n">2</span><span>Richmond climb</span><span class="v">10:55</span><span class="v">3.2 km</span><span class="v">168</span></div>
+          <div class="lap-row"><span class="n">3</span><span>Flat tempo</span><span class="v">15:22</span><span class="v">8.1 km</span><span class="v">152</span></div>
+          <div class="lap-row"><span class="n">4</span><span>Cooldown</span><span class="v">9:55</span><span class="v">5.0 km</span><span class="v">132</span></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>Notes</summary>
+        <div class="inner"><div class="notes">Headwind on the return leg. Legs felt good despite yesterday's strength session.</div></div>
+      </details>
+    </div>
+    <div class="annotations">
+      <b>Good for:</b> skim-first detail users. The AI-generated summary (one Haiku call per
+      imported activity, ~60 tokens) gives the "so what" up top; deep data hides behind
+      collapsible sections. <b>Cheapest to build</b> — no map, no split parsing needed for v1.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — COMPARISON               -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · Comparison <span class="pill" style="background: var(--blue); color: #fff;">Trend-aware</span></h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 0;">
+        <span class="handle"></span>
+        <div style="display: flex; gap: 10px; align-items: center; width: 100%;">
+          <div class="ex-icon">🚴</div>
+          <div style="flex: 1; min-width: 0;">
+            <div class="title-name">Weekend loop to Richmond</div>
+            <div class="title-meta">Cycling · Strava · Sat 10:12</div>
+          </div>
+          <div style="font-size: 18px; color: var(--inkMute); padding: 4px;">×</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display: flex; gap: 14px; align-items: baseline;">
+          <div style="font-size: 28px; font-weight: 600; letter-spacing: -0.01em;">48<span style="font-size: 13px; color: var(--inkSoft); font-weight: 400;"> min · 22.1 km · 520 kcal</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Vs last 4 rides</div>
+        <div>
+          <div class="compare-row">
+            <div class="metric">Avg HR</div>
+            <svg class="spark" viewBox="0 0 90 18"><polyline points="0,9 22,12 45,7 68,10 90,5" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="5" r="2" fill="var(--blue)"/></svg>
+            <div class="cur">148</div>
+            <div class="delta delta-down">−3</div>
+          </div>
+          <div class="compare-row">
+            <div class="metric">Pace</div>
+            <svg class="spark" viewBox="0 0 90 18"><polyline points="0,8 22,10 45,11 68,9 90,6" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="6" r="2" fill="var(--accent)"/></svg>
+            <div class="cur">2:10/km</div>
+            <div class="delta delta-up">−0:04</div>
+          </div>
+          <div class="compare-row">
+            <div class="metric">Distance</div>
+            <svg class="spark" viewBox="0 0 90 18"><polyline points="0,12 22,8 45,10 68,7 90,5" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="5" r="2" fill="var(--amber)"/></svg>
+            <div class="cur">22.1 km</div>
+            <div class="delta delta-up">+1.8</div>
+          </div>
+          <div class="compare-row">
+            <div class="metric">Avg power</div>
+            <svg class="spark" viewBox="0 0 90 18"><polyline points="0,10 22,8 45,6 68,4 90,3" fill="none" stroke="var(--strava)" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="3" r="2" fill="var(--strava)"/></svg>
+            <div class="cur">182 W</div>
+            <div class="delta delta-up">+8</div>
+          </div>
+          <div class="compare-row">
+            <div class="metric">Elev gain</div>
+            <svg class="spark" viewBox="0 0 90 18"><polyline points="0,7 22,8 45,9 68,6 90,7" fill="none" stroke="var(--inkSoft)" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="7" r="2" fill="var(--inkSoft)"/></svg>
+            <div class="cur">412 m</div>
+            <div class="delta delta-flat">±0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Interpretation</div>
+        <div style="font-size: 13px; color: var(--ink); line-height: 1.5;">
+          <b>Fittest cycling session in 2 weeks.</b> Lower HR at higher power and faster pace
+          — classic fitness-building signal. Recovery looks complete.
+        </div>
+      </div>
+
+      <details class="section">
+        <summary>All session details</summary>
+        <div class="inner" style="font-size: 12px; color: var(--inkSoft);">Full hero + secondary stat grid (same as A/B).</div>
+      </details>
+
+      <details class="section">
+        <summary>Recent sessions</summary>
+        <div class="inner">
+          <div class="lap-row"><span class="n">1</span><span>Fri · Cycling · Commute loop</span><span class="v">32m</span><span class="v">12 km</span><span class="v">142</span></div>
+          <div class="lap-row"><span class="n">2</span><span>Wed · Cycling · Intervals</span><span class="v">42m</span><span class="v">18 km</span><span class="v">156</span></div>
+          <div class="lap-row"><span class="n">3</span><span>Mon · Cycling · Recovery</span><span class="v">25m</span><span class="v">9 km</span><span class="v">118</span></div>
+          <div class="lap-row"><span class="n">4</span><span>Last Sat · Cycling · Hill loop</span><span class="v">51m</span><span class="v">20 km</span><span class="v">151</span></div>
+        </div>
+      </details>
+    </div>
+    <div class="annotations">
+      <b>Good for:</b> training-trend awareness. Every imported session instantly
+      contextualised against your recent pattern. Needs a <i>per-type baseline</i>
+      query — you already have the data. Middle effort to build.
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
