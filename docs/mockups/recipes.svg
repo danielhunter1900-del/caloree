@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 1040" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="420" height="1040" fill="#F7F5F0"/>
+
+  <!-- Status bar -->
+  <text x="20" y="28" font-size="13" font-weight="600" fill="#1A1A1A">9:41</text>
+
+  <!-- Header -->
+  <g transform="translate(20 68)">
+    <text font-size="32" font-weight="700" fill="#1A1A1A" letter-spacing="-0.5">Recipes</text>
+  </g>
+
+  <!-- Search -->
+  <g transform="translate(16 120)">
+    <rect width="388" height="40" rx="10" fill="#FFFFFF" stroke="#E8DFC8"/>
+    <circle cx="18" cy="20" r="5" fill="none" stroke="#9A9A95" stroke-width="1.5"/>
+    <path d="M22 24l4 4" stroke="#9A9A95" stroke-width="1.5" stroke-linecap="round"/>
+    <text x="34" y="25" font-size="13" fill="#9A9A95">Search your recipes</text>
+  </g>
+
+  <!-- Tag filter chips -->
+  <g transform="translate(16 174)">
+    <rect width="68" height="28" rx="14" fill="#1A1A1A"/>
+    <text x="34" y="18" text-anchor="middle" font-size="11" font-weight="700" fill="#F7F5F0">All · 12</text>
+    <rect x="76" width="88" height="28" rx="14" fill="transparent" stroke="#D8D4CB"/>
+    <text x="120" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#5C5C58">Breakfast · 4</text>
+    <rect x="172" width="72" height="28" rx="14" fill="transparent" stroke="#D8D4CB"/>
+    <text x="208" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#5C5C58">Dinner · 5</text>
+    <rect x="252" width="68" height="28" rx="14" fill="transparent" stroke="#D8D4CB"/>
+    <text x="286" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#5C5C58">Snack · 3</text>
+    <rect x="328" width="50" height="28" rx="14" fill="transparent" stroke="#D8D4CB"/>
+    <text x="353" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#5C5C58">★ 5</text>
+  </g>
+
+  <!-- Recipe card 1 — expanded / hero -->
+  <g transform="translate(16 220)">
+    <rect width="388" height="188" rx="14" fill="#FFFFFF"/>
+    <!-- Thumb -->
+    <g transform="translate(14 14)">
+      <rect width="96" height="96" rx="10" fill="#E8D7BF"/>
+      <circle cx="30" cy="40" r="14" fill="#F4CFA2"/>
+      <rect x="46" y="48" width="38" height="22" rx="4" fill="#BD8A62"/>
+    </g>
+    <!-- Name + star -->
+    <text x="124" y="34" font-size="16" font-weight="700" fill="#1A1A1A">Overnight oats — PB banana</text>
+    <text x="374" y="32" text-anchor="end" font-size="14" fill="#E0A24A">★</text>
+    <!-- Meal hint + ingredient count -->
+    <text x="124" y="54" font-size="11" font-weight="600" fill="#9A9A95" letter-spacing="1">BREAKFAST · 5 INGREDIENTS · LOGGED 11×</text>
+    <!-- Macro pills -->
+    <g transform="translate(124 68)">
+      <rect width="60" height="24" rx="12" fill="#F7F5F0"/>
+      <text x="30" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#1A1A1A">485 kcal</text>
+    </g>
+    <g transform="translate(190 68)">
+      <circle cx="6" cy="12" r="3" fill="#D6A74A"/>
+      <text x="14" y="16" font-size="11" font-weight="600" fill="#5C5C58">72 C</text>
+    </g>
+    <g transform="translate(234 68)">
+      <circle cx="6" cy="12" r="3" fill="#D96B5C"/>
+      <text x="14" y="16" font-size="11" font-weight="600" fill="#5C5C58">22 P</text>
+    </g>
+    <g transform="translate(278 68)">
+      <circle cx="6" cy="12" r="3" fill="#7A5C3A"/>
+      <text x="14" y="16" font-size="11" font-weight="600" fill="#5C5C58">14 F</text>
+    </g>
+
+    <!-- Action row -->
+    <g transform="translate(124 104)">
+      <rect width="118" height="36" rx="10" fill="#2B7A5C"/>
+      <text x="59" y="23" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Log to Breakfast</text>
+    </g>
+    <g transform="translate(250 104)">
+      <rect width="64" height="36" rx="10" fill="transparent" stroke="#D8D4CB"/>
+      <text x="32" y="23" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">View</text>
+    </g>
+    <g transform="translate(320 104)">
+      <rect width="54" height="36" rx="10" fill="transparent" stroke="#D8D4CB"/>
+      <text x="27" y="23" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Edit</text>
+    </g>
+
+    <!-- Expanded ingredient list -->
+    <line x1="14" y1="122" x2="374" y2="122" stroke="#ECEAE4"/>
+    <g transform="translate(14 134)" font-size="11" fill="#5C5C58">
+      <text y="10">• 40g rolled oats · 155 kcal</text>
+      <text y="24">• 200ml semi-skimmed milk · 95 kcal</text>
+      <text y="38">• 1 tbsp peanut butter · 95 kcal</text>
+      <text y="52">• 1 small banana · 90 kcal</text>
+      <text y="240" font-size="10" fill="#9A9A95">(+ 1 more)</text>
+    </g>
+  </g>
+
+  <!-- Recipe card 2 — collapsed -->
+  <g transform="translate(16 424)">
+    <rect width="388" height="88" rx="14" fill="#FFFFFF"/>
+    <g transform="translate(14 14)">
+      <rect width="60" height="60" rx="8" fill="#C7D9BE"/>
+      <circle cx="30" cy="36" r="14" fill="#8FB18B"/>
+    </g>
+    <text x="88" y="34" font-size="14" font-weight="700" fill="#1A1A1A">Chicken rice bowl</text>
+    <text x="88" y="52" font-size="10" font-weight="600" fill="#9A9A95" letter-spacing="1">LUNCH · 4 INGREDIENTS · LOGGED 23×</text>
+    <text x="88" y="70" font-size="12" fill="#5C5C58">620 kcal · C 65 P 48 F 14</text>
+    <g transform="translate(280 24)">
+      <rect width="96" height="36" rx="10" fill="#2B7A5C"/>
+      <text x="48" y="23" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Log to Lunch</text>
+    </g>
+  </g>
+
+  <!-- Recipe card 3 — collapsed -->
+  <g transform="translate(16 528)">
+    <rect width="388" height="88" rx="14" fill="#FFFFFF"/>
+    <g transform="translate(14 14)">
+      <rect width="60" height="60" rx="8" fill="#D9D2C2"/>
+      <rect x="14" y="17" width="32" height="26" rx="4" fill="#9D8768"/>
+    </g>
+    <text x="88" y="34" font-size="14" font-weight="700" fill="#1A1A1A">Greek yogurt + berries</text>
+    <text x="88" y="52" font-size="10" font-weight="600" fill="#9A9A95" letter-spacing="1">SNACK · 3 INGREDIENTS · LOGGED 9×</text>
+    <text x="88" y="70" font-size="12" fill="#5C5C58">220 kcal · C 24 P 18 F 4</text>
+    <g transform="translate(280 24)">
+      <rect width="96" height="36" rx="10" fill="#2B7A5C"/>
+      <text x="48" y="23" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Log to Snack</text>
+    </g>
+  </g>
+
+  <!-- Build-a-recipe CTA -->
+  <g transform="translate(16 632)">
+    <rect width="388" height="74" rx="14" fill="transparent" stroke="#E8DFC8" stroke-dasharray="4 3"/>
+    <text x="194" y="33" text-anchor="middle" font-size="14" font-weight="700" fill="#2B7A5C">+ Build a recipe</text>
+    <text x="194" y="52" text-anchor="middle" font-size="11" fill="#5C5C58">Pick ingredients from your food list · edit portions · save as a named recipe</text>
+  </g>
+
+  <!-- How it works -->
+  <g transform="translate(16 724)">
+    <rect width="388" height="250" rx="14" fill="#FFFFFF"/>
+    <text x="16" y="26" font-size="11" font-weight="700" fill="#5C5C58" letter-spacing="1.5">HOW IT WORKS</text>
+    <g transform="translate(16 40)" font-size="12" fill="#5C5C58">
+      <text y="0" font-weight="700" fill="#1A1A1A">1. Build</text>
+      <text y="16">— "Build a recipe" opens a sheet: name it ("Overnight oats"),</text>
+      <text y="30">pick a default meal, add ingredients (from your food list or</text>
+      <text y="44">AI-described), adjust grams, save. Totals auto-sum.</text>
+
+      <text y="68" font-weight="700" fill="#1A1A1A">2. Log in one tap</text>
+      <text y="84">— Big green "Log to {`{meal}`}" button on each card writes the</text>
+      <text y="98">whole recipe to the selected meal as a single food entry with</text>
+      <text y="112">ingredients preserved (same shape as AI-logged meals).</text>
+
+      <text y="136" font-weight="700" fill="#1A1A1A">3. Turn existing meals into recipes</text>
+      <text y="152">— From a logged meal's detail sheet, "Save as recipe" lifts</text>
+      <text y="166">its ingredients into a named template.</text>
+
+      <text y="190" font-weight="700" fill="#1A1A1A">4. Sort by use</text>
+      <text y="206">— Cards show usage count ("Logged 23×"). Tap a column</text>
+      <text y="220">header to sort by most-used, most-recent, or calories.</text>
+    </g>
+  </g>
+</svg>

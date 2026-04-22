@@ -378,7 +378,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -6683,7 +6683,7 @@ window.ProgressScreen = ProgressScreen;
 // ───────────────────────────────────────────────────────────── 
 // AI Macros screen — chat with Claude OR paste structured JSON
 // ─────────────────────────────────────────────────────────────
-function AIScreen({ theme, onAddMany }) {
+function AIScreen({ theme, onAddMany, defaultMeal }) {
   const [mode, setMode] = React.useState('chat'); // 'chat' | 'paste'
   return (
     <div style={{ paddingBottom: 110, background: theme.bg, minHeight: '100%' }}>
@@ -6721,14 +6721,14 @@ function AIScreen({ theme, onAddMany }) {
         ))}
       </div>
 
-      {mode === 'chat' ? <AIChat theme={theme} onAddMany={onAddMany} />
-                      : <AIPaste theme={theme} onAddMany={onAddMany} />}
+      {mode === 'chat' ? <AIChat theme={theme} onAddMany={onAddMany} defaultMeal={defaultMeal} />
+                      : <AIPaste theme={theme} onAddMany={onAddMany} defaultMeal={defaultMeal} />}
     </div>
   );
 }
 
 // ── Chat with Claude ────────────────────────────────────────
-function AIChat({ theme, onAddMany }) {
+function AIChat({ theme, onAddMany, defaultMeal }) {
   const [messages, setMessages] = React.useState([
     { role: 'assistant', text: "Tell me what you ate and I'll estimate the macros. E.g. \"2 scrambled eggs, 1 slice sourdough with butter, coffee with oat milk\"." },
   ]);
@@ -6738,7 +6738,10 @@ function AIChat({ theme, onAddMany }) {
   const [photo, setPhoto] = React.useState(null); // { dataUrl, mediaType }
   const [photoKind, setPhotoKind] = React.useState('food'); // 'food' | 'label'
   // Meal to log everything under — user-overridable.
-  const [mealOverride, setMealOverride] = React.useState('Snack');
+  // Seed the meal selector from the section the user came from — if they
+  // tapped "+" on Lunch and then "Describe with Claude", the pending card
+  // should default to Lunch, not the generic Snack fallback.
+  const [mealOverride, setMealOverride] = React.useState(defaultMeal || 'Snack');
   // Context kept so "Suggest change" can ask Claude to revise the
   // current pending estimate with extra feedback, not start over.
   const [lastContext, setLastContext] = React.useState(null);
@@ -11525,6 +11528,10 @@ function App({ session }) {
   const openLog = (meal) => setLogScreenMeal(meal || 'Snack');
   const closeLog = () => setLogScreenMeal(null);
   const [showAddPicker, setShowAddPicker] = useStateApp(false);
+  // Carries the meal section the user came from when they launch AI.
+  // Cleared when the AI tab is left so a later generic entry defaults
+  // back to the neutral "Snack".
+  const [aiMealHint, setAiMealHint] = useStateApp(null);
   const [showBulk, setShowBulk] = useStateApp(false);
   const [showPaste, setShowPaste] = useStateApp(false);
   const [showExercise, setShowExercise] = useStateApp(false);
@@ -11658,7 +11665,8 @@ function App({ session }) {
                 session={session}
                 logDate={logDate} setLogDate={setLogDate} />
             )}
-            {tab === 'ai' && <AIScreen theme={theme} onAddMany={addMany} />}
+            {tab === 'ai' && <AIScreen theme={theme} defaultMeal={aiMealHint}
+              onAddMany={(payload) => { addMany(payload); setAiMealHint(null); }} />}
             {tab === 'progress' && <ProgressScreen theme={theme} targets={targets} setTargets={setTargets}
               exerciseLog={exerciseLog} weightLog={weightLog} setWeightLog={setWeightLog} log={log}
               setTab={setTab} setLogDate={setLogDate}
@@ -11731,7 +11739,7 @@ function App({ session }) {
             <LogScreen theme={theme} defaultMeal={logScreenMeal}
               log={log}
               onClose={closeLog} onAdd={addEntry} onOpenFood={openDetail}
-              onUseAI={(meal) => { closeLog(); setTab('ai'); }} />
+              onUseAI={(meal) => { setAiMealHint(meal || null); closeLog(); setTab('ai'); }} />
           )}
           {detailFood && (
             <DetailScreen theme={theme}
