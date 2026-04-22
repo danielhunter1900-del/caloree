@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1835,28 +1835,6 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
         setWellness={(patch) => setWellness(selectedDate, patch)}
         settings={settings} setSettings={setSettings}/>
 
-      {/* Rest day banner — above exercise card when today is flagged as rest */}
-      {(wellnessMap[selectedDate] && wellnessMap[selectedDate].restDay) && (
-        <div style={{
-          margin: '0 16px 12px', padding: '10px 14px',
-          background: 'linear-gradient(90deg, rgba(122,139,209,0.14), rgba(122,139,209,0.06))',
-          border: '1px solid rgba(122,139,209,0.35)',
-          borderRadius: theme.radius.card,
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: 18 }}>🌙</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontFamily: theme.font, fontSize: 12, fontWeight: 700,
-              color: '#4A5A9E', letterSpacing: '0.06em', textTransform: 'uppercase',
-            }}>Rest day</div>
-            <div style={{
-              fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
-            }}>Light moves still count. Logged exercise won't change this flag.</div>
-          </div>
-        </div>
-      )}
-
       {/* Exercise card */}
       <ExerciseCard theme={theme}
         locked={markedComplete}
@@ -1894,6 +1872,28 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
             }
           });
         }}/>
+
+      {/* Rest day banner — under the exercise card when the day is flagged */}
+      {(wellnessMap[selectedDate] && wellnessMap[selectedDate].restDay) && (
+        <div style={{
+          margin: '0 16px 12px', padding: '10px 14px',
+          background: 'linear-gradient(90deg, rgba(122,139,209,0.14), rgba(122,139,209,0.06))',
+          border: '1px solid rgba(122,139,209,0.35)',
+          borderRadius: theme.radius.card,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>🌙</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, fontWeight: 700,
+              color: '#4A5A9E', letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}>Rest day</div>
+            <div style={{
+              fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
+            }}>Light moves still count. Logged exercise won't change this flag.</div>
+          </div>
+        </div>
+      )}
 
       {/* Edit toggle — hidden when the day is locked */}
       {dayLog.length > 0 && !markedComplete && (
