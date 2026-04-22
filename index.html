@@ -320,7 +320,18 @@ const FOODS = [
   { id: 'f16', name: 'Whole Milk',           brand: 'Organic',          serving: 'cup',       servingG: 244, kcal: 149, c: 12, p: 8,  f: 8  },
 ];
 
-const __TODAY_ISO = new Date().toISOString().slice(0, 10);
+// Local-date ISO helper — toISOString() returns UTC, which in timezones
+// ahead of UTC makes the app think "today" is yesterday during the
+// morning. Compute YYYY-MM-DD from local date parts instead.
+function todayLocalIso(d) {
+  const x = d || new Date();
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+window.todayLocalIso = todayLocalIso;
+const __TODAY_ISO = todayLocalIso();
 const TODAY_LOG = [];
 
 // Daily targets — defaults; user can override in Settings
@@ -378,7 +389,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1423,7 +1434,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           // Insert the merged log row directly (don't depend on App push, which only handles today)
           await window.sb.from('meal_logs').insert([{
             id: newEntry.id, user_id: uid,
-            date: newEntry.date || new Date().toISOString().slice(0, 10),
+            date: newEntry.date || todayLocalIso(),
             meal: newEntry.meal, food_id: newEntry.foodId,
             qty: newEntry.qty || 1, time: newEntry.time || null,
           }]);
@@ -1492,7 +1503,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
     }], { onConflict: 'id' });
     if (r.error) console.warn('fav sync:', r.error.message);
   };
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLocalIso();
   const selectedDate = logDate || todayIso;
   const setSelectedDate = setLogDate || (() => {});
   const dayLog = log.filter(e => (e.date || todayIso) === selectedDate);
@@ -1825,12 +1836,16 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
         display: 'flex', justifyContent: 'space-between',
       }}>
         {(() => {
-          // Compute streak: consecutive days ending today that have >=1 meal logged
+          // Consecutive days ending today (or yesterday if today not yet
+          // logged) that have >=1 meal logged. Uses local dates throughout
+          // so timezone offset can't miscount.
           const daysWithLogs = new Set(log.map(e => e.date || todayIso));
           let streak = 0;
-          const cur = new Date(todayIso + 'T00:00:00');
+          const cur = new Date();
+          cur.setHours(0, 0, 0, 0);
+          if (!daysWithLogs.has(todayLocalIso(cur))) cur.setDate(cur.getDate() - 1);
           while (true) {
-            const iso = cur.toISOString().slice(0, 10);
+            const iso = todayLocalIso(cur);
             if (daysWithLogs.has(iso)) {
               streak++;
               cur.setDate(cur.getDate() - 1);
@@ -2189,16 +2204,17 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate, log = [],
   const displayName = localStorage.getItem('cal_display_name') || 'You';
   const headerInitials = displayName.split(/\s+/).filter(Boolean)
     .map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLocalIso();
 
   // Build a 7-day window ending on today (so today is the rightmost-1 cell, with 1 future day)
   const daysShort = ['S','M','T','W','T','F','S'];
   const days = [];
-  const base = new Date(todayIso);
+  const base = new Date();
+  base.setHours(12, 0, 0, 0); // midday to avoid DST / timezone edge cases
   for (let i = -5; i <= 1; i++) {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
-    const iso = d.toISOString().slice(0, 10);
+    const iso = todayLocalIso(d);
     days.push({
       d: daysShort[d.getDay()], n: d.getDate(), iso,
       isToday: iso === todayIso,
@@ -2237,12 +2253,14 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate, log = [],
             const hasLog = new Set(log.map(e => e.date || todayIso));
             const todayLogged = hasLog.has(todayIso);
             let streak = 0;
-            const cur = new Date(todayIso + 'T00:00:00');
-            // If today isn't logged yet but yesterday was, keep the streak
-            // alive (don't display as zero during the daytime).
+            // Use local-date arithmetic — toISOString() on a Date at
+            // local midnight returns yesterday in timezones ahead of UTC,
+            // which was the off-by-one-day bug in the first cut.
+            const cur = new Date();
+            cur.setHours(12, 0, 0, 0);
             if (!todayLogged) cur.setDate(cur.getDate() - 1);
             while (true) {
-              const iso = cur.toISOString().slice(0, 10);
+              const iso = todayLocalIso(cur);
               if (hasLog.has(iso)) { streak++; cur.setDate(cur.getDate() - 1); }
               else break;
             }
@@ -3887,7 +3905,7 @@ function DetailScreen({ theme, foodId, defaultMeal, onClose, onAdd, entryId, log
   const [showIngredients, setShowIngredients] = useStateDetail(false);
   const [editingIng, setEditingIng] = useStateDetail(null); // index of ingredient being edited
   const [pickAction, setPickAction] = useStateDetail(null); // 'move' | 'copy' | null
-  const [pickDate, setPickDate] = useStateDetail(() => new Date().toISOString().slice(0, 10));
+  const [pickDate, setPickDate] = useStateDetail(() => todayLocalIso());
   const isEdit = !!existingEntry;
   const entryLocked = isEdit && !!lockedByDate[existingEntry.date];
   const qtyChanged = isEdit && Math.abs(qty - (+existingEntry.qty || 1)) > 0.0001;
@@ -5080,7 +5098,7 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
         <WeightEntrySheet theme={theme}
           onClose={() => setShowWeightEntry(false)}
           onSave={kg => {
-            const iso = new Date().toISOString().slice(0, 10);
+            const iso = todayLocalIso();
             const filtered = weightLog.filter(w => w.iso !== iso);
             setWeightLog([...filtered, { iso, kg }].sort((a, b) => a.iso.localeCompare(b.iso)));
             setShowWeightEntry(false);
@@ -5097,7 +5115,7 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
 function ExerciseCalendar({ theme, bucket, range, exByDate, selectedType, setSelectedType, EX_COLOR_MAP, onOpenDate }) {
   const [chipExpanded, setChipExpanded] = React.useState(false);
   if (!bucket || !bucket.bars || !bucket.bars.length) return null;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLocalIso();
 
   // Collect the list of ISO dates to scan for per-type totals.
   // Month & Week: bars are days. Year: bars are months, so walk each month's days.
@@ -9021,7 +9039,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         display_name: localStorage.getItem('cal_display_name') || null,
       };
       const json = JSON.stringify(bundle, null, 2);
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayLocalIso();
       downloadBlob(json, `caloree-export-${stamp}.json`, 'application/json;charset=utf-8');
     } catch (e) {
       alert('Export failed: ' + e.message);
@@ -9061,7 +9079,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
         const s = String(v ?? '');
         return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
       }).join(',')).join('\n');
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayLocalIso();
       downloadBlob(csv, `caloree-meals-${stamp}.csv`, 'text/csv;charset=utf-8');
     } catch (e) {
       alert('Export failed: ' + e.message);
@@ -9533,7 +9551,7 @@ function HistorySheet({ theme, session, log, setLog, onClose }) {
   const [entries, setEntries] = React.useState(null); // [{ id, date, meal, food_id, qty, food: {...} }]
   const [error, setError] = React.useState(null);
   const [selected, setSelected] = React.useState(new Set());
-  const [targetDate, setTargetDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [targetDate, setTargetDate] = React.useState(todayLocalIso());
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
@@ -9762,7 +9780,7 @@ function ExerciseLogSheet({ theme, onClose, session, onSave, customTypes = [], o
     }
   }, [type, duration]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalIso();
 
   const saveManual = async () => {
     if (!duration && !kcal) { setError('Enter at least duration or calories.'); return; }
@@ -10511,7 +10529,7 @@ function PasteFromClaudeSheet({ theme, onClose, session, onDone }) {
   const [busy, setBusy] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalIso();
   const prompt = `Parse my meal notes into JSON. Return ONLY this JSON (no prose, no markdown, no code fences):
 {
   "days": [
@@ -11304,7 +11322,7 @@ function App({ session }) {
   // Wrap setTargets so any change snapshots the new targets into history with today's from_date
   const setTargets = (next) => {
     setTargetsRaw(next);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     setTargetHistory(prev => {
       // If today already has an entry, replace it; else append
       const filtered = (prev || []).filter(h => h.from_date !== today);
@@ -11348,7 +11366,7 @@ function App({ session }) {
       // Migrate from old single-object format if present
       const old = JSON.parse(localStorage.getItem('cal_wellness') || 'null');
       if (old && typeof old === 'object') {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayLocalIso();
         return { [today]: old };
       }
     } catch {}
@@ -11617,7 +11635,7 @@ function App({ session }) {
       is_favourite: !!f.isFavourite,
       ingredients: f.ingredients || null,
     }));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     const logRows = log.map(l => ({
       id: l.id, user_id: uid, date: l.date || today,
       meal: l.meal, food_id: l.foodId, qty: l.qty || 1, time: l.time || null,
@@ -11704,7 +11722,7 @@ function App({ session }) {
   const [showPaste, setShowPaste] = useStateApp(false);
   const [showExercise, setShowExercise] = useStateApp(false);
   // Date the user is currently focused on (drives Home view + where AI/Bulk logs land)
-  const [logDate, setLogDate] = useStateApp(() => new Date().toISOString().slice(0, 10));
+  const [logDate, setLogDate] = useStateApp(() => todayLocalIso());
   const openDetail = (foodId, meal, entryId) => setDetailFood({ foodId, meal, entryId });
   const closeDetail = () => setDetailFood(null);
 
@@ -11723,7 +11741,7 @@ function App({ session }) {
       : (payload.meal && payload.items ? [{ meal: payload.meal, items: payload.items }] : []);
     const newFoods = [];
     const newEntries = [];
-    const targetDate = logDate || new Date().toISOString().slice(0, 10);
+    const targetDate = logDate || todayLocalIso();
     // Upload photos first (if a group has a data-URL photo)
     for (const g of groups) {
       if (g.photo && g.photo.startsWith('data:') && session) {
@@ -11754,7 +11772,7 @@ function App({ session }) {
     newFoods.forEach(f => FOODS.push(f));
     setLog([...log, ...newEntries]);
     // If logging to a past date, push directly to Supabase (App's push only syncs today)
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     if (window.sb && session && targetDate !== today && newEntries.length) {
       const uid = session.user.id;
       try {
@@ -11861,7 +11879,7 @@ function App({ session }) {
               setSettings({ ...(settings || {}), onboarded: true, profile });
               setTargets(newTargets);
               if (firstWeightKg && (!weightLog || weightLog.length === 0)) {
-                const iso = new Date().toISOString().slice(0, 10);
+                const iso = todayLocalIso();
                 setWeightLog([{ iso, kg: firstWeightKg }]);
               }
               if (profile.name) localStorage.setItem('cal_display_name', profile.name);
