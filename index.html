@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1688,8 +1688,459 @@ const PLAN_KIND_STYLE = {
   rest:     { icon: '🌙', color: '#7A8BD1', label: 'Rest day' },
 };
 
+// ── Adaptive weekly Claude recompute sheet ──
+// Reviews 4 weeks training, 14 days wellness, 14 days nutrition, weight
+// trend, and recent goal changes → proposes adjustments to NEXT week
+// with a hard ≤10% volume safety rail applied client-side after the
+// proposal lands.
+function AdaptiveRecomputeSheet({ theme, settings, setSettings, exerciseLog = [], wellnessMap = {}, log = [], weightLog = [], selectedDate, onClose }) {
+  const plan = settings?.trainingPlan;
+  const [phase, setPhase] = React.useState('idle'); // idle | loading | ready | applied | error
+  const [error, setError] = React.useState(null);
+  const [proposal, setProposal] = React.useState(null); // { summary, adjustments, volumeDelta, rationale }
+
+  // Build compact context helpers.
+  const weekMondayLocal = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    const dow = d.getDay() || 7;
+    d.setDate(d.getDate() - (dow - 1));
+    return todayLocalIso(d);
+  };
+  const addDaysIsoLocal = (iso, n) => {
+    const d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return todayLocalIso(d);
+  };
+
+  const nextWeekMonday = addDaysIsoLocal(weekMondayLocal(selectedDate), 7);
+  const nextWeekEnd = addDaysIsoLocal(nextWeekMonday, 6);
+  const nextWeekSessions = (plan?.sessions || [])
+    .filter(s => s.date >= nextWeekMonday && s.date <= nextWeekEnd);
+
+  // Context bundle for Claude.
+  const buildContext = () => {
+    // Training: last 4 calendar weeks, aggregated per week.
+    const monthAgo = addDaysIsoLocal(selectedDate, -28);
+    const training4w = {};
+    (exerciseLog || []).filter(e => e.date && e.date >= monthAgo && e.date <= selectedDate).forEach(e => {
+      const wk = weekMondayLocal(e.date);
+      if (!training4w[wk]) training4w[wk] = { runMin: 0, runKm: 0, runs: 0, strengthMin: 0, strength: 0, restDays: 0, sessions: 0 };
+      training4w[wk].sessions += 1;
+      if (e.type === 'Run') {
+        training4w[wk].runs += 1;
+        training4w[wk].runMin += +e.duration || 0;
+        training4w[wk].runKm  += +e.distance || 0;
+      } else if (e.type === 'Strength' || e.type === 'Calisthenics') {
+        training4w[wk].strength += 1;
+        training4w[wk].strengthMin += +e.duration || 0;
+      }
+    });
+    const training = Object.entries(training4w).sort(([a], [b]) => a.localeCompare(b))
+      .map(([wk, v]) => ({
+        week_start: wk,
+        run_km: +v.runKm.toFixed(1), run_min: Math.round(v.runMin),
+        runs: v.runs, strength_sessions: v.strength, strength_min: Math.round(v.strengthMin),
+      }));
+
+    // Wellness + rest days — 14-day averages.
+    const twoWeeksAgo = addDaysIsoLocal(selectedDate, -14);
+    const wEntries = Object.entries(wellnessMap).filter(([d]) => d >= twoWeeksAgo && d <= selectedDate);
+    const avg = (k) => {
+      const vals = wEntries.map(([, w]) => +w[k]).filter(v => v > 0);
+      return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : null;
+    };
+    const restDaysLast14 = wEntries.filter(([, w]) => w.restDay).length;
+
+    // Nutrition: 14-day kcal + protein from log + FOODS.
+    const FOODS = window.FOODS || [];
+    const foodById = {};
+    FOODS.forEach(f => { foodById[f.id] = f; });
+    const byDate = {};
+    (log || []).filter(e => e.date >= twoWeeksAgo && e.date <= selectedDate).forEach(l => {
+      const f = foodById[l.foodId]; if (!f) return;
+      const q = +l.qty || 1;
+      if (!byDate[l.date]) byDate[l.date] = { kcal: 0, p: 0, fibre: 0 };
+      byDate[l.date].kcal += (+f.kcal || 0) * q;
+      byDate[l.date].p    += (+f.p    || 0) * q;
+      byDate[l.date].fibre+= (+f.fibre || 0) * q;
+    });
+    const nDays = Object.keys(byDate).length || 1;
+    const kcalAvg = Math.round(Object.values(byDate).reduce((s, d) => s + d.kcal, 0) / nDays);
+    const proteinAvg = Math.round(Object.values(byDate).reduce((s, d) => s + d.p, 0) / nDays);
+    const fibreAvg = Math.round(Object.values(byDate).reduce((s, d) => s + d.fibre, 0) / nDays);
+    const targets = window.TARGETS || {};
+    const kcalTarget = targets.kcal || 2050;
+
+    // Weight trend 4 weeks.
+    const monthWeights = (weightLog || []).filter(w => w.iso >= monthAgo && w.iso <= selectedDate)
+      .sort((a, b) => a.iso.localeCompare(b.iso));
+    const weight = monthWeights.length >= 2 ? {
+      first_kg: +monthWeights[0].kg.toFixed(1),
+      last_kg: +monthWeights[monthWeights.length-1].kg.toFixed(1),
+      delta_kg: +(monthWeights[monthWeights.length-1].kg - monthWeights[0].kg).toFixed(1),
+      per_week: +((monthWeights[monthWeights.length-1].kg - monthWeights[0].kg)
+                  / ((monthWeights.length - 1) / 7 * 7 / 7 || 1)).toFixed(2),
+    } : null;
+
+    return {
+      plan_template: plan?.template,
+      plan_week: nextWeekSessions[0]?.week || null,
+      fitness: plan?.fitness || {},
+      next_week_sessions: nextWeekSessions.map(s => ({
+        date: s.date, kind: s.kind, runType: s.runType || null,
+        minutes: s.minutes || null, addon: s.addon || null,
+      })),
+      training_4w: training,
+      wellness_14d: {
+        sleep_h: avg('sleepHrs'),
+        energy: avg('energy'),
+        stress: avg('stress'),
+        rest_days: restDaysLast14,
+      },
+      nutrition_14d: {
+        kcal_avg: kcalAvg, kcal_target: kcalTarget,
+        protein_g_avg: proteinAvg, fibre_g_avg: fibreAvg,
+      },
+      weight,
+      prefs: plan?.prefs || {},
+    };
+  };
+
+  const callClaude = async () => {
+    const key = (localStorage.getItem('anthropic_api_key') || '').replace(/\s+/g, '');
+    if (!key) { setError('Set your Anthropic API key in Profile first.'); return; }
+    if (!plan || !nextWeekSessions.length) {
+      setError('No sessions scheduled for next week yet. Jump to the first plan week first.');
+      return;
+    }
+    setPhase('loading'); setError(null); setProposal(null);
+
+    const ctx = buildContext();
+    const system = `You are a running + training coach. Review this user's data and propose adjustments to NEXT week's training plan. Be specific, be concise, and respect all safety rails.
+
+HARD RAILS (must not violate):
+- Max weekly total-volume increase: 10% vs last complete week.
+- Max per-session volume increase: +15% vs last same-type session.
+- Never schedule a hard session (tempo / speed / hills) right after a day with RPE ≥ 8 flagged, or after a logged pain entry ≥ 3.
+- Never remove a pinned rest day.
+- Under-fuelling flag (kcal avg < target × 0.9 for 7+ days) → no volume increase this week.
+- Weight loss faster than 0.8 kg/wk on a non-cut phase → volume held.
+
+YOU WILL RECEIVE:
+- Next week's scheduled sessions
+- Last 4 weeks of actual training (volume per week, sessions)
+- 14-day wellness (sleep, energy, stress, rest days)
+- 14-day nutrition (kcal vs target, protein, fibre)
+- Weight trend
+- User preferences
+
+RETURN JSON ONLY (no prose, no markdown):
+{
+  "summary": "one-sentence story of why this week looks the way it does",
+  "adjustments": [
+    { "date": "YYYY-MM-DD", "action": "keep|modify|swap|skip",
+      "was": "short description", "now": "short description",
+      "why": "short reason tied to a data source" }
+  ],
+  "volume_change_pct": N,
+  "rationale": [
+    { "source": "nutrition|sleep|weight|training|pain|prefs", "note": "..." }
+  ]
+}
+
+RULES:
+- adjustments: include ONE entry per scheduled next-week session. action="keep" if no change.
+- "now" must be specific and actionable (e.g. "Easy 30 min", "Tempo 6×3", "Rest").
+- rationale: 2-5 items, cite specific data points.`;
+
+    const user = `DATA (JSON):
+${JSON.stringify(ctx, null, 2)}
+
+Propose adjustments. Return JSON only.`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5', max_tokens: 1500,
+          system,
+          messages: [{ role: 'user', content: user }],
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`API ${res.status}: ${txt.slice(0, 200)}`);
+      }
+      const j = await res.json();
+      const txt = (j.content || []).find(b => b.type === 'text')?.text || '';
+      const clean = txt.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(clean);
+      if (!parsed.adjustments) throw new Error('Response missing adjustments');
+      // Clamp volume delta to ≤10% (safety rail enforced client-side too).
+      if (typeof parsed.volume_change_pct === 'number' && parsed.volume_change_pct > 10) {
+        parsed.volume_change_pct_clamped = 10;
+      }
+      setProposal(parsed);
+      setPhase('ready');
+    } catch (e) {
+      setError(e.message || 'Unknown error');
+      setPhase('idle');
+    }
+  };
+
+  const applyProposal = () => {
+    if (!proposal || !plan) return;
+    const byDate = {};
+    proposal.adjustments.forEach(a => { byDate[a.date] = a; });
+    const newSessions = plan.sessions.map(s => {
+      const adj = byDate[s.date];
+      if (!adj || adj.action === 'keep') return s;
+      if (adj.action === 'skip') return { ...s, kind: 'rest', minutes: null, runType: null, addon: null };
+      // modify/swap: heuristically parse the "now" string for kind/min hints.
+      const now = String(adj.now || '').toLowerCase();
+      const minMatch = now.match(/(\d+)\s*(?:min|'|m\b)/);
+      const mins = minMatch ? +minMatch[1] : s.minutes;
+      let kind = s.kind, runType = s.runType || null;
+      if (now.includes('rest')) kind = 'rest';
+      else if (now.includes('mobility') || now.includes('stretch')) kind = 'mobility';
+      else if (now.includes('tempo'))    { kind = 'run'; runType = 'tempo'; }
+      else if (now.includes('speed') || now.includes('interval')) { kind = 'run'; runType = 'speed'; }
+      else if (now.includes('hill'))     { kind = 'run'; runType = 'hills'; }
+      else if (now.includes('long'))     { kind = 'run'; runType = 'long'; }
+      else if (now.includes('easy') || now.includes('recovery')) { kind = 'run'; runType = 'easy'; }
+      else if (now.includes('strength') || now.includes('calisthenics')) kind = 'strength';
+      return { ...s, kind, runType, minutes: kind === 'rest' ? null : mins, addon: null };
+    });
+    // Log this recompute in plan.recomputes[] so we can replay history later.
+    const recomputes = plan.recomputes || [];
+    setSettings({
+      ...(settings || {}),
+      trainingPlan: {
+        ...plan, sessions: newSessions,
+        recomputes: [...recomputes.slice(-9), {
+          applied_at: new Date().toISOString(),
+          covering_week: nextWeekMonday,
+          summary: proposal.summary,
+          volume_pct: proposal.volume_change_pct_clamped ?? proposal.volume_change_pct ?? 0,
+          adjustments_count: proposal.adjustments.filter(a => a.action !== 'keep').length,
+        }],
+      },
+    });
+    setPhase('applied');
+  };
+
+  const getActColor = (action) => action === 'keep' ? theme.inkMute
+    : action === 'modify' ? '#5A3D9E'
+    : action === 'swap' ? '#E0A24A'
+    : action === 'skip' ? '#D96B5C' : theme.ink;
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300,
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '92vh', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '14px 18px 10px', borderBottom: `1px solid ${theme.line}` }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 12px' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontFamily: theme.titleFont, fontSize: 20, fontWeight: theme.titleWeight, color: theme.ink }}>
+              Adjust next week
+            </div>
+            <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 22, color: theme.inkMute, padding: 4 }}>×</button>
+          </div>
+          <div style={{ fontFamily: theme.font, fontSize: 11, color: '#5A3D9E', letterSpacing: '0.06em',
+            textTransform: 'uppercase', fontWeight: 700, marginTop: 4 }}>
+            Week of {nextWeekMonday} · {nextWeekSessions.length} sessions
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 22px' }}>
+          {phase === 'idle' && !error && (
+            <div>
+              <div style={{
+                padding: '14px 16px', background: theme.surface, borderRadius: 12,
+                border: `1px solid ${theme.line}`, marginBottom: 14,
+              }}>
+                <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                  color: theme.inkSoft, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  marginBottom: 8 }}>Claude will review</div>
+                {[
+                  '🏃 Last 4 weeks of actual training',
+                  '😴 Sleep · energy · stress (14 days)',
+                  '🍽️ Kcal vs target · protein · fibre (14 days)',
+                  '⚖️ Weight trend + rate',
+                  '📌 Plan preferences + pinned days',
+                ].map(l => (
+                  <div key={l} style={{ fontFamily: theme.font, fontSize: 13, color: theme.ink,
+                    lineHeight: 1.6 }}>{l}</div>
+                ))}
+              </div>
+              <button onClick={callClaude} style={{
+                width: '100%', padding: 14, border: 'none',
+                background: '#5A3D9E', color: '#fff',
+                borderRadius: 12, fontFamily: theme.font, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+              }}>Get Claude's proposal →</button>
+              <div style={{ fontSize: 11, color: theme.inkMute, marginTop: 8, textAlign: 'center' }}>
+                ~3k tokens · Haiku · costs about $0.003 per recompute
+              </div>
+            </div>
+          )}
+
+          {phase === 'loading' && (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: theme.inkSoft }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>🤖</div>
+              <div style={{ fontFamily: theme.font, fontSize: 13 }}>Claude is reviewing your data…</div>
+              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkMute, marginTop: 6 }}>
+                Usually takes 5-10 seconds
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              padding: '10px 12px', background: 'rgba(217,107,92,0.12)',
+              border: '1px solid rgba(217,107,92,0.4)',
+              borderRadius: 10, fontSize: 12, color: '#B23A2A', marginBottom: 12,
+            }}>{error}</div>
+          )}
+
+          {phase === 'ready' && proposal && (
+            <div>
+              <div style={{
+                padding: '14px 16px',
+                background: 'linear-gradient(135deg, #F5EDFF 0%, #F9F5ED 100%)',
+                borderRadius: 12, marginBottom: 14,
+              }}>
+                <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                  color: '#5A3D9E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                  Claude · Haiku
+                </div>
+                <div style={{ fontFamily: theme.titleFont, fontSize: 16, fontWeight: 600,
+                  color: theme.ink, lineHeight: 1.35 }}>
+                  {proposal.summary}
+                </div>
+                {typeof proposal.volume_change_pct === 'number' && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: theme.inkSoft, fontWeight: 600, letterSpacing: '0.06em',
+                      textTransform: 'uppercase' }}>Volume</span>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: 999,
+                      background: (proposal.volume_change_pct_clamped ?? proposal.volume_change_pct) > 5
+                        ? 'rgba(224,162,74,0.2)' : proposal.volume_change_pct < 0
+                          ? 'rgba(122,139,209,0.2)' : 'rgba(43,122,92,0.15)',
+                      color: (proposal.volume_change_pct_clamped ?? proposal.volume_change_pct) > 5
+                        ? '#8A5A1F' : proposal.volume_change_pct < 0 ? '#4A5A9E' : '#1C5A3F',
+                      fontSize: 11, fontWeight: 700,
+                    }}>
+                      {proposal.volume_change_pct > 0 ? '+' : ''}{proposal.volume_change_pct}%
+                      {proposal.volume_change_pct_clamped && ` · capped at ${proposal.volume_change_pct_clamped}%`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+                marginBottom: 8 }}>Day-by-day</div>
+              {proposal.adjustments.map((a, i) => (
+                <div key={i} style={{
+                  padding: '10px 12px', background: theme.surface,
+                  border: `1px solid ${theme.line}`, borderLeft: `3px solid ${getActColor(a.action)}`,
+                  borderRadius: 10, marginBottom: 6,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft }}>
+                      {new Date(a.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </div>
+                    <span style={{
+                      padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase',
+                      background: getActColor(a.action), color: '#fff',
+                    }}>{a.action}</span>
+                  </div>
+                  <div style={{ fontFamily: theme.font, fontSize: 13, marginTop: 3 }}>
+                    {a.action === 'keep' ? a.was : (<>
+                      <span style={{ color: theme.inkMute, textDecoration: 'line-through' }}>{a.was}</span>
+                      {' → '}
+                      <span style={{ fontWeight: 700 }}>{a.now}</span>
+                    </>)}
+                  </div>
+                  {a.why && a.action !== 'keep' && (
+                    <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft,
+                      marginTop: 3, fontStyle: 'italic', lineHeight: 1.4 }}>{a.why}</div>
+                  )}
+                </div>
+              ))}
+
+              {Array.isArray(proposal.rationale) && proposal.rationale.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                    color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+                    marginBottom: 8 }}>Why · from your data</div>
+                  {proposal.rationale.map((r, i) => {
+                    const ico = { nutrition: '🍽️', sleep: '😴', weight: '⚖️',
+                      training: '🏃', pain: '🩹', prefs: '📌' }[r.source] || '•';
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0',
+                        borderTop: i > 0 ? `1px solid ${theme.line}` : 'none', fontSize: 12 }}>
+                        <span style={{ fontSize: 14 }}>{ico}</span>
+                        <div style={{ flex: 1, color: theme.inkSoft, lineHeight: 1.4 }}>{r.note}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button onClick={onClose} style={{
+                  flex: 1, padding: 12, border: `1px solid ${theme.line}`,
+                  background: 'transparent', color: theme.inkSoft, borderRadius: 10,
+                  fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}>Decline</button>
+                <button onClick={applyProposal} style={{
+                  flex: 2, padding: 12, border: 'none',
+                  background: '#5A3D9E', color: '#fff', borderRadius: 10,
+                  fontFamily: theme.font, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}>Accept plan ✓</button>
+              </div>
+            </div>
+          )}
+
+          {phase === 'applied' && (
+            <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
+              <div style={{ fontFamily: theme.titleFont, fontSize: 18, fontWeight: 600 }}>
+                Next week updated
+              </div>
+              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 6 }}>
+                Your plan now reflects Claude's proposal.
+              </div>
+              <button onClick={onClose} style={{
+                marginTop: 18, padding: '10px 22px', border: 'none',
+                background: theme.ink, color: theme.bg, borderRadius: 10,
+                fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>Done</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Planner view: today's session + this week + templates + prefs ──
-function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedDate, onExit, onOpenPrefs }) {
+function PlannerView({ theme, settings, setSettings, exerciseLog = [], wellnessMap = {}, log = [], weightLog = [], targetHistory = [], selectedDate, onExit, onOpenPrefs, onAdaptive }) {
   const plan = settings && settings.trainingPlan;
   const [pickingTemplate, setPickingTemplate] = React.useState(false);
   const [templateChoice, setTemplateChoice] = React.useState('hybrid-runner');
@@ -2218,8 +2669,26 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
         )}
       </div>
 
+      {/* Adaptive recompute CTA */}
+      <div style={{ padding: '18px 16px 0' }}>
+        <button onClick={onAdaptive} style={{
+          width: '100%', padding: '12px 14px',
+          border: '1px solid rgba(90,61,158,0.4)',
+          background: 'linear-gradient(90deg, rgba(90,61,158,0.08), rgba(90,61,158,0.02))',
+          color: '#5A3D9E', borderRadius: 10,
+          fontFamily: theme.font, fontSize: 13, fontWeight: 700,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 14 }}>🤖</span>
+          Ask Claude to adjust next week
+        </button>
+        <div style={{
+          marginTop: 6, fontSize: 11, color: theme.inkSoft, textAlign: 'center', lineHeight: 1.4,
+        }}>Uses your training, sleep, fuel, weight + pain data · ≤10% volume safety cap</div>
+      </div>
+
       {/* Quick actions */}
-      <div style={{ padding: '20px 16px 0', display: 'flex', gap: 8 }}>
+      <div style={{ padding: '14px 16px 0', display: 'flex', gap: 8 }}>
         <button onClick={onOpenPrefs} style={{
           flex: 1, padding: '12px 10px', border: `1px solid ${theme.line}`,
           background: theme.surface, color: theme.ink, borderRadius: 10,
@@ -2394,6 +2863,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
     try { localStorage.setItem('cal_home_mode', plannerMode ? 'planner' : 'tracker'); } catch {}
   }, [plannerMode]);
   const [showPlanPrefs, setShowPlanPrefs] = React.useState(false);
+  const [showAdaptive, setShowAdaptive] = React.useState(false);
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -2674,14 +3144,24 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
         {modeToggle}
         <PlannerView theme={theme}
           settings={settings} setSettings={setSettings}
-          exerciseLog={exerciseLog}
+          exerciseLog={exerciseLog} wellnessMap={wellnessMap}
+          log={log} weightLog={weightLog}
           selectedDate={selectedDate}
           onExit={() => setPlannerMode(false)}
-          onOpenPrefs={() => setShowPlanPrefs(true)} />
+          onOpenPrefs={() => setShowPlanPrefs(true)}
+          onAdaptive={() => setShowAdaptive(true)} />
         {showPlanPrefs && (
           <PlanPrefsSheet theme={theme}
             settings={settings} setSettings={setSettings}
             onClose={() => setShowPlanPrefs(false)} />
+        )}
+        {showAdaptive && (
+          <AdaptiveRecomputeSheet theme={theme}
+            settings={settings} setSettings={setSettings}
+            exerciseLog={exerciseLog} wellnessMap={wellnessMap}
+            log={log} weightLog={weightLog}
+            selectedDate={selectedDate}
+            onClose={() => setShowAdaptive(false)} />
         )}
         {modeToggle}
       </div>
