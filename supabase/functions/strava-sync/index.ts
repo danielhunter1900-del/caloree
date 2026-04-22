@@ -283,6 +283,25 @@ Deno.serve(async (req) => {
             name: b.name, distance_m: b.distance, moving_time: b.moving_time, pr_rank: b.pr_rank ?? null,
           }));
         }
+
+        // HR zones: separate endpoint. Fetch once per activity, attach to details.
+        // Cheap (1 extra request per detail-fetched activity, within budget).
+        if (!rateLimited && src.has_heartrate) {
+          const zres = await fetch(
+            `https://www.strava.com/api/v3/activities/${a.id}/zones`,
+            { headers: { Authorization: `Bearer ${accessToken}` } },
+          );
+          if (zres.status === 429) rateLimited = true;
+          else if (zres.ok) {
+            const zj = await zres.json();
+            const hr = Array.isArray(zj) ? zj.find((z: any) => z.type === 'heartrate') : null;
+            if (hr && Array.isArray(hr.distribution_buckets)) {
+              details.hr_zones = hr.distribution_buckets.map((b: any) => ({
+                min: b.min, max: b.max, time_s: b.time,
+              }));
+            }
+          }
+        }
       }
 
       toInsert.push({

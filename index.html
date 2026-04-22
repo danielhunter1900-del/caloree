@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1838,6 +1838,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
       {/* Exercise card */}
       <ExerciseCard theme={theme}
         locked={markedComplete}
+        exerciseLog={exerciseLog || []}
         entries={(exerciseLog || []).filter(e => (e.date || todayIso) === selectedDate)}
         customTypes={settings.customExerciseTypes || []}
         onAddCustomType={(t) => {
@@ -2701,7 +2702,7 @@ function nextCustomExerciseColor(custom, defaults = EX_COLORS) {
 }
 window.nextCustomExerciseColor = nextCustomExerciseColor;
 
-function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate, customTypes = [], onAddCustomType, locked }) {
+function ExerciseCard({ theme, entries, exerciseLog = [], onAdd, onDelete, onUpdateType, onUpdate, customTypes = [], onAddCustomType, locked }) {
   const ICONS = { ...(window.EX_ICONS || {}) };
   customTypes.forEach(c => { if (c && c.name) ICONS[c.name] = c.icon || '⚡'; });
   const TYPES = Object.keys(ICONS);
@@ -2801,7 +2802,7 @@ function ExerciseCard({ theme, entries, onAdd, onDelete, onUpdateType, onUpdate,
           onSave={(updated) => { onUpdate && onUpdate(updated); setEditingFull(null); setDetailEntry(updated); }}/>
       )}
       {detailEntry && !editingFull && (
-        <ExerciseDetailSheet theme={theme} entry={detailEntry}
+        <ExerciseDetailSheet theme={theme} entry={detailEntry} exerciseLog={exerciseLog}
           onClose={() => setDetailEntry(null)}
           onEdit={() => setEditingFull(detailEntry)}
           onDelete={(id) => { setDetailEntry(null); onDelete(id); }}/>
@@ -2816,7 +2817,7 @@ const RUN_SUBTYPES = ['Easy', 'Long', 'Speed', 'Steady'];
 // (HR, pace, splits, laps, best efforts, power, cadence, elevation)
 // for Strava-sourced activities; falls back to basic fields for
 // manually logged ones.
-function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
+function ExerciseDetailSheet({ theme, entry, exerciseLog = [], onClose, onEdit, onDelete }) {
   const [visible, setVisible] = React.useState(false);
   React.useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
 
@@ -3095,6 +3096,182 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
                       }}>{b.moving_time ? fmt(b.moving_time) : '—'}</div>
                     </div>
                   ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* HR zones donut — only when Strava returned a per-zone breakdown. */}
+          {Array.isArray(d.hr_zones) && d.hr_zones.length > 0 && (() => {
+            const zones = d.hr_zones;
+            const total = zones.reduce((s, z) => s + (z.time_s || 0), 0);
+            if (!total) return null;
+            const ZC = ['#7A8BD1', '#5FA8C9', '#2B7A5C', '#E0A24A', '#D96B5C'];
+            const CX = 50, CY = 50, R = 34, SW = 10;
+            const C = 2 * Math.PI * R;
+            let offset = 0;
+            const arcs = zones.map((z, i) => {
+              const frac = (z.time_s || 0) / total;
+              const len = frac * C;
+              const node = (
+                <circle key={i} cx={CX} cy={CY} r={R}
+                  fill="none" stroke={ZC[i] || '#888'}
+                  strokeWidth={SW}
+                  strokeDasharray={`${len} ${C}`}
+                  strokeDashoffset={-offset}
+                  transform={`rotate(-90 ${CX} ${CY})`}/>
+              );
+              offset += len;
+              return node;
+            });
+            const fmtMin = (s) => {
+              const m = Math.floor(s / 60);
+              return m > 0 ? `${m}m` : `${s}s`;
+            };
+            const avg = entry.details?.average_heartrate ? Math.round(entry.details.average_heartrate) : null;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>
+                  Heart-rate zones
+                </div>
+                <div style={{
+                  display: 'flex', gap: 14, padding: '14px 14px',
+                  background: theme.surface, borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`, alignItems: 'center',
+                }}>
+                  <div style={{ position: 'relative', width: 100, height: 100, flexShrink: 0 }}>
+                    <svg width="100" height="100" viewBox="0 0 100 100">
+                      <circle cx={CX} cy={CY} r={R} fill="none"
+                        stroke={theme.surfaceAlt} strokeWidth={SW}/>
+                      {arcs}
+                    </svg>
+                    {avg && (
+                      <div style={{
+                        position: 'absolute', inset: 0, display: 'flex',
+                        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: theme.font, fontSize: 10, color: theme.inkSoft,
+                      }}>
+                        <div style={{
+                          fontFamily: theme.numFont, fontSize: 18, fontWeight: theme.numWeight,
+                          color: theme.ink, lineHeight: 1,
+                        }}>{avg}</div>
+                        <div>avg bpm</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                    {zones.map((z, i) => {
+                      const pct = Math.round((z.time_s / total) * 100);
+                      const label = z.min != null && z.max != null && z.max !== -1
+                        ? `Z${i+1} ${z.min}–${z.max}`
+                        : `Z${i+1} ${z.min || ''}+`;
+                      return (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          fontFamily: theme.font, fontSize: 11,
+                        }}>
+                          <span style={{
+                            width: 8, height: 8, borderRadius: 4,
+                            background: ZC[i] || '#888', flexShrink: 0,
+                          }}/>
+                          <span style={{ color: theme.inkSoft, flex: 1, minWidth: 0,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {label}
+                          </span>
+                          <span style={{
+                            fontFamily: theme.numFont, fontWeight: 600, color: theme.ink,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}>{fmtMin(z.time_s)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Vs last 4 sessions of the same type — computed from exerciseLog.
+              Shows the most informative of duration / distance / avg HR / pace. */}
+          {(() => {
+            if (!entry.type || !exerciseLog || exerciseLog.length < 2) return null;
+            const sameType = exerciseLog
+              .filter(e => e.type === entry.type && e.id !== entry.id && e.date && e.date <= (entry.date || entry.details?.start_date_local || ''))
+              .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+              .slice(0, 4);
+            if (sameType.length < 2) return null;
+            const metrics = [];
+            const curDur = +entry.duration || 0;
+            const prevDur = sameType.map(e => +e.duration || 0).filter(v => v);
+            if (curDur && prevDur.length >= 2) {
+              const avg = prevDur.reduce((a,b)=>a+b,0)/prevDur.length;
+              metrics.push({ k: 'Duration', cur: `${Math.round(curDur)}m`,
+                delta: Math.round(curDur - avg), unit: 'm', good: null });
+            }
+            const curDist = +entry.distance || 0;
+            const prevDist = sameType.map(e => +e.distance || 0).filter(v => v);
+            if (curDist && prevDist.length >= 2) {
+              const avg = prevDist.reduce((a,b)=>a+b,0)/prevDist.length;
+              metrics.push({ k: 'Distance', cur: `${curDist.toFixed(1)}km`,
+                delta: +(curDist - avg).toFixed(1), unit: 'km', good: 1 });
+            }
+            const curHR = +entry.details?.average_heartrate || 0;
+            const prevHR = sameType.map(e => +e.details?.average_heartrate || 0).filter(v => v);
+            if (curHR && prevHR.length >= 2) {
+              const avg = prevHR.reduce((a,b)=>a+b,0)/prevHR.length;
+              metrics.push({ k: 'Avg HR', cur: `${Math.round(curHR)}bpm`,
+                delta: Math.round(curHR - avg), unit: 'bpm', good: -1 });
+            }
+            const curPace = +entry.details?.pace_sec_per_km || 0;
+            const prevPace = sameType.map(e => +e.details?.pace_sec_per_km || 0).filter(v => v);
+            if (curPace && prevPace.length >= 2) {
+              const avg = prevPace.reduce((a,b)=>a+b,0)/prevPace.length;
+              const d = Math.round(curPace - avg);
+              const m = Math.floor(Math.abs(d)/60), s = Math.abs(d)%60;
+              metrics.push({ k: 'Pace', cur: `${Math.floor(curPace/60)}:${String(curPace%60).padStart(2,'0')}/km`,
+                delta: d, unit: null, good: -1,
+                deltaStr: `${d < 0 ? '−' : '+'}${m > 0 ? `${m}:` : ''}${String(s).padStart(m>0?2:1,'0')}` });
+            }
+            if (!metrics.length) return null;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>
+                  Vs last {sameType.length} · {entry.type.toLowerCase()}
+                </div>
+                <div style={{
+                  background: theme.surface, borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`, padding: '6px 14px',
+                }}>
+                  {metrics.map(m => {
+                    const positive = m.good == null ? null
+                      : (m.good > 0 ? m.delta > 0 : m.delta < 0);
+                    const color = positive == null ? theme.inkMute
+                      : (positive ? '#2B7A5C' : '#D96B5C');
+                    const deltaStr = m.deltaStr || (m.delta > 0 ? '+' : '') + m.delta + (m.unit || '');
+                    return (
+                      <div key={m.k} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                        padding: '7px 0',
+                        fontFamily: theme.font, fontSize: 13,
+                      }}>
+                        <span style={{ color: theme.inkSoft, fontSize: 11,
+                          textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{m.k}</span>
+                        <span style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                          <span style={{
+                            fontFamily: theme.numFont, fontWeight: theme.numWeight,
+                            color: theme.ink, fontVariantNumeric: 'tabular-nums',
+                          }}>{m.cur}</span>
+                          {Math.abs(m.delta) > 0.001 && (
+                            <span style={{
+                              fontSize: 11, fontWeight: 600, color,
+                              minWidth: 50, textAlign: 'right',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}>{deltaStr}</span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
