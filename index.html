@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -2948,6 +2948,157 @@ function ExerciseDetailSheet({ theme, entry, onClose, onEdit, onDelete }) {
               ))}
             </div>
           )}
+
+          {/* Map — decoded Strava summary_polyline. Pure SVG, no external deps. */}
+          {d.map_polyline && (() => {
+            // Google polyline decoder — returns array of [lat, lng] points.
+            const decode = (s) => {
+              const pts = []; let idx = 0, lat = 0, lng = 0;
+              while (idx < s.length) {
+                let result = 1, shift = 0, b;
+                do { b = s.charCodeAt(idx++) - 63 - 1; result += b << shift; shift += 5; } while (b >= 0x1f);
+                lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+                result = 1; shift = 0;
+                do { b = s.charCodeAt(idx++) - 63 - 1; result += b << shift; shift += 5; } while (b >= 0x1f);
+                lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+                pts.push([lat * 1e-5, lng * 1e-5]);
+              }
+              return pts;
+            };
+            let pts;
+            try { pts = decode(d.map_polyline); } catch { return null; }
+            if (!pts || pts.length < 2) return null;
+            const lats = pts.map(p => p[0]), lngs = pts.map(p => p[1]);
+            const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+            const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+            const W = 320, H = 140, PAD = 10;
+            const spanLat = maxLat - minLat || 1;
+            const spanLng = maxLng - minLng || 1;
+            // Keep aspect ratio for the path
+            const scale = Math.min((W - 2 * PAD) / spanLng, (H - 2 * PAD) / spanLat);
+            const offsetX = (W - spanLng * scale) / 2;
+            const offsetY = (H - spanLat * scale) / 2;
+            const path = pts.map(([la, ln], i) => {
+              const x = offsetX + (ln - minLng) * scale;
+              const y = offsetY + (maxLat - la) * scale;
+              return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            const firstX = offsetX + (lngs[0] - minLng) * scale;
+            const firstY = offsetY + (maxLat - lats[0]) * scale;
+            const lastX = offsetX + (lngs[lngs.length-1] - minLng) * scale;
+            const lastY = offsetY + (maxLat - lats[lats.length-1]) * scale;
+            return (
+              <div style={{
+                marginBottom: 14, padding: 0, overflow: 'hidden',
+                borderRadius: theme.radius.card,
+                border: `1px solid ${theme.line}`,
+                background: 'linear-gradient(135deg, #E8F0E8 0%, #C9DDD0 100%)',
+              }}>
+                <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+                  <path d={path} fill="none" stroke="#FC4C02"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx={firstX} cy={firstY} r="4" fill="#2B7A5C" stroke="#fff" strokeWidth="1.5"/>
+                  <circle cx={lastX} cy={lastY} r="4" fill="#D96B5C" stroke="#fff" strokeWidth="1.5"/>
+                </svg>
+              </div>
+            );
+          })()}
+
+          {/* Per-km splits — bars sized by pace (faster = taller). */}
+          {Array.isArray(d.splits_km) && d.splits_km.length >= 2 && (() => {
+            const splits = d.splits_km;
+            const paces = splits.map(s => s.pace_sec_per_km || (s.seconds && s.distance ? Math.round(s.seconds / ((s.distance || 1) / 1000)) : null)).filter(p => p);
+            if (paces.length < 2) return null;
+            const minPace = Math.min(...paces), maxPace = Math.max(...paces);
+            const avgPace = paces.reduce((a, b) => a + b, 0) / paces.length;
+            const fmt = (p) => { const m = Math.floor(p / 60); const s = p % 60; return `${m}:${String(s).padStart(2,'0')}`; };
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Splits (km)</span>
+                  <span style={{ color: theme.inkMute, fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+                    avg {fmt(Math.round(avgPace))}/km
+                  </span>
+                </div>
+                <div style={{
+                  padding: '16px 14px 10px', background: theme.surface,
+                  borderRadius: theme.radius.btn, border: `1px solid ${theme.line}`,
+                  display: 'flex', alignItems: 'flex-end', gap: 4, height: 80,
+                }}>
+                  {splits.map((s, i) => {
+                    const p = s.pace_sec_per_km || (s.seconds && s.distance ? Math.round(s.seconds / ((s.distance || 1) / 1000)) : null);
+                    if (!p) return <div key={i} style={{ flex: 1 }}/>;
+                    // Faster pace = smaller number = taller bar.
+                    const rel = (maxPace - p) / Math.max(1, maxPace - minPace);
+                    const h = 16 + rel * 48;
+                    const isFaster = p < avgPace;
+                    return (
+                      <div key={i} title={`km ${s.km || i+1} · ${fmt(p)}/km`}
+                        style={{
+                          flex: 1, minWidth: 8, height: h,
+                          background: isFaster ? '#2B7A5C' : '#7A8BD1',
+                          borderRadius: '3px 3px 0 0',
+                          opacity: 0.85,
+                        }}/>
+                    );
+                  })}
+                </div>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  padding: '4px 2px 0', fontSize: 10, color: theme.inkMute,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  <span>km 1</span>
+                  <span>km {splits.length}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Best efforts — PRs from this run (if Strava returned them). */}
+          {Array.isArray(d.best_efforts) && d.best_efforts.length > 0 && (() => {
+            const prs = d.best_efforts.filter(b => b.pr_rank && b.pr_rank <= 3);
+            const all = prs.length ? prs : d.best_efforts.slice(0, 5);
+            const fmt = (s) => { const m = Math.floor(s / 60); const r = s % 60; return `${m}:${String(r).padStart(2,'0')}`; };
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...labelStyle, marginBottom: 6, paddingLeft: 4 }}>
+                  {prs.length ? `Personal records · ${prs.length}` : 'Best efforts'}
+                </div>
+                <div style={{
+                  background: theme.surface, borderRadius: theme.radius.btn,
+                  border: `1px solid ${theme.line}`, overflow: 'hidden',
+                }}>
+                  {all.map((b, i) => (
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '9px 14px',
+                      borderTop: i > 0 ? `1px solid ${theme.line}` : 'none',
+                    }}>
+                      <div style={{
+                        fontFamily: theme.font, fontSize: 13,
+                        color: theme.ink, fontWeight: 500,
+                      }}>
+                        {b.pr_rank && b.pr_rank <= 3 && (
+                          <span style={{
+                            display: 'inline-block', marginRight: 8,
+                            padding: '1px 6px', borderRadius: 4,
+                            background: b.pr_rank === 1 ? '#E0A24A' : (b.pr_rank === 2 ? '#A8A8A8' : '#B8865B'),
+                            color: '#fff', fontSize: 10, fontWeight: 700,
+                          }}>PR{b.pr_rank > 1 ? ` #${b.pr_rank}` : ''}</span>
+                        )}
+                        {b.name}
+                      </div>
+                      <div style={{
+                        fontFamily: theme.numFont, fontSize: 13, fontWeight: theme.numWeight,
+                        color: theme.ink, fontVariantNumeric: 'tabular-nums',
+                      }}>{b.moving_time ? fmt(b.moving_time) : '—'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Secondary stats */}
           {secondary.length > 0 && (
