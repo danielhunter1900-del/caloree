@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1840,7 +1840,7 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
           <div style={{
             fontFamily: theme.font, fontSize: 11, color: '#5A3D9E',
             letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginTop: 3,
-          }}>{tmpl?.name || plan.template} · wk {weekOf} of {plan.weeks}</div>
+          }}>{tmpl?.name || plan.template}{planWeekNumber ? ` · wk ${planWeekNumber} of ${plan.weeks}` : ` · ${plan.weeks}-week plan`}</div>
         </div>
         <button onClick={() => setPickingTemplate(true)} style={{
           background: 'none', border: 'none', cursor: 'pointer',
