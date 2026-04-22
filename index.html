@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1439,7 +1439,609 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
   );
 }
 
+// ── Training plan: curated NRC guided-run catalog ──
+// No public Nike API exists; this is a hand-maintained list matched by
+// caloree_type so the planner can suggest a real session that exists in
+// the NRC app. If Nike renames/removes one, the deep-link still opens
+// NRC's home screen and the user picks manually.
+const NRC_CATALOG = [
+  { id: 'speed-5x3-threshold', nike: 'Speed Run · 5×3 @ Threshold', coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 38 },
+  { id: 'speed-8x400',         nike: 'Speed Run · 8×400m',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 42 },
+  { id: 'speed-6x2-vo2',       nike: 'Speed Run · 6×2 @ VO₂',       coach: 'Coach Bennett', caloree_type: 'speed', minutes: 36 },
+  { id: 'tempo-20',            nike: 'Tempo Run · 20 min',          coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 35 },
+  { id: 'tempo-30',            nike: 'Tempo Run · 30 min',          coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 45 },
+  { id: 'hill-6x1',            nike: 'Hill Repeats · 6×1 min',       coach: 'Coach Bennett', caloree_type: 'hills', minutes: 32 },
+  { id: 'fartlek-45',          nike: 'Fartlek Play · 45 min',        coach: 'Coach Bennett', caloree_type: 'speed', minutes: 45 },
+  { id: 'long-60',             nike: 'Long Run · 60 min',            coach: 'Coach Bennett', caloree_type: 'long', minutes: 60 },
+  { id: 'long-90',             nike: 'Long Run · 90 min',            coach: 'Coach Bennett', caloree_type: 'long', minutes: 90 },
+];
+function findNRCMatch(session) {
+  if (!session || !session.kind || session.kind !== 'run') return null;
+  const t = (session.runType || '').toLowerCase();
+  if (!['tempo', 'speed', 'hills', 'long'].includes(t)) return null; // easy/recovery: no NRC
+  const pool = NRC_CATALOG.filter(x => x.caloree_type === t);
+  if (!pool.length) return null;
+  // Prefer the session whose minutes are closest to the prescription
+  const target = +session.minutes || 40;
+  return pool.sort((a, b) =>
+    Math.abs(a.minutes - target) - Math.abs(b.minutes - target))[0];
+}
+
+// Deterministic 4-week plan generator. Templates embed day-of-week shape;
+// adaptive recompute (Claude) can tweak it from week 2 onward.
+const PLAN_TEMPLATES = {
+  'hybrid-runner': {
+    name: 'Hybrid Runner',
+    desc: '3 runs + 2 strength + 1 mobility + 1 rest. Plyo on tempo day.',
+    weeks: 4,
+    shape: [
+      { dow: 1, kind: 'run',      runType: 'easy',    minutes: 30 },
+      { dow: 2, kind: 'strength', focus: 'push/pull', minutes: 40 },
+      { dow: 3, kind: 'rest' },
+      { dow: 4, kind: 'run',      runType: 'tempo',   minutes: 45, addon: 'plyo' },
+      { dow: 5, kind: 'strength', focus: 'core/pull', minutes: 35 },
+      { dow: 6, kind: 'run',      runType: 'long',    minutes: 75 },
+      { dow: 0, kind: 'mobility', minutes: 25 },
+    ],
+  },
+  'runners-shell': {
+    name: "Runner's Shell",
+    desc: '4 runs + core/mobility only. Maximum run volume.',
+    weeks: 6,
+    shape: [
+      { dow: 1, kind: 'run',      runType: 'easy',    minutes: 35 },
+      { dow: 2, kind: 'mobility', minutes: 20 },
+      { dow: 3, kind: 'run',      runType: 'hills',   minutes: 40 },
+      { dow: 4, kind: 'mobility', minutes: 20 },
+      { dow: 5, kind: 'run',      runType: 'tempo',   minutes: 45 },
+      { dow: 6, kind: 'run',      runType: 'long',    minutes: 90 },
+      { dow: 0, kind: 'rest' },
+    ],
+  },
+  'balanced-base': {
+    name: 'Balanced Base',
+    desc: '2 easy runs + 3 calisthenics + 1 plyo + 1 mobility. Lower intensity.',
+    weeks: 8,
+    shape: [
+      { dow: 1, kind: 'run',      runType: 'easy',    minutes: 30 },
+      { dow: 2, kind: 'strength', focus: 'pyramid',   minutes: 40 },
+      { dow: 3, kind: 'strength', focus: 'core',      minutes: 30 },
+      { dow: 4, kind: 'run',      runType: 'easy',    minutes: 45 },
+      { dow: 5, kind: 'plyo',     minutes: 25 },
+      { dow: 6, kind: 'strength', focus: 'full body', minutes: 45 },
+      { dow: 0, kind: 'mobility', minutes: 25 },
+    ],
+  },
+};
+
+function generatePlan(templateKey, startDateIso) {
+  const tmpl = PLAN_TEMPLATES[templateKey];
+  if (!tmpl) return null;
+  const start = new Date(startDateIso + 'T00:00:00');
+  // Align start to the nearest upcoming Monday (dow 1)
+  const shift = (8 - start.getDay()) % 7;
+  start.setDate(start.getDate() + (shift || 7));
+  const sessions = [];
+  for (let w = 0; w < tmpl.weeks; w++) {
+    tmpl.shape.forEach(block => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + w * 7 + ((block.dow - 1 + 7) % 7));
+      sessions.push({
+        date: todayLocalIso(d),
+        week: w + 1,
+        ...block,
+      });
+    });
+  }
+  return {
+    template: templateKey,
+    start_date: todayLocalIso(start),
+    weeks: tmpl.weeks,
+    sessions,
+    prefs: {
+      min_cal_per_wk: 2,
+      min_mob_per_wk: 1,
+      min_plyo_per_wk: 1,
+      max_weekly_increase_pct: 10,
+      preferred_rest_dow: 3,
+      long_run_dow: 6,
+      deload_every: 4,
+      wont_do: ['swim', 'treadmill'],
+      equipment: ['plyo_box', 'kettlebell', 'pull_up_bar', 'rings', 'bands', 'mat'],
+      prefer_nrc_for_structured: true,
+    },
+  };
+}
+
+// ── Plan session icons + colors ──
+const PLAN_KIND_STYLE = {
+  run:      { icon: '🏃', color: '#D96B5C', label: 'Run' },
+  strength: { icon: '🤸', color: '#A86B4F', label: 'Strength' },
+  mobility: { icon: '🧘', color: '#6BAF92', label: 'Mobility' },
+  plyo:     { icon: '💥', color: '#9C6BD9', label: 'Plyometrics' },
+  rest:     { icon: '🌙', color: '#7A8BD1', label: 'Rest day' },
+};
+
+// ── Planner view: today's session + this week + templates + prefs ──
+function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedDate, onExit, onOpenPrefs }) {
+  const plan = settings && settings.trainingPlan;
+  const [pickingTemplate, setPickingTemplate] = React.useState(false);
+  const [templateChoice, setTemplateChoice] = React.useState('hybrid-runner');
+
+  const startPlan = (key) => {
+    const newPlan = generatePlan(key, todayLocalIso());
+    setSettings({ ...(settings || {}), trainingPlan: newPlan });
+    setPickingTemplate(false);
+  };
+  const clearPlan = () => {
+    if (!confirm('Discard current plan? This keeps your logged workouts but removes the schedule.')) return;
+    const next = { ...(settings || {}) };
+    delete next.trainingPlan;
+    setSettings(next);
+  };
+
+  if (!plan || pickingTemplate) {
+    // ── No plan: template picker ──
+    return (
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
+        <div style={{ padding: '18px 18px 8px' }}>
+          <div style={{
+            fontFamily: theme.titleFont, fontSize: 22, fontWeight: theme.titleWeight,
+            color: theme.ink, letterSpacing: theme.letter, marginBottom: 6,
+          }}>{plan ? 'Switch template' : 'Pick a training plan'}</div>
+          <div style={{ fontFamily: theme.font, fontSize: 13, color: theme.inkSoft, lineHeight: 1.5 }}>
+            Plans auto-adapt weekly. Structured runs suggest a matching Nike guided session.
+          </div>
+        </div>
+        <div style={{ padding: '8px 18px 18px' }}>
+          {Object.entries(PLAN_TEMPLATES).map(([key, t]) => {
+            const selected = templateChoice === key;
+            return (
+              <div key={key} onClick={() => setTemplateChoice(key)} style={{
+                padding: 14, marginBottom: 10,
+                background: selected ? theme.surface : theme.surfaceAlt,
+                borderRadius: theme.radius.card,
+                border: `1.5px solid ${selected ? theme.ink : 'transparent'}`,
+                cursor: 'pointer',
+                boxShadow: selected ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <div style={{
+                  fontFamily: theme.titleFont, fontSize: 15, fontWeight: 600,
+                  color: theme.ink, letterSpacing: theme.letter,
+                }}>{t.name} · {t.weeks} weeks</div>
+                <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 3, lineHeight: 1.45 }}>
+                  {t.desc}
+                </div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+                  {Object.entries(t.shape.reduce((m, s) => ({ ...m, [s.kind]: (m[s.kind] || 0) + 1 }), {})).map(([k, n]) => (
+                    <span key={k} style={{
+                      padding: '2px 7px', fontSize: 10, fontWeight: 700,
+                      background: theme.bg, border: `1px solid ${theme.line}`,
+                      borderRadius: 999, color: PLAN_KIND_STYLE[k]?.color || theme.inkSoft,
+                    }}>{PLAN_KIND_STYLE[k]?.icon || '•'} {n}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={() => startPlan(templateChoice)} style={{
+            width: '100%', marginTop: 8, padding: 14, border: 'none',
+            background: theme.ink, color: theme.bg, borderRadius: 12,
+            fontFamily: theme.font, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>{plan ? 'Switch to this plan' : 'Start this plan →'}</button>
+          {plan && (
+            <button onClick={() => setPickingTemplate(false)} style={{
+              width: '100%', marginTop: 8, padding: 12, border: `1px solid ${theme.line}`,
+              background: 'transparent', color: theme.inkSoft, borderRadius: 12,
+              fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            }}>Cancel</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Plan exists ──
+  const tmpl = PLAN_TEMPLATES[plan.template];
+  const todaySess = plan.sessions.find(s => s.date === selectedDate);
+  // Week that selectedDate belongs to
+  const weekOf = todaySess ? todaySess.week : (() => {
+    // Fall back to the first week with future sessions
+    const future = plan.sessions.find(s => s.date >= selectedDate);
+    return future ? future.week : 1;
+  })();
+  const weekSessions = plan.sessions.filter(s => s.week === weekOf)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Completion: match plan sessions against exerciseLog by date + kind
+  const matchLog = (sess) => {
+    if (sess.kind === 'rest') return null;
+    const candidates = exerciseLog.filter(e => e.date === sess.date);
+    if (!candidates.length) return null;
+    // Type match
+    const typeMap = { run: 'Run', strength: ['Strength','Calisthenics'], mobility: 'Mobility', plyo: ['Calisthenics','HIIT','Other'] };
+    const want = typeMap[sess.kind];
+    const match = candidates.find(e => Array.isArray(want) ? want.includes(e.type) : e.type === want);
+    return match || candidates[0];
+  };
+  const completionsByWeek = (() => {
+    const m = {};
+    plan.sessions.forEach(s => {
+      if (s.kind === 'rest') return;
+      if (!m[s.week]) m[s.week] = { total: 0, done: 0 };
+      m[s.week].total += 1;
+      if (matchLog(s)) m[s.week].done += 1;
+    });
+    return m;
+  })();
+  const thisWeekProgress = completionsByWeek[weekOf] || { total: 0, done: 0 };
+  const matched = todaySess ? matchLog(todaySess) : null;
+  const nrc = todaySess ? findNRCMatch(todaySess) : null;
+  const kindStyle = todaySess ? PLAN_KIND_STYLE[todaySess.kind] : null;
+
+  const isoWeekdayLabel = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
+      <div style={{
+        padding: '18px 18px 12px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: theme.titleFont, fontSize: 22, fontWeight: theme.titleWeight,
+            color: theme.ink, letterSpacing: theme.letter,
+          }}>Plan</div>
+          <div style={{
+            fontFamily: theme.font, fontSize: 11, color: '#5A3D9E',
+            letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, marginTop: 3,
+          }}>{tmpl?.name || plan.template} · wk {weekOf} of {plan.weeks}</div>
+        </div>
+        <button onClick={() => setPickingTemplate(true)} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 11, color: theme.inkSoft, padding: 4, fontWeight: 600,
+        }}>Change ›</button>
+      </div>
+
+      {/* Today's session */}
+      <div style={{ padding: '0 16px' }}>
+        <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+          color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+          marginBottom: 6, paddingLeft: 4 }}>Today · {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+        {!todaySess ? (
+          <div style={{
+            padding: '16px 18px', background: theme.surface,
+            borderRadius: theme.radius.card, border: `1px solid ${theme.line}`,
+            fontFamily: theme.font, fontSize: 13, color: theme.inkSoft, lineHeight: 1.5,
+          }}>No session scheduled. Enjoy a free day.</div>
+        ) : todaySess.kind === 'rest' ? (
+          <div style={{
+            padding: '16px 18px',
+            background: 'linear-gradient(90deg, rgba(122,139,209,0.15), rgba(122,139,209,0.06))',
+            borderRadius: theme.radius.card,
+            border: '1px solid rgba(122,139,209,0.35)',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <span style={{ fontSize: 24 }}>🌙</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: theme.font, fontSize: 13, fontWeight: 700, color: '#4A5A9E' }}>
+                Rest day
+              </div>
+              <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2 }}>
+                Light movement is fine. Walking, mobility, stretching.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            padding: 0, background: theme.surface,
+            borderRadius: theme.radius.card, border: `1px solid ${theme.line}`,
+            overflow: 'hidden',
+          }}>
+            <div style={{ padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'center',
+              borderBottom: matched || nrc ? `1px solid ${theme.line}` : 'none' }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                background: kindStyle.color, color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22,
+              }}>{kindStyle.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: theme.font, fontSize: 15, fontWeight: 600,
+                  color: theme.ink }}>
+                  {todaySess.kind === 'run'
+                    ? `${todaySess.runType?.replace(/\b\w/g, c => c.toUpperCase())} run · ${todaySess.minutes} min`
+                    : todaySess.kind === 'strength'
+                      ? `${(todaySess.focus || 'Strength').replace(/\b\w/g, c => c.toUpperCase())} · ${todaySess.minutes} min`
+                      : `${kindStyle.label} · ${todaySess.minutes} min`}
+                </div>
+                <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 3 }}>
+                  {todaySess.addon === 'plyo' && '+ plyometrics after · '}
+                  RPE target {todaySess.kind === 'run' && todaySess.runType === 'tempo' ? '7/10' : todaySess.kind === 'run' && todaySess.runType === 'speed' ? '8/10' : todaySess.kind === 'run' && todaySess.runType === 'long' ? '5/10' : '6/10'}
+                </div>
+              </div>
+              {matched && (
+                <span style={{
+                  padding: '3px 8px', background: theme.accent, color: theme.accentInk,
+                  borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                }}>DONE ✓</span>
+              )}
+            </div>
+
+            {nrc && !matched && (
+              <div style={{
+                padding: '12px 16px', background: 'linear-gradient(90deg, rgba(252,76,2,0.07), rgba(252,76,2,0.02))',
+                borderTop: `1px solid ${theme.line}`,
+              }}>
+                <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                  color: '#C23A02', letterSpacing: '0.08em', textTransform: 'uppercase',
+                  marginBottom: 3 }}>Nike Run Club · suggested</div>
+                <div style={{ fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink }}>
+                  {nrc.nike}
+                </div>
+                <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 2 }}>
+                  {nrc.coach} · ~{nrc.minutes} min on the Watch
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <a href="nikerunclub://" style={{
+                    flex: 1, padding: '10px 0', textAlign: 'center',
+                    background: '#FC4C02', color: '#fff', borderRadius: 10,
+                    fontFamily: theme.font, fontSize: 13, fontWeight: 700,
+                    textDecoration: 'none',
+                  }}>Open in Nike Run Club ↗</a>
+                </div>
+                <div style={{ fontFamily: theme.font, fontSize: 10, color: theme.inkMute, marginTop: 6, lineHeight: 1.4 }}>
+                  Pick the matching session in NRC. Run on your Watch. Auto-matches via Strava when you finish.
+                </div>
+              </div>
+            )}
+
+            {!nrc && !matched && todaySess.kind === 'run' && (
+              <div style={{
+                padding: '10px 16px', background: theme.surfaceAlt, fontSize: 11, color: theme.inkSoft, lineHeight: 1.45,
+                borderTop: `1px solid ${theme.line}`,
+              }}>
+                Any running app works for this one. Your Watch's built-in Workout app is fine.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* This week ribbon */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            This week
+          </div>
+          <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>
+            {thisWeekProgress.done}/{thisWeekProgress.total} done
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          {weekSessions.map(s => {
+            const done = !!matchLog(s);
+            const isToday = s.date === selectedDate;
+            const st = PLAN_KIND_STYLE[s.kind] || PLAN_KIND_STYLE.rest;
+            return (
+              <div key={s.date} style={{
+                aspectRatio: '1/1', borderRadius: 8,
+                background: st.color, position: 'relative',
+                opacity: done ? 0.85 : (isToday ? 1 : 0.55),
+                outline: isToday ? `2px solid ${theme.ink}` : 'none',
+                outlineOffset: -1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, color: '#fff',
+              }}>
+                <span>{st.icon}</span>
+                <span style={{
+                  position: 'absolute', top: 2, left: 4, fontSize: 8, fontWeight: 700,
+                  color: 'rgba(255,255,255,0.9)', letterSpacing: '0.06em',
+                }}>{isoWeekdayLabel(s.date)[0]}</span>
+                {done && (
+                  <span style={{
+                    position: 'absolute', bottom: 2, right: 3, fontSize: 9, fontWeight: 700,
+                    color: '#fff',
+                  }}>✓</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ padding: '20px 16px 0', display: 'flex', gap: 8 }}>
+        <button onClick={onOpenPrefs} style={{
+          flex: 1, padding: '12px 10px', border: `1px solid ${theme.line}`,
+          background: theme.surface, color: theme.ink, borderRadius: 10,
+          fontFamily: theme.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+        }}>Preferences</button>
+        <button onClick={clearPlan} style={{
+          padding: '12px 14px', border: `1px solid ${theme.line}`,
+          background: 'transparent', color: '#D96B5C', borderRadius: 10,
+          fontFamily: theme.font, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        }}>Discard</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Plan preferences sheet ──
+function PlanPrefsSheet({ theme, settings, setSettings, onClose }) {
+  const plan = settings?.trainingPlan;
+  if (!plan) return null;
+  const prefs = plan.prefs || {};
+  const patch = (k, v) => {
+    setSettings({
+      ...(settings || {}),
+      trainingPlan: { ...plan, prefs: { ...prefs, [k]: v } },
+    });
+  };
+  const EQUIP = [
+    ['plyo_box', '🧱', 'Plyo box'],
+    ['barbell', '🏋️', 'Barbell'],
+    ['kettlebell', '🔔', 'Kettlebell'],
+    ['pull_up_bar', '🪢', 'Pull-up bar'],
+    ['rings', '💍', 'Rings/TRX'],
+    ['bands', '🎯', 'Bands'],
+    ['mat', '📏', 'Mat/floor'],
+    ['treadmill', '🏃', 'Treadmill'],
+    ['bike', '🚲', 'Bike'],
+  ];
+  const DOW_LABELS = ['S','M','T','W','T','F','S'];
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300,
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '90vh', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '14px 18px 10px', borderBottom: `1px solid ${theme.line}` }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 12px' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontFamily: theme.titleFont, fontSize: 20, fontWeight: theme.titleWeight, color: theme.ink }}>
+              Plan preferences
+            </div>
+            <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 22, color: theme.inkMute, padding: 4 }}>×</button>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 22px' }}>
+
+          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+            Weekly minimums
+          </div>
+          {[
+            ['min_cal_per_wk', 'Calisthenics / strength', '🤸'],
+            ['min_mob_per_wk', 'Mobility', '🧘'],
+            ['min_plyo_per_wk', 'Plyometrics', '💥'],
+          ].map(([k, label, icon]) => (
+            <div key={k} style={{
+              padding: '10px 12px', background: theme.surface, borderRadius: 10,
+              marginBottom: 6, border: `1px solid ${theme.line}`,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>{icon}</span>
+                <span style={{ fontFamily: theme.font, fontSize: 13 }}>{label}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button onClick={() => patch(k, Math.max(0, (prefs[k] || 0) - 1))}
+                  style={{ width: 26, height: 26, border: `1px solid ${theme.line}`, background: theme.surface, borderRadius: 13, cursor: 'pointer', fontSize: 14 }}>−</button>
+                <div style={{ width: 24, textAlign: 'center', fontFamily: theme.numFont, fontWeight: 700 }}>{prefs[k] || 0}</div>
+                <button onClick={() => patch(k, Math.min(7, (prefs[k] || 0) + 1))}
+                  style={{ width: 26, height: 26, border: `1px solid ${theme.line}`, background: theme.surface, borderRadius: 13, cursor: 'pointer', fontSize: 14 }}>+</button>
+              </div>
+            </div>
+          ))}
+
+          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '16px 0 8px' }}>
+            Schedule
+          </div>
+          <div style={{ padding: '10px 12px', background: theme.surface, borderRadius: 10,
+            border: `1px solid ${theme.line}`, marginBottom: 6 }}>
+            <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginBottom: 6 }}>Preferred rest day</div>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {DOW_LABELS.map((l, i) => (
+                <button key={i} onClick={() => patch('preferred_rest_dow', i)} style={{
+                  flex: 1, padding: '8px 0',
+                  border: `1px solid ${prefs.preferred_rest_dow === i ? theme.ink : theme.line}`,
+                  background: prefs.preferred_rest_dow === i ? theme.ink : theme.surface,
+                  color: prefs.preferred_rest_dow === i ? theme.bg : theme.ink,
+                  borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                }}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ padding: '10px 12px', background: theme.surface, borderRadius: 10,
+            border: `1px solid ${theme.line}`, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontFamily: theme.font, fontSize: 13 }}>Max weekly volume ↑</div>
+              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>Hard safety ceiling</div>
+            </div>
+            <span style={{ padding: '3px 10px', background: 'rgba(217,107,92,0.15)', color: '#B23A2A',
+              borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+              {prefs.max_weekly_increase_pct || 10}%
+            </span>
+          </div>
+
+          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '16px 0 8px' }}>
+            Equipment
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {EQUIP.map(([k, icon, label]) => {
+              const on = (prefs.equipment || []).includes(k);
+              return (
+                <button key={k} onClick={() => {
+                  const cur = new Set(prefs.equipment || []);
+                  if (cur.has(k)) cur.delete(k); else cur.add(k);
+                  patch('equipment', [...cur]);
+                }} style={{
+                  padding: '10px 6px', textAlign: 'center', cursor: 'pointer',
+                  border: `1.5px solid ${on ? theme.ink : theme.line}`,
+                  background: on ? theme.surface : 'transparent',
+                  borderRadius: 10, opacity: on ? 1 : 0.5,
+                }}>
+                  <div style={{ fontSize: 18 }}>{icon}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>{label}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '16px 0 8px' }}>
+            Nike Run Club
+          </div>
+          <div style={{ padding: '10px 12px', background: theme.surface, borderRadius: 10,
+            border: `1px solid ${theme.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontFamily: theme.font, fontSize: 13 }}>Prefer NRC for structured runs</div>
+              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, lineHeight: 1.4 }}>
+                Tempo / speed / hills / long suggest a matching Nike session.
+              </div>
+            </div>
+            <button onClick={() => patch('prefer_nrc_for_structured', !prefs.prefer_nrc_for_structured)}
+              style={{
+                width: 44, height: 26, borderRadius: 13, border: 'none',
+                background: prefs.prefer_nrc_for_structured ? theme.accent : theme.surfaceAlt,
+                position: 'relative', cursor: 'pointer', padding: 2,
+              }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 11, background: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                transform: prefs.prefer_nrc_for_structured ? 'translateX(18px)' : 'translateX(0)',
+                transition: 'transform 0.18s',
+              }}/>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, setSettings, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, weightLog = [], onAddMeal, onOpenFood, onOpenProfile, onAddExercise, onOpenWeight, session, logDate, setLogDate }) {
+  // Tracker ↔ Planner. Persisted across reloads so the view feels stable.
+  const [plannerMode, setPlannerMode] = React.useState(() => {
+    try { return localStorage.getItem('cal_home_mode') === 'planner'; } catch { return false; }
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem('cal_home_mode', plannerMode ? 'planner' : 'tracker'); } catch {}
+  }, [plannerMode]);
+  const [showPlanPrefs, setShowPlanPrefs] = React.useState(false);
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -1676,6 +2278,47 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
     : 'complete';
 
   const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+
+  // Floating switch pill — shown on both tracker and planner views.
+  const switchPill = (
+    <button onClick={() => setPlannerMode(m => !m)} style={{
+      position: 'fixed', left: '50%', transform: 'translateX(-50%)',
+      bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
+      padding: '10px 18px', borderRadius: 999, border: 'none',
+      background: plannerMode ? theme.ink : '#5A3D9E',
+      color: '#fff', cursor: 'pointer',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      fontFamily: theme.font, fontSize: 13, fontWeight: 700,
+      zIndex: 50, letterSpacing: '0.01em',
+    }}>
+      <span style={{ fontSize: 14 }}>{plannerMode ? '🍽️' : '📋'}</span>
+      {plannerMode ? 'Back to tracker' : 'View today\u2019s plan'}
+    </button>
+  );
+
+  if (plannerMode) {
+    return (
+      <div style={{ paddingBottom: 0, background: theme.bg, minHeight: '100%',
+        display: 'flex', flexDirection: 'column' }}>
+        <Header theme={theme} onOpenProfile={onOpenProfile}
+          selectedDate={selectedDate} setSelectedDate={setSelectedDate}
+          log={log} settings={settings} setSettings={setSettings} />
+        <PlannerView theme={theme}
+          settings={settings} setSettings={setSettings}
+          exerciseLog={exerciseLog}
+          selectedDate={selectedDate}
+          onExit={() => setPlannerMode(false)}
+          onOpenPrefs={() => setShowPlanPrefs(true)} />
+        {showPlanPrefs && (
+          <PlanPrefsSheet theme={theme}
+            settings={settings} setSettings={setSettings}
+            onClose={() => setShowPlanPrefs(false)} />
+        )}
+        {switchPill}
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -2079,6 +2722,7 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
           </div>
         </div>
       )}
+      {switchPill}
     </div>
   );
 }
