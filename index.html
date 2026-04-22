@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1670,7 +1670,13 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
     setSettings(next);
   };
 
-  if (!plan || pickingTemplate) {
+  // If a stale plan was saved before the v54 schema fix (no sessions array,
+  // or non-array sessions), force the user back into the template picker
+  // rather than crashing.
+  if (plan && !Array.isArray(plan.sessions)) {
+    plan.sessions = [];
+  }
+  if (!plan || !plan.sessions?.length || pickingTemplate) {
     // ── No plan: template picker ──
     return (
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
@@ -3230,7 +3236,14 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate, log = [],
             color: theme.ink, letterSpacing: theme.letter,
             lineHeight: 1.05, marginTop: 2,
             textTransform: isEditorial ? 'uppercase' : 'none',
-          }}>{selectedDate === todayIso ? (isEditorial ? 'Today' : 'Good morning') : 'Day view'}</div>
+          }}>{selectedDate === todayIso ? (isEditorial ? 'Today' : (() => {
+              const h = new Date().getHours();
+              if (h < 5) return 'Late night';
+              if (h < 12) return 'Good morning';
+              if (h < 17) return 'Good afternoon';
+              if (h < 22) return 'Good evening';
+              return 'Good night';
+            })()) : 'Day view'}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {(() => {
