@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1772,7 +1772,12 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
 
   // ── Plan exists ──
   const tmpl = PLAN_TEMPLATES[plan.template];
-  const todaySess = plan.sessions.find(s => s.date === selectedDate);
+  // Which day's session to preview. Starts at selectedDate; user can tap
+  // any cell in the ribbon below to peek at that day.
+  const [previewDate, setPreviewDate] = React.useState(selectedDate);
+  React.useEffect(() => { setPreviewDate(selectedDate); }, [selectedDate]);
+  const todaySess = plan.sessions.find(s => s.date === previewDate);
+  const previewIsToday = previewDate === selectedDate;
   // The Monday we're showing (this week ± offset).
   const viewMondayIso = addDaysIso(weekMonday(selectedDate), weekOffset * 7);
   // All 7 calendar days of that week — filter plan sessions into them.
@@ -1852,7 +1857,7 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
       <div style={{ padding: '0 16px' }}>
         <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
           color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
-          marginBottom: 6, paddingLeft: 4 }}>Today · {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+          marginBottom: 6, paddingLeft: 4 }}>{previewIsToday ? 'Today' : 'Preview'} · {new Date(previewDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
         {!todaySess ? (
           <div style={{
             padding: '16px 18px', background: theme.surface,
@@ -1986,36 +1991,37 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
             const match = weekSessions.find(x => x.date === iso);
             const s = match?.session;
             const isToday = iso === selectedDate;
+            const isPreview = iso === previewDate;
+            const outline = isPreview ? `2px solid #5A3D9E`
+              : (isToday ? `2px solid ${theme.ink}` : 'none');
             if (!s) {
               return (
-                <div key={iso} style={{
+                <button key={iso} onClick={() => setPreviewDate(iso)} style={{
                   aspectRatio: '1/1', borderRadius: 8,
                   background: theme.surfaceAlt, border: `1px dashed ${theme.line}`,
-                  position: 'relative',
-                  outline: isToday ? `2px solid ${theme.ink}` : 'none',
-                  outlineOffset: -1,
+                  position: 'relative', padding: 0,
+                  outline, outlineOffset: -1,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: theme.inkMute, fontSize: 14,
+                  color: theme.inkMute, fontSize: 14, cursor: 'pointer',
                 }}>
                   <span>·</span>
                   <span style={{
                     position: 'absolute', top: 2, left: 4, fontSize: 8, fontWeight: 700,
                     color: theme.inkMute, letterSpacing: '0.06em',
                   }}>{isoWeekdayLabel(iso)[0]}</span>
-                </div>
+                </button>
               );
             }
             const done = !!matchLog(s);
             const st = PLAN_KIND_STYLE[s.kind] || PLAN_KIND_STYLE.rest;
             return (
-              <div key={iso} style={{
-                aspectRatio: '1/1', borderRadius: 8,
+              <button key={iso} onClick={() => setPreviewDate(iso)} style={{
+                aspectRatio: '1/1', borderRadius: 8, border: 'none', padding: 0,
                 background: st.color, position: 'relative',
-                opacity: done ? 0.85 : (isToday ? 1 : 0.55),
-                outline: isToday ? `2px solid ${theme.ink}` : 'none',
-                outlineOffset: -1,
+                opacity: done ? 0.85 : (isToday || isPreview ? 1 : 0.55),
+                outline, outlineOffset: -1,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, color: '#fff',
+                fontSize: 16, color: '#fff', cursor: 'pointer',
               }}>
                 <span>{st.icon}</span>
                 <span style={{
@@ -2028,7 +2034,7 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
                     color: '#fff',
                   }}>✓</span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
