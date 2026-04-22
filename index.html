@@ -36,6 +36,130 @@
     auth: { persistSession: true, autoRefreshToken: true },
   });
 
+  // ─── Offline write queue ─────────────────────────────────────────
+  // Wraps PostgREST mutations (upsert / insert / update / delete) so
+  // that a flaky network doesn't silently drop writes. On network
+  // failure the descriptor is persisted to localStorage; the queue
+  // is drained on `online`, on tab focus, and every 30s.
+  //
+  // Call sites use window.sbQueue.run({ op, table, ... }) instead of
+  // window.sb.from(table).upsert(...) etc. Anything transient (5xx,
+  // offline) gets queued; anything permanent (RLS, bad column) is
+  // re-thrown so the caller can surface it.
+  (function installSbQueue() {
+    const KEY = 'cal_write_queue_v1';
+    let items = [];
+    try { items = JSON.parse(localStorage.getItem(KEY) || '[]'); if (!Array.isArray(items)) items = []; } catch {}
+    let listeners = [];
+    let draining = false;
+
+    const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {} };
+    const notify  = () => { listeners.forEach(fn => { try { fn(items.length); } catch {} }); };
+
+    const isRetryable = (err) => {
+      if (!err) return false;
+      const msg = String(err.message || err || '').toLowerCase();
+      if (msg.includes('failed to fetch')) return true;
+      if (msg.includes('network')) return true;
+      if (msg.includes('timeout')) return true;
+      const s = err.status || err.code || 0;
+      if (s === 0) return true;
+      if (typeof s === 'number' && s >= 500 && s < 600) return true;
+      // Offline according to the browser
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+      return false;
+    };
+
+    async function execOp(op) {
+      if (!window.sb) throw new Error('sb not ready');
+      let q = window.sb.from(op.table);
+      if (op.op === 'upsert') {
+        q = q.upsert(op.rows, op.opts || {});
+      } else if (op.op === 'insert') {
+        q = q.insert(op.rows);
+      } else if (op.op === 'update') {
+        q = q.update(op.patch);
+      } else if (op.op === 'delete') {
+        q = q.delete();
+      } else {
+        throw new Error('unknown op: ' + op.op);
+      }
+      for (const f of (op.filters || [])) {
+        if (f.op === 'eq')       q = q.eq(f.col, f.val);
+        else if (f.op === 'in')  q = q.in(f.col, f.val);
+        else if (f.op === 'neq') q = q.neq(f.col, f.val);
+      }
+      const r = await q;
+      if (r && r.error) throw r.error;
+      return r;
+    }
+
+    const enqueue = (op) => {
+      if (!op.id) op.id = `${op.table}:${op.op}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`;
+      op.attempts = (op.attempts || 0) + 1;
+      op.firstFailedAt = op.firstFailedAt || Date.now();
+      if (!items.some(x => x.id === op.id)) items.push(op);
+      persist(); notify();
+    };
+
+    const drain = async () => {
+      if (draining) return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      if (!window.sb) return;
+      draining = true;
+      try {
+        while (items.length) {
+          const op = items[0];
+          try {
+            await execOp(op);
+            items.shift();
+            persist(); notify();
+          } catch (err) {
+            if (isRetryable(err)) {
+              op.attempts = (op.attempts || 0) + 1;
+              persist();
+              break; // stop; next trigger will retry
+            }
+            // Non-retryable — give up on this op and move on so it
+            // doesn't block the queue forever.
+            console.warn('sbQueue dropping non-retryable:', op.table, op.op, err?.message);
+            items.shift();
+            persist(); notify();
+          }
+        }
+      } finally {
+        draining = false;
+      }
+    };
+
+    window.sbQueue = {
+      run: async (op) => {
+        try {
+          await execOp(op);
+          return { ok: true };
+        } catch (err) {
+          if (isRetryable(err)) { enqueue(op); return { queued: true }; }
+          throw err;
+        }
+      },
+      drain,
+      size: () => items.length,
+      list: () => items.slice(),
+      clear: () => { items = []; persist(); notify(); },
+      subscribe: (fn) => { listeners.push(fn); try { fn(items.length); } catch {}; return () => { listeners = listeners.filter(x => x !== fn); }; },
+    };
+
+    // Drain triggers
+    window.addEventListener('online', drain);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') drain();
+      });
+    }
+    setInterval(drain, 30_000);
+    setTimeout(drain, 1500); // after boot
+  })();
+
   // Upload a data-URL JPEG to Supabase Storage; returns the storage path.
   window.uploadMealPhoto = async function(dataUrl, userId) {
     if (!dataUrl || !dataUrl.startsWith('data:')) return null;
@@ -254,7 +378,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1866,6 +1990,32 @@ function MacroDrillSheet({ theme, log, drill, onClose, onOpenFood }) {
 // ─────────────────────────────────────────────────────────────
 // Header — greeting + horizontal date scrubber
 // ─────────────────────────────────────────────────────────────
+// Small badge that shows how many pending writes are queued offline.
+// Tap to force a drain attempt. Vanishes when the queue is empty.
+function UnsyncedBadge({ theme }) {
+  const [count, setCount] = React.useState(
+    (window.sbQueue && window.sbQueue.size && window.sbQueue.size()) || 0
+  );
+  React.useEffect(() => {
+    if (!window.sbQueue) return;
+    return window.sbQueue.subscribe(setCount);
+  }, []);
+  if (!count) return null;
+  return (
+    <button onClick={() => window.sbQueue && window.sbQueue.drain()} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '6px 10px', borderRadius: 999,
+      background: '#FFF2DB', border: '1px solid #E6C37A',
+      color: '#8A5A1F', cursor: 'pointer',
+      fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+      letterSpacing: '0.02em',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: 3, background: '#E0A24A' }}/>
+      {count} unsynced
+    </button>
+  );
+}
+
 function Header({ theme, onOpenProfile, selectedDate, setSelectedDate }) {
   const [calOpen, setCalOpen] = React.useState(false);
   const displayName = localStorage.getItem('cal_display_name') || 'You';
@@ -1912,15 +2062,18 @@ function Header({ theme, onOpenProfile, selectedDate, setSelectedDate }) {
             textTransform: isEditorial ? 'uppercase' : 'none',
           }}>{selectedDate === todayIso ? (isEditorial ? 'Today' : 'Good morning') : 'Day view'}</div>
         </div>
-        <button onClick={onOpenProfile} style={{
-          width: 36, height: 36, borderRadius: 18, border: 'none', cursor: 'pointer',
-          background: theme.surfaceAlt,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{
-            fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
-          }}>{headerInitials}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UnsyncedBadge theme={theme} />
+          <button onClick={onOpenProfile} style={{
+            width: 36, height: 36, borderRadius: 18, border: 'none', cursor: 'pointer',
+            background: theme.surfaceAlt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{
+              fontFamily: theme.font, fontSize: 13, fontWeight: 600, color: theme.ink,
+            }}>{headerInitials}</span>
+          </button>
+        </div>
       </div>
 
       {/* Date scrubber — tap chevron to expand into calendar */}
@@ -11099,24 +11252,31 @@ function App({ session }) {
     return () => window.removeEventListener('caloree:strava-synced', refresh);
   }, [session]);
 
-  // Push profile (targets/settings/theme)
+  // Push profile (targets/settings/theme) — queued so flaky networks
+  // don't drop goal changes.
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
-    window.sb.from('profiles').upsert({
-      user_id: session.user.id, targets, settings, theme: themeKey,
-      target_history: targetHistory, updated_at: new Date().toISOString(),
-    }).then(r => r.error && console.warn('profile sync:', r.error.message));
+    window.sbQueue.run({
+      op: 'upsert', table: 'profiles',
+      rows: {
+        user_id: session.user.id, targets, settings, theme: themeKey,
+        target_history: targetHistory, updated_at: new Date().toISOString(),
+      },
+      opts: { onConflict: 'user_id' },
+    }).catch(err => console.warn('profile sync:', err?.message));
   }, [targets, settings, themeKey, targetHistory, session]);
 
-  // Push weight
+  // Push weight (queued)
   React.useEffect(() => {
     if (hydratingRef.current || !session || !weightLog.length) return;
     const rows = weightLog.map(w => ({ user_id: session.user.id, iso: w.iso, kg: w.kg }));
-    window.sb.from('weight_logs').upsert(rows, { onConflict: 'user_id,iso' })
-      .then(r => r.error && console.warn('weight sync:', r.error.message));
+    window.sbQueue.run({
+      op: 'upsert', table: 'weight_logs', rows,
+      opts: { onConflict: 'user_id,iso' },
+    }).catch(err => console.warn('weight sync:', err?.message));
   }, [weightLog, session]);
 
-  // Push wellness map — upsert all dates that have entries
+  // Push wellness map — upsert all dates that have entries (queued)
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
     const rows = Object.entries(wellnessMap).map(([date, w]) => ({
@@ -11130,15 +11290,16 @@ function App({ session }) {
       },
     }));
     if (!rows.length) return;
-    window.sb.from('wellness_logs').upsert(rows, { onConflict: 'user_id,date' })
-      .then(r => r.error && console.warn('wellness sync:', r.error.message));
+    window.sbQueue.run({
+      op: 'upsert', table: 'wellness_logs', rows,
+      opts: { onConflict: 'user_id,date' },
+    }).catch(err => console.warn('wellness sync:', err?.message));
   }, [wellnessMap, session]);
 
-  // Push log + synthetic foods
+  // Push log + synthetic foods (queued — most data-loss-prone site)
   React.useEffect(() => {
     if (hydratingRef.current || !session) return;
     const uid = session.user.id;
-    const sb = window.sb;
     const aiFoods = FOODS.filter(f => typeof f.id === 'string' && f.id.startsWith('ai_'));
     const foodRows = aiFoods.map(f => ({
       id: f.id, user_id: uid, name: f.name, brand: f.brand || null,
@@ -11156,16 +11317,21 @@ function App({ session }) {
     }));
     (async () => {
       if (foodRows.length) {
-        const r = await sb.from('foods').upsert(foodRows, { onConflict: 'id' });
-        if (r.error) console.warn('food sync:', r.error.message);
+        await window.sbQueue.run({
+          op: 'upsert', table: 'foods', rows: foodRows,
+          opts: { onConflict: 'id' },
+        }).catch(err => console.warn('food sync:', err?.message));
       }
       // Replace only today's logs (multi-day entries are inserted directly by bulk paths)
-      const del = await sb.from('meal_logs').delete().eq('user_id', uid).eq('date', today);
-      if (del.error) console.warn('log delete:', del.error.message);
+      await window.sbQueue.run({
+        op: 'delete', table: 'meal_logs',
+        filters: [{ op: 'eq', col: 'user_id', val: uid }, { op: 'eq', col: 'date', val: today }],
+      }).catch(err => console.warn('log delete:', err?.message));
       const todayRows = logRows.filter(r => r.date === today);
       if (todayRows.length) {
-        const r = await sb.from('meal_logs').insert(todayRows);
-        if (r.error) console.warn('log insert:', r.error.message);
+        await window.sbQueue.run({
+          op: 'insert', table: 'meal_logs', rows: todayRows,
+        }).catch(err => console.warn('log insert:', err?.message));
       }
     })();
   }, [log, session]);
@@ -11200,7 +11366,7 @@ function App({ session }) {
   React.useEffect(() => { localStorage.setItem('cal_settings', JSON.stringify(settings)); }, [settings]);
   React.useEffect(() => { localStorage.setItem('cal_exercise', JSON.stringify(exerciseLog)); }, [exerciseLog]);
 
-  // Push exercise logs (id-based upsert)
+  // Push exercise logs (id-based upsert, queued)
   React.useEffect(() => {
     if (hydratingRef.current || !session || !exerciseLog.length) return;
     const uid = session.user.id;
@@ -11210,8 +11376,10 @@ function App({ session }) {
       distance_km: e.distance || null, kcal: e.kcal || null,
       notes: e.notes || null, details: e.details || null,
     }));
-    window.sb.from('exercise_logs').upsert(rows, { onConflict: 'id' })
-      .then(r => r.error && console.warn('exercise sync:', r.error.message));
+    window.sbQueue.run({
+      op: 'upsert', table: 'exercise_logs', rows,
+      opts: { onConflict: 'id' },
+    }).catch(err => console.warn('exercise sync:', err?.message));
   }, [exerciseLog, session]);
 
   React.useEffect(() => {
