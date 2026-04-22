@@ -378,7 +378,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -995,7 +995,30 @@ function SummaryChip({ theme, icon, value, color }) {
   );
 }
 
-function WellnessCard({ theme, wellness, setWellness, locked }) {
+function ReorderArrows({ idx, total, onMove, theme }) {
+  const canUp = idx > 0;
+  const canDown = idx < total - 1;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 6 }}>
+      <button onClick={() => canUp && onMove(idx, -1)} disabled={!canUp} style={{
+        width: 22, height: 14, padding: 0, lineHeight: 1,
+        border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+        borderRadius: 4, cursor: canUp ? 'pointer' : 'default',
+        opacity: canUp ? 1 : 0.3, fontSize: 10, color: theme.ink,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>▲</button>
+      <button onClick={() => canDown && onMove(idx, 1)} disabled={!canDown} style={{
+        width: 22, height: 14, padding: 0, lineHeight: 1,
+        border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+        borderRadius: 4, cursor: canDown ? 'pointer' : 'default',
+        opacity: canDown ? 1 : 0.3, fontSize: 10, color: theme.ink,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>▼</button>
+    </div>
+  );
+}
+
+function WellnessCard({ theme, wellness, setWellness, locked, settings, setSettings }) {
   // When the day is locked, ignore every attempt to mutate wellness.
   const origSet = setWellness;
   setWellness = locked ? (() => {}) : origSet;
@@ -1005,6 +1028,28 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
     return saved === null ? true : saved === '1';
   });
   React.useEffect(() => { localStorage.setItem('cal_wellness_open', open ? '1' : '0'); }, [open]);
+
+  const [reordering, setReordering] = React.useState(false);
+  const DEFAULT_ROW_ORDER = ['coffee','water','sleep','reading','stress','energy','rehab','mobility'];
+  const savedOrder = (settings && Array.isArray(settings.wellnessRowOrder)) ? settings.wellnessRowOrder : null;
+  const rowOrder = (() => {
+    if (!savedOrder) return DEFAULT_ROW_ORDER;
+    const seen = new Set(savedOrder);
+    return savedOrder.filter(k => DEFAULT_ROW_ORDER.includes(k))
+      .concat(DEFAULT_ROW_ORDER.filter(k => !seen.has(k)));
+  })();
+  const moveRow = (fromIdx, dir) => {
+    if (!setSettings) return;
+    const toIdx = fromIdx + dir;
+    if (toIdx < 0 || toIdx >= rowOrder.length) return;
+    const next = rowOrder.slice();
+    [next[fromIdx], next[toIdx]] = [next[toIdx], next[fromIdx]];
+    setSettings({ ...(settings || {}), wellnessRowOrder: next });
+  };
+  const resetRowOrder = () => {
+    if (!setSettings) return;
+    setSettings({ ...(settings || {}), wellnessRowOrder: DEFAULT_ROW_ORDER });
+  };
 
   // Shared row style
   const row = {
@@ -1077,16 +1122,40 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       opacity: locked ? 0.6 : 1,
       pointerEvents: locked ? 'none' : 'auto',
     }}>
-      <button onClick={() => setOpen(!open)} style={{
+      <div style={{
         width: '100%', padding: '12px 0 12px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        textAlign: 'left',
       }}>
-        <div style={{
-          fontFamily: theme.font, fontSize: 11, fontWeight: 600,
-          color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
-        }}>Wellness</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setOpen(!open)} style={{
+            padding: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+            fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+          }}>Wellness</button>
+          {open && setSettings && !locked && (
+            <React.Fragment>
+              <button onClick={() => setReordering(!reordering)} style={{
+                padding: '3px 8px', border: `1px solid ${reordering ? theme.ink : theme.line}`,
+                background: reordering ? theme.ink : 'transparent',
+                color: reordering ? theme.bg : theme.inkSoft,
+                borderRadius: 999, cursor: 'pointer',
+                fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+              }}>{reordering ? 'Done' : 'Reorder'}</button>
+              {reordering && (
+                <button onClick={resetRowOrder} style={{
+                  padding: '3px 8px', border: `1px solid ${theme.line}`,
+                  background: 'transparent', color: theme.inkSoft,
+                  borderRadius: 999, cursor: 'pointer',
+                  fontFamily: theme.font, fontSize: 10, fontWeight: 600,
+                }}>Reset</button>
+              )}
+            </React.Fragment>
+          )}
+        </div>
+        <button onClick={() => setOpen(!open)} style={{
+          padding: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {!open && (
             <div style={{
@@ -1105,11 +1174,13 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
           </svg>
         </div>
       </button>
+      </div>
 
-      {open && <>
+      {open && <div style={{ display: 'flex', flexDirection: 'column' }}>
       {/* Coffee */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('coffee') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('coffee')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 6h9v3a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" stroke={theme.ink} strokeWidth="1.5"/>
@@ -1125,8 +1196,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Water */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('water') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('water')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
               <path d="M7 1s5 5 5 9a5 5 0 01-10 0c0-4 5-9 5-9z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1140,8 +1212,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Sleep */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('sleep') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('sleep')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M13 9A5 5 0 017 3a5 5 0 106 6z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1155,8 +1228,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Reading */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('reading') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('reading')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M2 3.5h5a2 2 0 012 2V13a1.5 1.5 0 00-1.5-1.5H2V3.5zM14 3.5H9a2 2 0 00-2 2V13a1.5 1.5 0 011.5-1.5H14V3.5z"
@@ -1171,8 +1245,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Stress */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('stress') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('stress')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 10c1-2 3-3 5-3s4 1 5 3" stroke={theme.ink} strokeWidth="1.5" strokeLinecap="round"/>
@@ -1186,8 +1261,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Energy */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('energy') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('energy')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
               <path d="M8 1L2 9h4l-1 6 6-8H7l1-6z" stroke={theme.ink} strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1199,8 +1275,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Rehab — did you do it today? */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}` }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, order: rowOrder.indexOf('rehab') }}>
         <div style={label}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('rehab')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M5 10l2 2 4-5" stroke={theme.ink} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1219,8 +1296,9 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
       </div>
 
       {/* Mobility — morning / lunch / afternoon check-ins */}
-      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, alignItems: 'flex-start' }}>
+      <div style={{ ...row, borderTop: `1px solid ${theme.line}`, alignItems: 'flex-start', order: rowOrder.indexOf('mobility') }}>
         <div style={{ ...label, paddingTop: 4 }}>
+          {reordering && <ReorderArrows idx={rowOrder.indexOf('mobility')} total={rowOrder.length} onMove={moveRow} theme={theme}/>}
           <div style={iconBox}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="3.5" r="1.8" stroke={theme.ink} strokeWidth="1.3" fill="none"/>
@@ -1252,7 +1330,7 @@ function WellnessCard({ theme, wellness, setWellness, locked }) {
           })}
         </div>
       </div>
-      </>}
+      </div>}
     </div>
   );
 }
@@ -1649,7 +1727,8 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
       <WellnessCard theme={theme}
         locked={markedComplete}
         wellness={wellnessMap[selectedDate] || { coffees: 0, sleepHrs: 0, stress: 0, water: 0, energy: 0, readingMin: 0, rehab: false, mobility: {} }}
-        setWellness={(patch) => setWellness(selectedDate, patch)}/>
+        setWellness={(patch) => setWellness(selectedDate, patch)}
+        settings={settings} setSettings={setSettings}/>
 
       {/* Exercise card */}
       <ExerciseCard theme={theme}

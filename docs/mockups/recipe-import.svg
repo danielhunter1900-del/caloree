@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 1120" font-family="-apple-system, system-ui, sans-serif">
+  <rect width="840" height="1120" fill="#F7F5F0"/>
+
+  <!-- ==== LEFT: Import step ==== -->
+  <text x="30" y="34" font-size="12" font-weight="700" fill="#9A9A95" letter-spacing="2">STEP 1 · IMPORT / PASTE</text>
+  <g transform="translate(30 54)">
+    <rect width="370" height="540" rx="14" fill="#FFFFFF"/>
+    <text x="20" y="32" font-size="18" font-weight="700" fill="#1A1A1A">Add a recipe</text>
+    <text x="20" y="52" font-size="12" fill="#9A9A95">From anywhere — Claude parses into ingredients + macros.</text>
+
+    <!-- Tabs -->
+    <g transform="translate(20 76)">
+      <rect width="110" height="32" rx="16" fill="#1A1A1A"/>
+      <text x="55" y="21" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F5F0">Paste link</text>
+      <rect x="118" width="94" height="32" rx="16" fill="transparent" stroke="#D8D4CB"/>
+      <text x="165" y="21" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Photo / OCR</text>
+      <rect x="220" width="110" height="32" rx="16" fill="transparent" stroke="#D8D4CB"/>
+      <text x="275" y="21" text-anchor="middle" font-size="12" font-weight="600" fill="#5C5C58">Type manually</text>
+    </g>
+
+    <!-- URL box -->
+    <g transform="translate(20 128)">
+      <rect width="330" height="44" rx="10" fill="#F7F5F0" stroke="#E8DFC8"/>
+      <text x="14" y="28" font-size="12" fill="#1A1A1A">tiktok.com/@chefsdaughter/video/spicy-tofu</text>
+    </g>
+
+    <text x="20" y="196" font-size="11" fill="#9A9A95">Supports: TikTok, Instagram, YouTube descriptions, recipe URLs (NYT Cooking, BBC, Serious Eats…), plain text.</text>
+
+    <!-- Preview panel while Claude parses -->
+    <g transform="translate(20 222)">
+      <rect width="330" height="280" rx="10" fill="#F7F5F0"/>
+      <text x="14" y="26" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">CLAUDE PARSED</text>
+
+      <!-- Title -->
+      <text x="14" y="54" font-size="16" font-weight="700" fill="#1A1A1A">Gochujang tofu rice bowl</text>
+      <text x="14" y="72" font-size="11" fill="#5C5C58">detected: TikTok description · <tspan fill="#9A9A95">✓ recognised units, ingredients, steps</tspan></text>
+
+      <!-- Ingredients -->
+      <g transform="translate(14 94)" font-size="12" fill="#5C5C58">
+        <text y="0">• 400g firm tofu</text>
+        <text y="18">• 2 tbsp gochujang</text>
+        <text y="36">• 1 tbsp soy sauce</text>
+        <text y="54">• 1 cup jasmine rice</text>
+        <text y="72">• 2 spring onions</text>
+        <text y="90">• 1 tbsp sesame oil</text>
+        <text y="108">• 1 egg (optional)</text>
+        <text y="126" font-size="10" fill="#9A9A95">+ 3 more</text>
+      </g>
+
+      <text x="186" y="94" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">TOTALS / RECIPE</text>
+      <g transform="translate(186 110)" font-size="11" fill="#5C5C58">
+        <text y="10"><tspan font-weight="700" fill="#1A1A1A">1,820 kcal</tspan></text>
+        <text y="28">C 210g  ·  P 82g  ·  F 68g</text>
+        <text y="46">Sat fat 14g · Fibre 8g</text>
+      </g>
+    </g>
+
+    <!-- CTA -->
+    <g transform="translate(20 486)">
+      <rect width="330" height="40" rx="10" fill="#2B7A5C"/>
+      <text x="165" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF">Continue to serving size →</text>
+    </g>
+  </g>
+
+  <!-- ==== RIGHT: Serving + unit step ==== -->
+  <text x="440" y="34" font-size="12" font-weight="700" fill="#2B7A5C" letter-spacing="2">STEP 2 · SCALE + UNITS</text>
+  <g transform="translate(440 54)">
+    <rect width="370" height="540" rx="14" fill="#FFFFFF"/>
+    <text x="20" y="32" font-size="18" font-weight="700" fill="#1A1A1A">Gochujang tofu rice bowl</text>
+
+    <!-- Servings row -->
+    <g transform="translate(20 62)">
+      <rect width="330" height="86" rx="10" fill="#F7F5F0"/>
+      <text x="16" y="26" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">SERVINGS</text>
+      <text x="16" y="54" font-size="10" fill="#5C5C58">Claude detected the recipe makes 4 servings.</text>
+
+      <!-- Stepper -->
+      <g transform="translate(220 54)">
+        <circle cx="0" cy="0" r="14" fill="#FFFFFF" stroke="#D8D4CB"/>
+        <text x="0" y="4" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">−</text>
+        <text x="36" y="6" text-anchor="middle" font-size="18" font-weight="700" fill="#1A1A1A">4</text>
+        <circle cx="72" cy="0" r="14" fill="#1A1A1A"/>
+        <text x="72" y="4" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F5F0">+</text>
+      </g>
+      <text x="310" y="74" text-anchor="end" font-size="10" fill="#9A9A95">per serving · 455 kcal</text>
+    </g>
+
+    <!-- Unit toggle -->
+    <g transform="translate(20 166)">
+      <rect width="330" height="72" rx="10" fill="#F7F5F0"/>
+      <text x="16" y="26" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">UNITS</text>
+      <rect x="14" y="38" width="146" height="24" rx="12" fill="#1A1A1A"/>
+      <text x="87" y="54" text-anchor="middle" font-size="11" font-weight="700" fill="#F7F5F0">Metric (g / ml)</text>
+      <rect x="170" y="38" width="146" height="24" rx="12" fill="transparent" stroke="#D8D4CB"/>
+      <text x="243" y="54" text-anchor="middle" font-size="11" font-weight="600" fill="#5C5C58">Imperial (oz / cups)</text>
+    </g>
+
+    <!-- Ingredient table with scaled quantities -->
+    <g transform="translate(20 254)">
+      <rect width="330" height="172" rx="10" fill="#FFFFFF" stroke="#ECEAE4"/>
+      <text x="14" y="22" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">INGREDIENTS × 4 SERVINGS</text>
+
+      <g transform="translate(14 40)" font-size="12" fill="#5C5C58">
+        <text y="0">Firm tofu</text><text x="304" y="0" text-anchor="end" font-weight="700" fill="#1A1A1A">400 g</text>
+        <text y="20">Gochujang</text><text x="304" y="20" text-anchor="end" font-weight="700" fill="#1A1A1A">30 g</text>
+        <text y="40">Soy sauce</text><text x="304" y="40" text-anchor="end" font-weight="700" fill="#1A1A1A">15 ml</text>
+        <text y="60">Jasmine rice (uncooked)</text><text x="304" y="60" text-anchor="end" font-weight="700" fill="#1A1A1A">200 g</text>
+        <text y="80">Spring onions</text><text x="304" y="80" text-anchor="end" font-weight="700" fill="#1A1A1A">30 g</text>
+        <text y="100">Sesame oil</text><text x="304" y="100" text-anchor="end" font-weight="700" fill="#1A1A1A">15 ml</text>
+      </g>
+    </g>
+
+    <!-- Per-serving macros -->
+    <g transform="translate(20 444)">
+      <rect width="330" height="66" rx="10" fill="#F7F5F0"/>
+      <text x="16" y="24" font-size="10" font-weight="700" fill="#9A9A95" letter-spacing="1.5">PER SERVING</text>
+      <text x="16" y="46" font-size="16" font-weight="700" fill="#1A1A1A">455 kcal</text>
+      <text x="100" y="46" font-size="11" fill="#5C5C58">C 52 · P 21 · F 17</text>
+      <text x="310" y="58" text-anchor="end" font-size="10" fill="#9A9A95">Sat 3.5g · Fibre 2g</text>
+    </g>
+  </g>
+
+  <!-- ==== BOTTOM: save / log ==== -->
+  <text x="30" y="628" font-size="12" font-weight="700" fill="#9A9A95" letter-spacing="2">STEP 3 · SAVE / LOG</text>
+  <g transform="translate(30 648)">
+    <rect width="780" height="140" rx="14" fill="#FFFFFF"/>
+
+    <!-- Save -->
+    <g transform="translate(20 26)">
+      <rect width="200" height="90" rx="10" fill="#F7F5F0"/>
+      <text x="100" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#1A1A1A">Save to recipes</text>
+      <text x="100" y="60" text-anchor="middle" font-size="11" fill="#5C5C58">Default meal: Dinner</text>
+      <text x="100" y="78" text-anchor="middle" font-size="10" fill="#9A9A95">★ Add to favourites</text>
+    </g>
+
+    <!-- Log one serving -->
+    <g transform="translate(240 26)">
+      <rect width="260" height="90" rx="10" fill="#2B7A5C"/>
+      <text x="130" y="42" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Log 1 serving now</text>
+      <text x="130" y="66" text-anchor="middle" font-size="11" fill="#D5EADE">455 kcal · into tonight's Dinner</text>
+    </g>
+
+    <!-- Modify with Claude -->
+    <g transform="translate(520 26)">
+      <rect width="240" height="90" rx="10" fill="transparent" stroke="#D8D4CB"/>
+      <text x="120" y="38" text-anchor="middle" font-size="13" font-weight="700" fill="#1A1A1A">Modify with Claude</text>
+      <text x="120" y="58" text-anchor="middle" font-size="10" fill="#5C5C58">"I swapped tofu for chicken"</text>
+      <text x="120" y="76" text-anchor="middle" font-size="10" fill="#9A9A95">— re-runs parse with edits</text>
+    </g>
+  </g>
+
+  <!-- Notes -->
+  <g transform="translate(30 828)">
+    <rect width="780" height="260" rx="14" fill="#FFFFFF"/>
+    <text x="20" y="30" font-size="12" font-weight="700" fill="#5C5C58" letter-spacing="1.5">HOW IT FLOWS</text>
+    <g transform="translate(20 50)" font-size="12" fill="#5C5C58" font-family="-apple-system, system-ui">
+      <text y="0"><tspan font-weight="700" fill="#1A1A1A">1. Paste.</tspan> Any URL — TikTok / Instagram post link, YouTube, Serious Eats, a PDF. Or a photo of a recipe card.</text>
+      <text y="22"><tspan font-weight="700" fill="#1A1A1A">2. Claude fetches + parses.</tspan> Behind the scenes: the proxy edge function scrapes the page, strips narrative,</text>
+      <text y="38">returns structured JSON: {`{ title, servings, ingredients: [{ name, qty, unit, grams, macros }], steps }`}.</text>
+      <text y="60"><tspan font-weight="700" fill="#1A1A1A">3. Scale.</tspan> Increase / decrease servings — quantities scale live, including partial unit conversions</text>
+      <text y="76">("2½ cups" → "320 g" when units are toggled to Metric).</text>
+      <text y="98"><tspan font-weight="700" fill="#1A1A1A">4. Units.</tspan> Global toggle between Metric and Imperial. Claude normalises on import (everything stored</text>
+      <text y="114">in grams / ml internally) so switching units is a pure view transform, not a re-parse.</text>
+      <text y="136"><tspan font-weight="700" fill="#1A1A1A">5. Save or log.</tspan> "Save to recipes" adds to your library with the default meal. "Log 1 serving now"</text>
+      <text y="152">writes a single meal entry to today's selected meal. Totals match per-serving values shown.</text>
+      <text y="174"><tspan font-weight="700" fill="#1A1A1A">6. Modify.</tspan> "Modify with Claude" lets you swap ingredients or substitute — recalculates macros</text>
+      <text y="190">without re-doing the paste.</text>
+      <text y="218" font-weight="700" fill="#1A1A1A">Caveats</text>
+      <text y="234">Video parsing is text-only (post descriptions / captions) — can't watch the video. TikTok posts without a</text>
+      <text y="248">written recipe fall back to OCR / manual entry.</text>
+    </g>
+  </g>
+</svg>
