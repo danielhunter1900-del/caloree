@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Planner ↔ Tracker nav — schematic</title>
+<style>
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surfaceAlt: #EDE9E0; --line: #D8D4C8;
+    --ink: #1A1A1A; --inkSoft: #5C5A54; --inkMute: #8A867C;
+    --accent: #2B7A5C; --blue: #5FA8C9; --amber: #E0A24A; --red: #D96B5C;
+    --plan: #5A3D9E;
+    --run: #D96B5C; --cal: #A86B4F; --mob: #6BAF92; --rest: #7A8BD1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; max-width: 860px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(370px, 1fr));
+    gap: 24px; max-width: 1300px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card h2 { margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt); }
+  .phone { width: 370px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-height: 720px; }
+  .phone-header { padding: 14px 16px 10px; background: var(--surface);
+    border-bottom: 1px solid var(--line); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 10px; display: block; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .annotations { padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10; }
+  .annotations b { color: #5A3B08; }
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .pros-cons div { font-size: 11px; line-height: 1.5; }
+  .pros-cons .pros { color: #2A6E4C; }
+  .pros-cons .cons { color: #9A3A1F; }
+  .pros-cons h4 { margin: 0 0 4px; font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; font-weight: 700; }
+
+  /* Phone content shared */
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .content-area { flex: 1; background: var(--bg); }
+  .ring-placeholder {
+    width: 160px; height: 160px; border-radius: 80px;
+    border: 14px solid var(--accent); margin: 20px auto; position: relative;
+    background: var(--surface);
+  }
+  .ring-placeholder::before { content: '1,480'; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 600; }
+  .ring-placeholder::after { content: '/ 2,050 kcal'; position: absolute;
+    bottom: 44px; left: 0; right: 0; text-align: center;
+    font-size: 11px; color: var(--inkSoft); }
+  .meal-row {
+    padding: 10px 16px; display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--line); background: var(--surface);
+  }
+  .meal-row .thumb { width: 36px; height: 36px; background: var(--surfaceAlt);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .meal-row .info { flex: 1; min-width: 0; }
+  .meal-row .n { font-size: 13px; font-weight: 500; }
+  .meal-row .s { font-size: 11px; color: var(--inkSoft); margin-top: 2px; }
+  .meal-row .k { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .plan-session {
+    padding: 10px 16px; display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--line); background: var(--surface);
+  }
+  .plan-session .ico { width: 36px; height: 36px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; font-size: 18px; color: #fff; }
+  .plan-session .info { flex: 1; min-width: 0; }
+  .plan-session .n { font-size: 13px; font-weight: 500; }
+  .plan-session .s { font-size: 11px; color: var(--inkSoft); margin-top: 2px; }
+  .plan-session .open { padding: 4px 10px; border: 1px solid var(--line); background: var(--surfaceAlt);
+    border-radius: 999px; font-size: 10px; font-weight: 600; cursor: pointer; }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex; padding: 8px 12px 12px; background: var(--surface);
+    border-top: 1px solid var(--line); gap: 4px;
+  }
+  .tab-bar .tab {
+    flex: 1; text-align: center; padding: 6px 0; font-size: 10px; font-weight: 600;
+    color: var(--inkMute); cursor: pointer; letter-spacing: 0.04em;
+  }
+  .tab-bar .tab.active { color: var(--ink); }
+  .tab-bar .tab .ico { display: block; font-size: 20px; margin-bottom: 2px; }
+  .tab-bar .tab.active .ico { color: var(--accent); }
+
+  /* Mode toggle */
+  .mode-toggle {
+    display: flex; padding: 3px; background: var(--surfaceAlt); border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .mode-toggle button {
+    flex: 1; padding: 6px 10px; border: none; background: transparent;
+    border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer;
+    color: var(--inkSoft); display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .mode-toggle button.active { background: var(--surface); color: var(--ink);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  /* Segmented pill inside Home */
+  .seg { display: flex; padding: 2px; background: var(--surfaceAlt); border-radius: 999px; }
+  .seg button { flex: 1; padding: 6px 10px; border: none; background: transparent;
+    border-radius: 999px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--inkSoft); }
+  .seg button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  .rec { margin: 0; padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px;
+    font-size: 12px; color: var(--inkSoft); line-height: 1.4; border-left: 3px solid var(--plan); }
+  .rec b { color: var(--ink); }
+</style>
+</head>
+<body>
+<h1>Planner ↔ Tracker navigation — 3 options</h1>
+<p class="sub">Three patterns for letting the user switch between the day's <b>tracker</b> (home
+ring / meals / exercise log) and the <b>planner</b> (this week's prescribed training + progress
+against plan). Pick one based on how often you'd expect to flip between them.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — PLAN AS A 5TH TAB         -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · Plan = new tab (recommended)</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Plan</div>
+          <div style="font-size: 11px; color: var(--plan); font-weight: 700;">Wk 2 · Thu</div>
+        </div>
+      </div>
+
+      <div class="content-area" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="section" style="background: var(--surface); border-bottom: 1px solid var(--line);">
+          <div class="label">Today · Thu Apr 23</div>
+          <div class="rec">
+            <b>Tempo day.</b> 10 min warmup · <b>6 × 3 min @ 4:12/km</b> · cooldown. Plyometrics
+            after. ≈ 55 min.
+          </div>
+        </div>
+
+        <div class="plan-session">
+          <div class="ico" style="background: var(--run);">🏃</div>
+          <div class="info">
+            <div class="n">Tempo 6 × 3 min</div>
+            <div class="s">Target 4:12/km · ~55 min</div>
+          </div>
+          <button class="open">Open in NRC ↗</button>
+        </div>
+        <div class="plan-session">
+          <div class="ico" style="background: #9C6BD9;">💥</div>
+          <div class="info">
+            <div class="n">Plyometrics · 3 rounds</div>
+            <div class="s">Box jumps · split squats · bounds</div>
+          </div>
+          <button class="open">View</button>
+        </div>
+        <div class="plan-session">
+          <div class="ico" style="background: var(--mob);">🧘</div>
+          <div class="info">
+            <div class="n">Cooldown + hip stretches</div>
+            <div class="s">5 min</div>
+          </div>
+          <button class="open">View</button>
+        </div>
+
+        <div class="section" style="flex: 1; background: var(--bg);">
+          <div class="label">This week · progress</div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
+            <div style="aspect-ratio: 1; background: var(--accent); border-radius: 6px; opacity: 0.35;"></div>
+            <div style="aspect-ratio: 1; background: var(--accent); border-radius: 6px; opacity: 0.35;"></div>
+            <div style="aspect-ratio: 1; background: var(--rest); border-radius: 6px; opacity: 0.35;"></div>
+            <div style="aspect-ratio: 1; background: var(--run); border-radius: 6px; border: 2px solid var(--ink);"></div>
+            <div style="aspect-ratio: 1; background: var(--cal); border-radius: 6px;"></div>
+            <div style="aspect-ratio: 1; background: var(--run); border-radius: 6px;"></div>
+            <div style="aspect-ratio: 1; background: var(--mob); border-radius: 6px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab"><span class="ico">○</span>Home</div>
+        <div class="tab"><span class="ico">⊞</span>Log</div>
+        <div class="tab active" style="color: var(--plan);"><span class="ico" style="color: var(--plan);">📋</span>Plan</div>
+        <div class="tab"><span class="ico">∿</span>Trends</div>
+        <div class="tab"><span class="ico">◉</span>Profile</div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Sits as a dedicated tab</b> between Log and Trends. Always one tap away.
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4>Zero cognitive overhead. Plan and tracking stay independent.
+          Adaptive recompute notifications can open the tab directly.</div>
+        <div class="cons"><h4>Cons</h4>Adds a 5th tab (some users prefer 4). Small label squeeze
+          on narrow phones.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — MODE TOGGLE                -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · Mode toggle in header</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div class="page-title" style="font-size: 18px;">Thursday</div>
+          <div class="mode-toggle">
+            <button class="active">🏃 Train</button>
+            <button>🍽️ Track</button>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--plan); margin-top: 4px; font-weight: 600;">
+          Tempo day · wk 2 of Hybrid Runner
+        </div>
+      </div>
+
+      <div class="content-area">
+        <div class="section" style="background: var(--surface); border-bottom: 1px solid var(--line);">
+          <div class="rec">
+            <b>6 × 3 min @ threshold</b> · 90s jog recovery. Target pace 4:12/km. ≈ 55 min total.
+          </div>
+        </div>
+
+        <div class="plan-session">
+          <div class="ico" style="background: var(--run);">🏃</div>
+          <div class="info">
+            <div class="n">Tempo 6 × 3 min</div>
+            <div class="s">~55 min · target 4:12/km</div>
+          </div>
+          <button class="open">Open in NRC ↗</button>
+        </div>
+        <div class="plan-session">
+          <div class="ico" style="background: #9C6BD9;">💥</div>
+          <div class="info">
+            <div class="n">Plyometrics · 3 rounds</div>
+            <div class="s">Box jumps · split squats · bounds</div>
+          </div>
+          <button class="open">View</button>
+        </div>
+
+        <div class="section" style="background: var(--surfaceAlt);">
+          <div class="label">Quick track</div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+            <button style="padding: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; font-size: 12px; cursor: pointer; font-weight: 600;">+ Meal</button>
+            <button style="padding: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; font-size: 12px; cursor: pointer; font-weight: 600;">+ Water</button>
+            <button style="padding: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; font-size: 12px; cursor: pointer; font-weight: 600;">+ Weight</button>
+          </div>
+          <div style="margin-top: 10px; font-size: 11px; color: var(--inkSoft); text-align: center;">
+            Switch to Track for the full ring + meal list →
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab active"><span class="ico" style="color: var(--accent);">○</span>Home</div>
+        <div class="tab"><span class="ico">⊞</span>Log</div>
+        <div class="tab"><span class="ico">∿</span>Trends</div>
+        <div class="tab"><span class="ico">◉</span>Profile</div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Home page itself splits into two modes</b> — Train or Track — via a toggle in the header.
+      4-tab layout preserved. The mode defaults based on time: morning = Train, evening = Track.
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4>No extra tab. Both views share the day header, so the
+          context (which day) is always consistent.</div>
+        <div class="cons"><h4>Cons</h4>One view is always hidden — need to tap to switch. Could
+          feel modal if you use both equally every day.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — SEGMENTED WITHIN HOME      -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · Stacked on Home (no switch)</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Home</div>
+          <div style="font-size: 11px; color: var(--inkSoft);">Thursday</div>
+        </div>
+      </div>
+
+      <div class="content-area">
+        <!-- Compact plan banner at top -->
+        <div style="margin: 10px 16px 0; padding: 10px 14px; background: linear-gradient(135deg, #F0E8FF 0%, #EDE4FF 100%); border: 1px solid rgba(90,61,158,0.25); border-radius: 12px; display: flex; align-items: center; gap: 10px;">
+          <div style="font-size: 22px;">🏃</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 10px; font-weight: 700; color: var(--plan); letter-spacing: 0.08em; text-transform: uppercase;">Today's plan · wk 2</div>
+            <div style="font-size: 13px; font-weight: 600; margin-top: 1px;">Tempo 6×3 · 55 min · 4:12/km</div>
+          </div>
+          <button style="padding: 5px 10px; border: 1px solid var(--plan); background: var(--plan); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; cursor: pointer;">Start ↗</button>
+        </div>
+
+        <!-- Ring (smaller) -->
+        <div style="position: relative; width: 140px; height: 140px; margin: 14px auto 6px;">
+          <div style="width: 140px; height: 140px; border-radius: 70px; border: 12px solid var(--accent); position: relative; background: var(--surface);">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+              <div style="font-size: 26px; font-weight: 600;">1,480</div>
+              <div style="font-size: 10px; color: var(--inkSoft);">/ 2,050 kcal</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section picker -->
+        <div style="padding: 0 16px; margin-bottom: 10px;">
+          <div class="seg">
+            <button class="active">Macros</button>
+            <button>Plan</button>
+            <button>Wellness</button>
+            <button>Exercise</button>
+          </div>
+        </div>
+
+        <div class="meal-row">
+          <div class="thumb">🥣</div>
+          <div class="info"><div class="n">Oats + berries</div><div class="s">Breakfast · 420 kcal</div></div>
+          <div class="k">420</div>
+        </div>
+        <div class="meal-row">
+          <div class="thumb">🥗</div>
+          <div class="info"><div class="n">Chicken salad</div><div class="s">Lunch · 580 kcal</div></div>
+          <div class="k">580</div>
+        </div>
+        <div class="meal-row">
+          <div class="thumb">🥜</div>
+          <div class="info"><div class="n">Peanut snack</div><div class="s">Snack · 180 kcal</div></div>
+          <div class="k">180</div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab active"><span class="ico" style="color: var(--accent);">○</span>Home</div>
+        <div class="tab"><span class="ico">⊞</span>Log</div>
+        <div class="tab"><span class="ico">∿</span>Trends</div>
+        <div class="tab"><span class="ico">◉</span>Profile</div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Plan sits as a banner at the top of Home</b>. The existing "Home sections" pill adds a
+      Plan segment alongside Macros / Wellness / Exercise so the full plan view expands in place.
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4>Zero new navigation. Plan peeks in the banner every time
+          you open the app. One place for everything today.</div>
+        <div class="cons"><h4>Cons</h4>Home gets long. Multi-week planner view needs a separate
+          screen anyway. Banner always there even on rest days.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Recommendation:</b> <b>A (Plan tab)</b> is the cleanest and most extensible. It keeps the
+  existing Home/Log/Trends/Profile mental model intact and gives the plan its own real estate —
+  important when the multi-week view, preferences, equipment, adaptive recompute, and history
+  all live inside it. <b>C (banner + segment)</b> is nice as a complement: ship A, <em>and</em>
+  add the compact banner on Home so you see today's plan immediately even without switching
+  tabs. B feels too modal given both views are frequent.
+</p>
+</body>
+</html>

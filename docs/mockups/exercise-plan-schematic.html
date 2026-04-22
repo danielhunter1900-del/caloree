@@ -206,7 +206,82 @@ and if Strava-matched, auto-completes when the session is imported.</p>
         <div class="item"><span class="swatch" style="background: var(--rest)"></span>Rest</div>
       </div>
 
-      <div class="section">
+      <!-- Multi-week ribbon — 4 weeks of the plan at a glance -->
+      <div class="section" style="padding-bottom: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+          <div class="label" style="margin: 0;">All 4 weeks</div>
+          <div style="font-size: 11px; color: var(--inkSoft);">← swipe for more</div>
+        </div>
+
+        <!-- Week 1 (done) -->
+        <div style="display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: center; margin-bottom: 6px; opacity: 0.7;">
+          <div style="font-size: 10px; color: var(--inkSoft); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Wk 1</div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; height: 36px;">
+            <div style="background: var(--run); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--cal); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--rest); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--run); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--cal); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--run); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+            <div style="background: var(--mob); border-radius: 4px; position: relative;"><div style="position: absolute; inset: 0; background: rgba(0,0,0,0.2); border-radius: 4px;"></div></div>
+          </div>
+        </div>
+
+        <!-- Week 2 (current — expanded below) -->
+        <div style="display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: center; margin-bottom: 10px;">
+          <div style="font-size: 10px; color: var(--ink); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Wk 2 <span style="font-size: 9px; color: var(--accent);">●</span></div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; height: 36px;">
+            <div style="background: var(--run); border-radius: 4px; position: relative; border: 1.5px solid var(--ink);"></div>
+            <div style="background: var(--cal); border-radius: 4px; position: relative; border: 1.5px solid var(--ink);"></div>
+            <div style="background: var(--rest); border-radius: 4px; position: relative; border: 1.5px solid var(--ink);"></div>
+            <div style="background: var(--run); border-radius: 4px; position: relative; border: 2px dashed var(--ink);"></div>
+            <div style="background: var(--cal); border-radius: 4px;"></div>
+            <div style="background: var(--run); border-radius: 4px;"></div>
+            <div style="background: var(--mob); border-radius: 4px;"></div>
+          </div>
+        </div>
+
+        <!-- Week 3 (upcoming) -->
+        <div style="display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: center; margin-bottom: 6px;">
+          <div style="font-size: 10px; color: var(--inkSoft); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Wk 3</div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; height: 36px;">
+            <div style="background: var(--run); border-radius: 4px;"></div>
+            <div style="background: var(--cal); border-radius: 4px;"></div>
+            <div style="background: var(--rest); border-radius: 4px;"></div>
+            <div style="background: var(--run); border-radius: 4px;"></div>
+            <div style="background: var(--plyo); border-radius: 4px;"></div>
+            <div style="background: var(--run); border-radius: 4px;"></div>
+            <div style="background: var(--cal); border-radius: 4px;"></div>
+          </div>
+        </div>
+
+        <!-- Week 4 (deload) -->
+        <div style="display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: center; margin-bottom: 4px;">
+          <div style="font-size: 10px; color: var(--inkSoft); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Wk 4 <span style="font-size: 8px; color: var(--amber); text-transform: none; letter-spacing: 0; font-weight: 600;">deload</span></div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; height: 36px;">
+            <div style="background: var(--run); border-radius: 4px; opacity: 0.55;"></div>
+            <div style="background: var(--mob); border-radius: 4px;"></div>
+            <div style="background: var(--rest); border-radius: 4px;"></div>
+            <div style="background: var(--cal); border-radius: 4px; opacity: 0.55;"></div>
+            <div style="background: var(--rest); border-radius: 4px;"></div>
+            <div style="background: var(--run); border-radius: 4px; opacity: 0.55;"></div>
+            <div style="background: var(--mob); border-radius: 4px;"></div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 38px 1fr; gap: 8px; margin-top: 6px;">
+          <div></div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; font-size: 8px; color: var(--inkMute); text-align: center; letter-spacing: 0.04em;">
+            <div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div><div>S</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="padding-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+          <div class="label" style="margin: 0;">Week 2 · this week</div>
+          <div style="font-size: 11px; color: var(--inkSoft);">3/7 done</div>
+        </div>
         <div class="cal-grid">
           <div class="cal-day done">
             <div class="dow">Mon</div><div class="n">20</div>
@@ -327,11 +402,29 @@ and if Strava-matched, auto-completes when the session is imported.</p>
       </div>
 
       <div class="section">
-        <div class="label">How it went (optional)</div>
-        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 12px; cursor: pointer;">🙂 Easy</button>
-          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600; cursor: pointer;">😤 On target</button>
-          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 12px; cursor: pointer;">🥵 Hard</button>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+          <div class="label" style="margin: 0;">How it went · RPE</div>
+          <div style="font-size: 11px; color: var(--inkSoft);">Borg CR-10 scale</div>
+        </div>
+        <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">1</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">2</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">3</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">4</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">5</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">6</button>
+          <button style="flex: 1; padding: 10px 0; border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">7</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">8</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">9</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">10</button>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 9px; color: var(--inkMute); padding: 0 2px; margin-bottom: 10px;">
+          <span>very easy</span>
+          <span>threshold</span>
+          <span>max effort</span>
+        </div>
+        <div style="padding: 8px 10px; background: var(--surfaceAlt); border-radius: 8px; margin-bottom: 10px; font-size: 12px; color: var(--inkSoft); line-height: 1.4;">
+          <b style="color: var(--ink);">7 selected · "very hard"</b> — matches tempo target.
         </div>
         <textarea rows="2" placeholder="Legs felt heavy on intervals 4–5. Recovery paces were good."
           style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 12px; background: var(--surface); color: var(--ink);"></textarea>
@@ -347,6 +440,218 @@ and if Strava-matched, auto-completes when the session is imported.</p>
       Session broken into checkable blocks. Strava imports auto-tick matching blocks (if
       type/duration/distance fits). RPE + note feed Claude analysis. "Rest instead" cancels the
       session and flips the day to rest without losing the plan cadence.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- D — PREFERENCES              -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>D · My preferences · always apply</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Plan preferences</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Rules every plan + weekly recompute must respect
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Weekly targets</div>
+
+        <div style="padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px; margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600;">Calisthenics · min 3 /wk</div>
+              <div style="font-size: 11px; color: var(--inkSoft); margin-top: 2px;">Plans may add more, never fewer.</div>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button style="width: 24px; height: 24px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; cursor: pointer;">−</button>
+              <div style="width: 28px; text-align: center; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;">3</div>
+              <button style="width: 24px; height: 24px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; cursor: pointer;">+</button>
+            </div>
+          </div>
+          <div style="display: flex; gap: 4px; height: 6px;">
+            <div style="flex: 1; background: var(--cal); border-radius: 3px;"></div>
+            <div style="flex: 1; background: var(--cal); border-radius: 3px;"></div>
+            <div style="flex: 1; background: var(--cal); border-radius: 3px;"></div>
+            <div style="flex: 1; background: var(--surface); border: 1px dashed var(--line); border-radius: 3px;"></div>
+            <div style="flex: 1; background: var(--surface); border: 1px dashed var(--line); border-radius: 3px;"></div>
+          </div>
+        </div>
+
+        <div style="padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px; margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600;">Running · min 3 · max 5 /wk</div>
+              <div style="font-size: 11px; color: var(--inkSoft); margin-top: 2px;">Includes all run subtypes.</div>
+            </div>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="number" value="3" style="width: 32px; padding: 3px 4px; border: 1px solid var(--line); border-radius: 6px; text-align: center; font-size: 12px; background: var(--surface);"/>
+              <span style="font-size: 11px; color: var(--inkSoft);">–</span>
+              <input type="number" value="5" style="width: 32px; padding: 3px 4px; border: 1px solid var(--line); border-radius: 6px; text-align: center; font-size: 12px; background: var(--surface);"/>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px; margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600;">Mobility · min 2 /wk</div>
+              <div style="font-size: 11px; color: var(--inkSoft); margin-top: 2px;">Recovery sessions, not logged runs.</div>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;">2</div>
+          </div>
+        </div>
+
+        <div style="padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 13px; font-weight: 600;">Plyometrics · 1 /wk</div>
+              <div style="font-size: 11px; color: var(--inkSoft); margin-top: 2px;">Paused when pain ≥ 3 in knees/calves.</div>
+            </div>
+            <div style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;">1</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Schedule shape</div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
+          <div style="font-size: 13px;">Preferred rest day</div>
+          <div style="display: flex; gap: 3px;">
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">M</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">T</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); font-size: 11px; font-weight: 700; cursor: pointer;">W</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">T</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">F</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">S</button>
+            <button style="width: 30px; height: 30px; border-radius: 15px; border: 1px solid var(--line); background: var(--surface); font-size: 11px; cursor: pointer;">S</button>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
+          <div>
+            <div style="font-size: 13px;">Long run day</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Claude can shift ±1 day</div>
+          </div>
+          <div style="padding: 4px 10px; background: var(--ink); color: var(--bg); border-radius: 999px; font-size: 11px; font-weight: 700;">Sat</div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
+          <div>
+            <div style="font-size: 13px;">Deload every N weeks</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Lower volume recovery week</div>
+          </div>
+          <div style="display: flex; gap: 4px;">
+            <div style="padding: 4px 10px; background: var(--surfaceAlt); border-radius: 999px; font-size: 11px; color: var(--inkSoft);">3</div>
+            <div style="padding: 4px 10px; background: var(--ink); color: var(--bg); border-radius: 999px; font-size: 11px; font-weight: 700;">4</div>
+            <div style="padding: 4px 10px; background: var(--surfaceAlt); border-radius: 999px; font-size: 11px; color: var(--inkSoft);">5</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+          <div>
+            <div style="font-size: 13px;">Max weekly volume increase</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Hard safety ceiling</div>
+          </div>
+          <div style="padding: 4px 10px; background: rgba(217,107,92,0.15); color: #B23A2A; border-radius: 999px; font-size: 11px; font-weight: 700;">10 %</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Equipment available</div>
+        <div style="font-size: 11px; color: var(--inkSoft); margin-bottom: 10px; line-height: 1.4;">
+          Plyo + calisthenics sessions auto-adapt to what you have. Uncheck what you don't own.
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">🧱</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Plyo box</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">30 / 60 cm</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; text-align: center; cursor: pointer; opacity: 0.5;">
+            <div style="font-size: 20px; line-height: 1;">🏋️</div>
+            <div style="font-size: 11px; font-weight: 600; margin-top: 4px;">Barbell</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">+ plates</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">🔔</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Kettlebell</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">16 kg</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">🪢</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Pull-up bar</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">—</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">💍</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Rings / TRX</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">—</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; text-align: center; cursor: pointer; opacity: 0.5;">
+            <div style="font-size: 20px; line-height: 1;">🏃</div>
+            <div style="font-size: 11px; font-weight: 600; margin-top: 4px;">Treadmill</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">—</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">🎯</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Resistance bands</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">light + heavy</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1.5px solid var(--ink); background: var(--surfaceAlt); border-radius: 10px; text-align: center; cursor: pointer;">
+            <div style="font-size: 20px; line-height: 1;">📏</div>
+            <div style="font-size: 11px; font-weight: 700; margin-top: 4px;">Mat + floor</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">bodyweight</div>
+          </label>
+          <label style="padding: 10px 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; text-align: center; cursor: pointer; opacity: 0.5;">
+            <div style="font-size: 20px; line-height: 1;">🚲</div>
+            <div style="font-size: 11px; font-weight: 600; margin-top: 4px;">Bike / turbo</div>
+            <div style="font-size: 9px; color: var(--inkSoft); margin-top: 2px;">—</div>
+          </label>
+        </div>
+
+        <div style="margin-top: 12px; padding: 10px 12px; background: rgba(156,107,217,0.1); border-radius: 10px; border-left: 3px solid var(--plyo); font-size: 11px; line-height: 1.5;">
+          <b>Plyo adapts:</b> with plyo box selected, Thursday session uses box jumps 30cm +
+          depth drops. Without a box, it swaps to tuck jumps + broad jumps + lateral bounds
+          — same muscle groups, ground-based only.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Won't do</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="padding: 5px 10px; border-radius: 999px; background: var(--surfaceAlt); border: 1px solid var(--line); font-size: 11px; font-weight: 600;">Swim</span>
+          <span style="padding: 5px 10px; border-radius: 999px; background: var(--surfaceAlt); border: 1px solid var(--line); font-size: 11px; font-weight: 600;">Treadmill runs</span>
+          <span style="padding: 5px 10px; border-radius: 999px; background: var(--surfaceAlt); border: 1px solid var(--line); font-size: 11px; font-weight: 600;">Before 7am</span>
+          <span style="padding: 5px 10px; border-radius: 999px; background: transparent; border: 1.5px dashed var(--line); color: var(--inkMute); font-size: 11px; font-weight: 500;">＋ Add rule</span>
+        </div>
+        <div style="font-size: 11px; color: var(--inkSoft); margin-top: 8px; line-height: 1.4;">
+          Plan generator + adaptive recompute will never schedule these.
+        </div>
+      </div>
+
+      <div class="section" style="padding-top: 10px;">
+        <button style="width: 100%; padding: 12px; background: var(--ink); color: var(--bg); border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;">
+          Save preferences
+        </button>
+        <div style="font-size: 11px; color: var(--inkMute); margin-top: 8px; text-align: center;">
+          Applied to current plan (wk 3 onward) and all future plans.
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Persistent rules</b> — mins, maxes, preferred days, what you'll never do. Every template
+      picker and adaptive recompute reads these first. Safety ceilings (like 10% weekly volume)
+      are locked; user-chosen minimums/maximums can be edited freely. The "Won't do" chip list is
+      a hard blocklist that even Claude can't override.
     </div>
   </div>
 

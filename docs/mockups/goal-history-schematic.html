@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Goal evolution — schematic</title>
+<style>
+  :root {
+    --bg: #F5F3EE;
+    --surface: #FFFFFF;
+    --surfaceAlt: #EDE9E0;
+    --line: #D8D4C8;
+    --ink: #1A1A1A;
+    --inkSoft: #5C5A54;
+    --inkMute: #8A867C;
+    --accent: #2B7A5C;
+    --accent2: #7A8BD1;
+    --red: #D96B5C;
+    --amber: #E0A24A;
+    --protein: #A86B4F;
+    --carb: #C9A34A;
+    --fat: #6BAF92;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; }
+  .row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 24px; max-width: 1280px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .card h2 {
+    margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt);
+  }
+  .phone {
+    width: 360px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    display: flex; flex-direction: column; min-height: 680px;
+  }
+  .phone-header {
+    padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .handle {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: 6px auto 10px; display: block;
+  }
+  .page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 999px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .pill-now { background: var(--accent); color: #fff; }
+  .pill-start { background: var(--surfaceAlt); color: var(--inkSoft); }
+  .pill-ai { background: #EDE4FF; color: #5A3D9E; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 22px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px;
+    width: 2px; background: var(--line);
+  }
+  .t-entry {
+    position: relative; padding-bottom: 18px; cursor: pointer;
+  }
+  .t-entry:last-child { padding-bottom: 0; }
+  .t-dot {
+    position: absolute; left: -19px; top: 4px; width: 12px; height: 12px;
+    border-radius: 6px; background: var(--accent); border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1.5px var(--accent);
+  }
+  .t-dot.start { background: var(--surfaceAlt); box-shadow: 0 0 0 1.5px var(--line); }
+  .t-dot.ai { background: #5A3D9E; box-shadow: 0 0 0 1.5px #5A3D9E; }
+  .t-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .t-date { font-size: 12px; color: var(--inkSoft); font-variant-numeric: tabular-nums; }
+  .t-delta {
+    font-size: 14px; font-weight: 600; margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .t-delta .arrow { color: var(--inkMute); margin: 0 2px; font-size: 12px; }
+  .t-delta .up { color: var(--accent); }
+  .t-delta .down { color: var(--red); }
+  .t-delta .chip {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; margin-right: 6px;
+    font-size: 11px; color: #fff; font-weight: 700;
+  }
+  .chip-kcal { background: var(--ink); }
+  .chip-p { background: var(--protein); }
+  .chip-c { background: var(--carb); }
+  .chip-f { background: var(--fat); }
+  .t-why {
+    font-size: 13px; color: var(--ink); margin-top: 6px; line-height: 1.45;
+    font-style: italic; color: var(--inkSoft);
+  }
+  .t-expanded {
+    margin-top: 10px; padding: 10px 12px; background: var(--surfaceAlt);
+    border-radius: 10px;
+  }
+  .t-expanded .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 14px;
+    font-size: 11px;
+  }
+  .t-expanded .grid .k { color: var(--inkSoft); }
+  .t-expanded .grid .v { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .t-expanded .actions {
+    display: flex; gap: 6px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .t-expanded .btn {
+    padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--line); background: var(--surface);
+    cursor: pointer; color: var(--ink);
+  }
+  .t-expanded .btn.revert { color: var(--red); }
+
+  /* Sparkline header */
+  .spark-header {
+    padding: 14px 18px 6px; background: linear-gradient(180deg, var(--surface), transparent);
+  }
+  .spark-label-row {
+    display: flex; justify-content: space-between; font-size: 10px;
+    color: var(--inkSoft); letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .spark {
+    width: 100%; height: 70px; display: block;
+  }
+  .spark-legend {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    font-size: 11px; font-variant-numeric: tabular-nums; color: var(--inkSoft);
+  }
+  .spark-legend strong { color: var(--ink); font-weight: 600; }
+
+  /* Profile-row variant */
+  .profile-row {
+    background: var(--surface); padding: 14px 18px; margin: 0 16px 12px;
+    border-radius: 12px; display: flex; justify-content: space-between;
+    align-items: center; cursor: pointer;
+    border: 1px solid var(--line);
+  }
+  .profile-row .title-wrap .t { font-size: 14px; font-weight: 500; }
+  .profile-row .title-wrap .sub { font-size: 11px; color: var(--inkSoft); margin: 0; }
+  .profile-row .chevron { color: var(--inkMute); font-size: 16px; }
+
+  .annotations {
+    padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10;
+  }
+  .annotations b { color: #5A3B08; }
+</style>
+</head>
+<body>
+
+<h1>Goal history — vertical timeline</h1>
+<p class="sub">Where it lives (A), the timeline itself (B), and the expanded state (C).
+Tap an entry to see full before/after targets and revert.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — WHERE IT LIVES           -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · Entry point on Profile</h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 14px;">
+        <span class="handle"></span>
+        <div style="width: 100%;">
+          <div class="page-title">Profile</div>
+        </div>
+      </div>
+      <div style="padding-top: 12px;">
+
+        <div style="padding: 0 16px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--inkSoft);">Targets</div>
+
+        <div style="background: var(--surface); padding: 14px 18px; margin: 0 16px 12px; border-radius: 12px; border: 1px solid var(--line);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-size: 13px; color: var(--inkSoft);">Kcal goal</div>
+            <div style="font-variant-numeric: tabular-nums; font-weight: 600;">2,050</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-size: 13px; color: var(--inkSoft);">Protein</div>
+            <div style="font-variant-numeric: tabular-nums; font-weight: 600;">170 g</div>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <div style="font-size: 13px; color: var(--inkSoft);">Carbs · Fat</div>
+            <div style="font-variant-numeric: tabular-nums; font-weight: 600;">220 · 70 g</div>
+          </div>
+        </div>
+
+        <div class="profile-row" style="border: 1px solid var(--accent); background: rgba(43,122,92,0.05);">
+          <div class="title-wrap">
+            <div class="t">Goal history</div>
+            <p class="sub">4 changes · last 3 weeks ago</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="70" height="22" viewBox="0 0 70 22">
+              <polyline points="0,12 14,14 28,8 42,11 56,6 70,4" fill="none"
+                stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="70" cy="4" r="2.5" fill="var(--accent)"/>
+            </svg>
+            <span class="chevron">›</span>
+          </div>
+        </div>
+
+        <div class="profile-row">
+          <div class="title-wrap">
+            <div class="t">Goal presets</div>
+            <p class="sub">Cut · Maintain · Bulk</p>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+
+        <div class="profile-row">
+          <div class="title-wrap">
+            <div class="t">Your details</div>
+            <p class="sub">M · 31 · 182 cm · Moderate · Maintain</p>
+          </div>
+          <span class="chevron">›</span>
+        </div>
+
+      </div>
+    </div>
+    <div class="annotations">
+      <b>A row on Profile</b> with a tiny kcal sparkline preview on the right. One tap → opens
+      the timeline sheet on the next panel.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — TIMELINE SHEET           -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · Timeline sheet</h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 4px;">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%;">
+          <div class="page-title">Goal history</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+      </div>
+
+      <div class="spark-header">
+        <div class="spark-label-row">
+          <span>Kcal target over time</span>
+          <span>4 changes · 5.5 months</span>
+        </div>
+        <svg class="spark" viewBox="0 0 320 70" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <!-- Step line: 2000 → 2300 → 2150 → 2050 -->
+          <path d="M0,52 L80,52 L80,12 L180,12 L180,32 L260,32 L260,48 L320,48"
+            fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M0,52 L80,52 L80,12 L180,12 L180,32 L260,32 L260,48 L320,48 L320,70 L0,70 Z"
+            fill="url(#grad)"/>
+          <!-- dots at change points -->
+          <circle cx="0"   cy="52" r="3" fill="var(--inkMute)"/>
+          <circle cx="80"  cy="12" r="3" fill="var(--accent)"/>
+          <circle cx="180" cy="32" r="3" fill="var(--accent)"/>
+          <circle cx="260" cy="32" r="3" fill="#5A3D9E"/>
+          <!-- labels -->
+          <text x="0"   y="66" font-size="8" fill="var(--inkMute)" text-anchor="start">Nov</text>
+          <text x="80"  y="66" font-size="8" fill="var(--inkMute)" text-anchor="middle">Jan 5</text>
+          <text x="180" y="66" font-size="8" fill="var(--inkMute)" text-anchor="middle">Mar 10</text>
+          <text x="260" y="66" font-size="8" fill="var(--inkMute)" text-anchor="middle">Apr 22</text>
+          <text x="320" y="66" font-size="8" fill="var(--inkMute)" text-anchor="end">Now</text>
+        </svg>
+        <div class="spark-legend">
+          <span>Low <strong>2,000</strong></span>
+          <span>High <strong>2,300</strong></span>
+          <span>Current <strong>2,050</strong></span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="timeline">
+          <!-- NOW entry -->
+          <div class="t-entry">
+            <div class="t-dot ai"></div>
+            <div class="t-head">
+              <div class="t-date">2026-04-22</div>
+              <span class="pill pill-now">Now</span>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,150 <span class="arrow">→</span> <span class="down">2,050</span>
+              &nbsp;·&nbsp;
+              <span class="chip chip-p">p</span>160 <span class="arrow">→</span> <span class="up">170</span>
+            </div>
+            <div class="t-why">
+              <span class="pill pill-ai" style="margin-right: 6px;">Claude</span>
+              Weight plateaued at 78.5 for 3 weeks; suggested a 100 kcal cut plus a
+              protein push to protect lean mass during the deficit.
+            </div>
+          </div>
+
+          <!-- prior -->
+          <div class="t-entry">
+            <div class="t-dot"></div>
+            <div class="t-head">
+              <div class="t-date">2026-03-10</div>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,300 <span class="arrow">→</span> <span class="down">2,150</span>
+            </div>
+            <div class="t-why">Finished a bulk; switching to maintenance.</div>
+          </div>
+
+          <!-- prior -->
+          <div class="t-entry">
+            <div class="t-dot"></div>
+            <div class="t-head">
+              <div class="t-date">2026-02-14</div>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-c">c</span>280 <span class="arrow">→</span> <span class="up">320</span>
+              &nbsp;·&nbsp;
+              <span class="chip chip-f">f</span>60 <span class="arrow">→</span> <span class="down">55</span>
+            </div>
+            <div class="t-why">Moved carbs up around lifts; fat stays lower on non-training days.</div>
+          </div>
+
+          <!-- start -->
+          <div class="t-entry">
+            <div class="t-dot start"></div>
+            <div class="t-head">
+              <div class="t-date">2026-01-05</div>
+              <span class="pill pill-start">Start</span>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,000 <span class="arrow">→</span> <span class="up">2,300</span>
+            </div>
+            <div class="t-why">Starting a 12-week strength block — bulk phase.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="annotations">
+      <b>Structure:</b> sparkline at top (step line, not smoothed — targets move in jumps),
+      newest entry first, <b>dot colour</b> shows source (grey = manual, green = you edited,
+      purple = Claude-proposed and accepted). <b>Chips</b> only show fields that actually changed.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — EXPANDED / ACTIONS       -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · Expanded entry (tap)</h2>
+    <div class="phone">
+      <div class="phone-header" style="flex-direction: column; padding-bottom: 4px;">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%;">
+          <div class="page-title">Goal history</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+      </div>
+
+      <div class="spark-header" style="opacity: 0.6;">
+        <div class="spark-label-row">
+          <span>Kcal target over time</span>
+          <span>Tap dot to jump to entry</span>
+        </div>
+        <svg class="spark" viewBox="0 0 320 70" preserveAspectRatio="none">
+          <path d="M0,52 L80,52 L80,12 L180,12 L180,32 L260,32 L260,48 L320,48"
+            fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="180" cy="32" r="5" fill="var(--accent2)" stroke="#fff" stroke-width="2"/>
+        </svg>
+      </div>
+
+      <div class="section">
+        <div class="timeline">
+          <!-- collapsed -->
+          <div class="t-entry" style="opacity: 0.45;">
+            <div class="t-dot ai"></div>
+            <div class="t-head">
+              <div class="t-date">2026-04-22</div>
+              <span class="pill pill-now">Now</span>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,150 <span class="arrow">→</span> 2,050 · <span class="chip chip-p">p</span>160 <span class="arrow">→</span> 170
+            </div>
+          </div>
+
+          <!-- EXPANDED — showing all fields + actions -->
+          <div class="t-entry" style="background: rgba(122,139,209,0.06); margin: 0 -12px; padding: 10px 12px 14px; border-radius: 12px;">
+            <div class="t-dot" style="background: var(--accent2); box-shadow: 0 0 0 1.5px var(--accent2);"></div>
+            <div class="t-head">
+              <div class="t-date">2026-03-10</div>
+              <span style="color: var(--accent2); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Selected</span>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,300 <span class="arrow">→</span> <span class="down">2,150</span>
+            </div>
+            <div class="t-why">Finished a bulk; switching to maintenance.</div>
+
+            <div class="t-expanded">
+              <div class="label" style="margin-bottom: 6px;">Full targets</div>
+              <div class="grid">
+                <div class="k">Kcal</div><div class="v">2,300 → 2,150</div><div></div>
+                <div class="k">Protein</div><div class="v">170 → 160 g</div><div></div>
+                <div class="k">Carbs</div><div class="v">280 → 240 g</div><div></div>
+                <div class="k">Fat</div><div class="v">65 → 70 g</div><div></div>
+                <div class="k">Fibre</div><div class="v">30 g</div><div style="color: var(--inkMute);">unchanged</div>
+                <div class="k">Sat fat</div><div class="v">20 g</div><div style="color: var(--inkMute);">unchanged</div>
+                <div class="k">Sugar</div><div class="v">50 g</div><div style="color: var(--inkMute);">unchanged</div>
+                <div class="k">Ex min</div><div class="v">45 min</div><div style="color: var(--inkMute);">unchanged</div>
+                <div class="k">Ex kcal</div><div class="v">400</div><div style="color: var(--inkMute);">unchanged</div>
+              </div>
+              <div class="actions">
+                <button class="btn revert">↶ Revert to these</button>
+                <button class="btn">Copy as preset</button>
+                <button class="btn" style="margin-left: auto;">Edit why</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- collapsed -->
+          <div class="t-entry" style="opacity: 0.45;">
+            <div class="t-dot"></div>
+            <div class="t-head">
+              <div class="t-date">2026-02-14</div>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-c">c</span>280 <span class="arrow">→</span> 320 · <span class="chip chip-f">f</span>60 <span class="arrow">→</span> 55
+            </div>
+          </div>
+
+          <div class="t-entry" style="opacity: 0.45;">
+            <div class="t-dot start"></div>
+            <div class="t-head">
+              <div class="t-date">2026-01-05</div>
+              <span class="pill pill-start">Start</span>
+            </div>
+            <div class="t-delta">
+              <span class="chip chip-kcal">kcal</span>2,000 <span class="arrow">→</span> 2,300
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="annotations">
+      <b>Actions on expand:</b> <b>Revert</b> sets current targets to those values and creates
+      a <i>new</i> timeline entry with a why like "Reverted to Mar 10 state." <b>Copy as preset</b>
+      saves it into your Goal presets (Cut/Maintain/Bulk). <b>Edit why</b> lets you annotate a change
+      retroactively. The sparkline dot for the selected entry grows + turns blue.
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Build notes:</b> all source data already lives in <code>settings.target_history</code>.
+  Each change writes <code>{ date, targets, why, source: 'manual'|'claude'|'preset' }</code>.
+  The sparkline is pure SVG, step-interpolated (not smoothed), reads <code>targets.kcal</code>
+  from each snapshot. The delta-only chip row compares entry N to N-1 and only prints fields
+  whose value actually moved. Revert creates a new history entry rather than erasing forward
+  history, so the timeline never loses information.
+</p>
+
+</body>
+</html>

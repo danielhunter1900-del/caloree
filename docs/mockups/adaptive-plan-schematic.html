@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Adaptive plan — schematic</title>
+<style>
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surfaceAlt: #EDE9E0; --line: #D8D4C8;
+    --ink: #1A1A1A; --inkSoft: #5C5A54; --inkMute: #8A867C;
+    --accent: #2B7A5C; --blue: #5FA8C9; --amber: #E0A24A; --red: #D96B5C;
+    --run: #D96B5C; --cal: #A86B4F; --mob: #6BAF92; --plyo: #9C6BD9; --rest: #7A8BD1;
+    --ai: #5A3D9E;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; max-width: 860px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(370px, 1fr));
+    gap: 24px; max-width: 1300px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card h2 { margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt); }
+  .phone { width: 370px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-height: 720px; }
+  .phone-header { padding: 14px 16px 10px; background: var(--surface);
+    border-bottom: 1px solid var(--line); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: 0 auto 10px; display: block; }
+  .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .annotations { padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10; }
+  .annotations b { color: #5A3B08; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .pill-ai { background: #EDE4FF; color: var(--ai); }
+  .pill-rail { background: rgba(217,107,92,0.15); color: #B23A2A; }
+  .pill-accept { background: var(--accent); color: #fff; }
+  .pill-soft { background: var(--surfaceAlt); color: var(--inkSoft); }
+
+  /* Proposal card */
+  .proposal-hero {
+    padding: 16px 18px; background: linear-gradient(135deg, #F5EDFF 0%, #F9F5ED 100%);
+    border-bottom: 1px solid var(--line);
+  }
+  .proposal-hero .who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .proposal-hero .who .dot { width: 10px; height: 10px; border-radius: 5px; background: var(--ai); }
+  .proposal-hero h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; font-weight: 600; }
+  .proposal-hero .summary { font-size: 13px; color: var(--inkSoft); margin-top: 4px; line-height: 1.45; }
+  .proposal-hero .summary b { color: var(--ink); }
+
+  /* Numeric changes row */
+  .delta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .delta-cell { padding: 10px 12px; background: var(--surface); border-radius: 10px; border: 1px solid var(--line); }
+  .delta-cell .k { font-size: 10px; color: var(--inkSoft); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .delta-cell .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .delta-cell .d { font-size: 11px; font-weight: 600; margin-top: 2px; }
+  .up { color: var(--accent); } .down { color: var(--red); } .flat { color: var(--inkMute); }
+
+  /* Rationale items */
+  .rationale { display: flex; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+  .rationale:first-child { border-top: none; }
+  .rationale .src { width: 18px; font-size: 16px; text-align: center; flex-shrink: 0; }
+  .rationale .body { flex: 1; min-width: 0; }
+  .rationale .body .what { font-weight: 600; color: var(--ink); }
+  .rationale .body .because { color: var(--inkSoft); margin-top: 2px; line-height: 1.4; }
+  .rationale .body .because b { color: var(--ink); }
+  .rationale .rail { padding: 1px 6px; border-radius: 4px; background: rgba(217,107,92,0.15); color: #B23A2A;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+    height: fit-content; margin-top: 2px; }
+
+  /* Week diff */
+  .diff-row { display: grid; grid-template-columns: 48px 1fr 14px 1fr; gap: 6px; align-items: center;
+    padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+  .diff-row:first-child { border-top: none; }
+  .diff-row .dow { color: var(--inkSoft); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
+  .diff-row .old { color: var(--inkMute); text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.3); }
+  .diff-row .new { color: var(--ink); font-weight: 500; }
+  .diff-row.kept .old { text-decoration: none; color: var(--inkSoft); }
+  .diff-row.kept .new { color: var(--inkSoft); }
+  .diff-row.changed .new { color: var(--ai); }
+  .diff-row.added .old { opacity: 0.3; }
+  .diff-row.added .new { color: var(--accent); }
+
+  /* Inputs card */
+  .input-item { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; padding: 9px 14px;
+    border-top: 1px solid var(--line); font-size: 12px; align-items: center; }
+  .input-item:first-child { border-top: none; }
+  .input-item .ico { font-size: 16px; text-align: center; }
+  .input-item .name { color: var(--inkSoft); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .input-item .val { font-family: var(--numFont); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .input-item .val.flag { color: var(--red); }
+  .input-item .val.good { color: var(--accent); }
+
+  /* Action buttons */
+  .actions { display: flex; gap: 8px; padding: 14px 18px 18px; }
+  .actions .btn { flex: 1; padding: 12px 0; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
+  .actions .btn.accept { background: var(--accent); color: #fff; }
+  .actions .btn.tweak { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+  .actions .btn.decline { background: transparent; color: var(--inkSoft); border: 1px solid var(--line); }
+
+  .note-field {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    font-family: inherit; font-size: 13px; background: var(--surface); color: var(--ink);
+    resize: vertical; outline: none;
+  }
+</style>
+</head>
+<body>
+<h1>Adaptive weekly recompute</h1>
+<p class="sub">Every Sunday Claude looks at the last 4 weeks of training, recovery, nutrition, weight, and
+pain data — then proposes next week's plan adjustments. You see every change with the data that
+drove it. Hard safety rails (≤10%/week volume, pain-aware, pinned rest days) can't be
+overridden.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — THIS WEEK'S PROPOSAL     -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · Claude's weekly proposal</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Week 18 plan</div>
+          <span class="pill pill-ai">Adaptive</span>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Generated Sun · Apr 27 · Hybrid Runner · wk 3
+        </div>
+      </div>
+
+      <div class="proposal-hero">
+        <div class="who">
+          <span class="dot"></span>
+          <span style="font-size: 10px; color: var(--ai); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700;">Claude · Haiku</span>
+        </div>
+        <h3>Hold volume this week — fuel first, push next.</h3>
+        <div class="summary">
+          You're <b>under-fuelling</b> (kcal avg 1,880 vs 2,050 target) while weight drops
+          <b>0.9 kg/wk</b>. Plus right-knee pain logged twice. I'm keeping total load flat and
+          swapping Thursday tempo for easy.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="delta-grid">
+          <div class="delta-cell">
+            <div class="k">Run vol</div>
+            <div class="v">25 km</div>
+            <div class="d flat">±0 <span style="color: var(--inkMute); font-weight: 400;">vs last</span></div>
+          </div>
+          <div class="delta-cell">
+            <div class="k">Sessions</div>
+            <div class="v">6 <span style="font-size: 11px; color: var(--inkSoft); font-weight: 400;">+1</span></div>
+            <div class="d up">+mob</div>
+          </div>
+          <div class="delta-cell">
+            <div class="k">Hard days</div>
+            <div class="v">1</div>
+            <div class="d down">−1 tempo</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="padding: 0;">
+        <div class="label" style="padding: 14px 18px 0;">Why · from your data</div>
+
+        <div class="rationale">
+          <div class="src">🍽️</div>
+          <div class="body">
+            <div class="what">Hold total volume</div>
+            <div class="because">Kcal 7-day avg <b>1,880</b> vs target <b>2,050</b>.
+              Protein 3 of 5 days under 1.6 g/kg. Under-fuelling + training load = injury risk.</div>
+          </div>
+          <span class="rail">Safety · fuel</span>
+        </div>
+
+        <div class="rationale">
+          <div class="src">⚖️</div>
+          <div class="body">
+            <div class="what">Rate-of-loss flag</div>
+            <div class="because">Weight <b>−0.9 kg/wk</b>, faster than your 0.5 kg/wk target.
+              Volume-up would compound this.</div>
+          </div>
+          <span class="rail">Safety · weight</span>
+        </div>
+
+        <div class="rationale">
+          <div class="src">🩹</div>
+          <div class="body">
+            <div class="what">Swap Thu tempo → easy</div>
+            <div class="because">Right knee logged level 3 on Mon + Wed. Long run still OK —
+              pain was after intervals, not easy runs.</div>
+          </div>
+          <span class="rail">Safety · pain</span>
+        </div>
+
+        <div class="rationale">
+          <div class="src">🧘</div>
+          <div class="body">
+            <div class="what">Add 15-min Wed mobility</div>
+            <div class="because">Mobility logged 1 of 3 check-ins avg. Helps the knee
+              without adding load.</div>
+          </div>
+        </div>
+
+        <div class="rationale">
+          <div class="src">😴</div>
+          <div class="body">
+            <div class="what">Context · sleep OK</div>
+            <div class="because">Sleep 7.4h avg, energy 3.8/5. Recovery signals are fine —
+              it's fuel and pain limiting this week, not rest.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn decline">Decline</button>
+        <button class="btn tweak">Tweak</button>
+        <button class="btn accept">Accept plan</button>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Hero card</b> explains the week's story in one line. Each <b>rationale item</b> links a change
+      to the specific data source that drove it, with a red <b>Safety</b> pill when a hard rail
+      was triggered. 3-button footer: Accept applies; Tweak opens edit mode; Decline keeps last week.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — DATA INPUTS CLAUDE SAW   -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · Full data input (transparency)</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">What Claude saw</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Last 4 weeks · Apr 1–Apr 26
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Training</div>
+        <div style="background: var(--surfaceAlt); border-radius: 10px; padding: 0;">
+          <div class="input-item"><div class="ico">🏃</div>
+            <div><div class="name">Run minutes / wk</div></div>
+            <div class="val">148 · 162 · 175 · 180</div>
+          </div>
+          <div class="input-item"><div class="ico">🤸</div>
+            <div><div class="name">Strength sessions</div></div>
+            <div class="val">2 · 2 · 1 · 2</div>
+          </div>
+          <div class="input-item"><div class="ico">💥</div>
+            <div><div class="name">Plyo sessions</div></div>
+            <div class="val">1 · 0 · 1 · 1</div>
+          </div>
+          <div class="input-item"><div class="ico">🌙</div>
+            <div><div class="name">Rest days</div></div>
+            <div class="val">1 · 1 · 2 · 1</div>
+          </div>
+          <div class="input-item"><div class="ico">❤️</div>
+            <div><div class="name">Avg HR drift · tempo</div></div>
+            <div class="val flag">+4 bpm</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Recovery & wellness</div>
+        <div style="background: var(--surfaceAlt); border-radius: 10px; padding: 0;">
+          <div class="input-item"><div class="ico">😴</div>
+            <div><div class="name">Sleep hrs · 7d avg</div></div>
+            <div class="val good">7.4 h</div>
+          </div>
+          <div class="input-item"><div class="ico">⚡</div>
+            <div><div class="name">Energy · 7d avg</div></div>
+            <div class="val">3.8 /5</div>
+          </div>
+          <div class="input-item"><div class="ico">😓</div>
+            <div><div class="name">Stress · 7d avg</div></div>
+            <div class="val">2.4 /5</div>
+          </div>
+          <div class="input-item"><div class="ico">🧘</div>
+            <div><div class="name">Mobility check-ins</div></div>
+            <div class="val flag">0.9 /3</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Nutrition · last 14 days</div>
+        <div style="background: var(--surfaceAlt); border-radius: 10px; padding: 0;">
+          <div class="input-item"><div class="ico">🔥</div>
+            <div><div class="name">Kcal avg vs target</div></div>
+            <div class="val flag">1,880 / 2,050</div>
+          </div>
+          <div class="input-item"><div class="ico">🥩</div>
+            <div><div class="name">Protein · g/kg avg</div></div>
+            <div class="val flag">1.5</div>
+          </div>
+          <div class="input-item"><div class="ico">🍞</div>
+            <div><div class="name">Carbs · g avg</div></div>
+            <div class="val">215 / 240</div>
+          </div>
+          <div class="input-item"><div class="ico">🌾</div>
+            <div><div class="name">Fibre · g avg</div></div>
+            <div class="val good">32</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Body · weight + pain</div>
+        <div style="background: var(--surfaceAlt); border-radius: 10px; padding: 0;">
+          <div class="input-item"><div class="ico">⚖️</div>
+            <div><div class="name">Weight Δ · 4 wk</div></div>
+            <div class="val flag">−3.5 kg</div>
+          </div>
+          <div class="input-item"><div class="ico">📉</div>
+            <div><div class="name">Rate</div></div>
+            <div class="val flag">−0.9 kg/wk</div>
+          </div>
+          <div class="input-item"><div class="ico">🦵</div>
+            <div><div class="name">Active pain entries</div></div>
+            <div class="val flag">knee 3/5, back 2/5</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Goal history · recent</div>
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; font-size: 12px; color: var(--inkSoft); line-height: 1.5;">
+          <b style="color: var(--ink);">Apr 10</b> — Switched to cut (kcal 2,200 → 2,050).
+          Planned loss rate: 0.5 kg/wk. <br>
+          <b style="color: var(--red);">Actual: −0.9 kg/wk</b> — too aggressive.
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      Every input shown; nothing hidden. Red values are the flags that drove changes; green are
+      healthy signals. Users can scroll through exactly what Claude used — no black box.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — DAY-BY-DAY DIFF          -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · What actually changed</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Last week → this week</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          3 changes · 4 sessions kept · 1 added
+        </div>
+      </div>
+
+      <div class="section" style="padding: 0;">
+        <div style="padding: 12px 18px; display: flex; gap: 14px; align-items: center; border-bottom: 1px solid var(--line);">
+          <div style="font-size: 10px; color: var(--inkSoft); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Legend</div>
+          <span class="pill pill-soft">Kept</span>
+          <span class="pill" style="background: rgba(90,61,158,0.15); color: var(--ai);">Changed</span>
+          <span class="pill pill-accept" style="background: var(--accent); color: #fff;">Added</span>
+        </div>
+
+        <div class="diff-row kept">
+          <span class="dow">Mon</span>
+          <span class="old">Easy 5k</span>
+          <span style="color: var(--inkMute);">→</span>
+          <span class="new">Easy 5k</span>
+        </div>
+        <div class="diff-row kept">
+          <span class="dow">Tue</span>
+          <span class="old">Push + pull + 10m mob</span>
+          <span style="color: var(--inkMute);">→</span>
+          <span class="new">Push + pull + 10m mob</span>
+        </div>
+        <div class="diff-row added">
+          <span class="dow">Wed</span>
+          <span class="old">—</span>
+          <span style="color: var(--accent);">＋</span>
+          <span class="new">Mobility 15m</span>
+        </div>
+        <div class="diff-row changed">
+          <span class="dow">Thu</span>
+          <span class="old">Tempo 6×3 + plyo</span>
+          <span style="color: var(--ai);">⇨</span>
+          <span class="new">Easy 6k + plyo</span>
+        </div>
+        <div class="diff-row kept">
+          <span class="dow">Fri</span>
+          <span class="old">Core + pull</span>
+          <span style="color: var(--inkMute);">→</span>
+          <span class="new">Core + pull</span>
+        </div>
+        <div class="diff-row kept">
+          <span class="dow">Sat</span>
+          <span class="old">Long 14k</span>
+          <span style="color: var(--inkMute);">→</span>
+          <span class="new">Long 14k</span>
+        </div>
+        <div class="diff-row kept">
+          <span class="dow">Sun</span>
+          <span class="old">Mobility 20m</span>
+          <span style="color: var(--inkMute);">→</span>
+          <span class="new">Mobility 20m</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Tweak this proposal</div>
+        <textarea rows="3" class="note-field" placeholder="e.g. I want to keep the tempo but at 80% effort — knee felt better today."></textarea>
+        <div style="margin-top: 10px; display: flex; gap: 8px;">
+          <button style="flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; cursor: pointer;">Re-run with note</button>
+          <button style="padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; cursor: pointer;" title="Pin sessions so future recomputes can't change them">📌 Pin</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Volume guardrail</div>
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; font-size: 12px; line-height: 1.5;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--inkSoft);">This week's proposal</span>
+            <span style="font-weight: 700; font-variant-numeric: tabular-nums;">25 km</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+            <span style="color: var(--inkSoft);">Max allowed (≤10% of last week's 25 km)</span>
+            <span style="font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent);">27.5 km</span>
+          </div>
+          <div style="margin-top: 8px; height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden;">
+            <div style="width: 91%; height: 100%; background: var(--accent); border-radius: 3px;"></div>
+          </div>
+          <div style="font-size: 11px; color: var(--inkMute); margin-top: 6px; line-height: 1.4;">
+            Within the 10% cap. Plan generator cannot propose anything above this ceiling —
+            even if you push harder in "Tweak".
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Diff view</b> makes the week's changes obvious at a glance. <b>Tweak box</b> lets you add
+      free-text feedback and re-run; pinning locks specific sessions so future weeks can't move
+      them. <b>Volume guardrail</b> card shows the hard 10% ceiling is active — visible, not hidden.
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Implementation:</b> weekly cron (Sunday 8 AM local) OR on-demand button. Edge function builds
+  the context bundle (training 4w + wellness 14d + nutrition 14d + weight 4w + pain active + goal
+  history) → one Haiku call (~3k tokens, ~$0.003) → returns a structured plan for the next 7 days
+  plus a rationale array. Client validates it against the safety rails client-side before showing
+  Accept; if a rail is violated, Claude's proposal is auto-trimmed and flagged in the rationale.
+  Pinned sessions pass through verbatim. Decline keeps last week's plan; Accept writes to
+  <code>plan_sessions</code>. Every recompute is logged so you can replay the last 8 weeks of
+  proposals and see which ones worked.
+</p>
+</body>
+</html>
