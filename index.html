@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -1506,16 +1506,61 @@ function WellnessCard({ theme, wellness, setWellness, locked, settings, setSetti
 // caloree_type so the planner can suggest a real session that exists in
 // the NRC app. If Nike renames/removes one, the deep-link still opens
 // NRC's home screen and the user picks manually.
+// Curated from Nike Run Club's live guided-run catalog (300+ sessions).
+// Each entry is a real NRC audio-guided run. We match by type + target
+// minutes. The "Open in Nike Run Club" deep-link opens the app home;
+// user scrolls to the named session (in-app search works too).
 const NRC_CATALOG = [
-  { id: 'speed-5x3-threshold', nike: 'Speed Run · 5×3 @ Threshold', coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 38 },
-  { id: 'speed-8x400',         nike: 'Speed Run · 8×400m',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 42 },
-  { id: 'speed-6x2-vo2',       nike: 'Speed Run · 6×2 @ VO₂',       coach: 'Coach Bennett', caloree_type: 'speed', minutes: 36 },
-  { id: 'tempo-20',            nike: 'Tempo Run · 20 min',          coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 35 },
-  { id: 'tempo-30',            nike: 'Tempo Run · 30 min',          coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 45 },
-  { id: 'hill-6x1',            nike: 'Hill Repeats · 6×1 min',       coach: 'Coach Bennett', caloree_type: 'hills', minutes: 32 },
-  { id: 'fartlek-45',          nike: 'Fartlek Play · 45 min',        coach: 'Coach Bennett', caloree_type: 'speed', minutes: 45 },
-  { id: 'long-60',             nike: 'Long Run · 60 min',            coach: 'Coach Bennett', caloree_type: 'long', minutes: 60 },
-  { id: 'long-90',             nike: 'Long Run · 90 min',            coach: 'Coach Bennett', caloree_type: 'long', minutes: 90 },
+  // Easy / recovery
+  { id: 'first-run',           nike: 'First Run',                   coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 20 },
+  { id: 'next-run',            nike: 'Next Run',                    coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 22 },
+  { id: 'easy-run-25',         nike: 'Easy Run',                    coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 25 },
+  { id: 'just-a-run',          nike: 'Just A Run',                  coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 30 },
+  { id: 'lunch-run',           nike: 'Lunch Run',                   coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 25 },
+  { id: 'comeback-run',        nike: 'Comeback Run',                coach: 'Coach Bennett', caloree_type: 'easy',  minutes: 15 },
+  { id: 'morning-headspace',   nike: 'Morning Run With Headspace',  coach: 'Bennett / Puddicombe', caloree_type: 'easy', minutes: 30 },
+  { id: 'recovery-headspace',  nike: 'Recovery Run With Headspace', coach: 'Headspace',     caloree_type: 'easy',  minutes: 35 },
+  { id: 'mindful-meters',      nike: 'Mindful Meters',              coach: 'Headspace',     caloree_type: 'easy',  minutes: 60 },
+  // Tempo
+  { id: 'tempo-paula',         nike: 'Tempo Run With Paula',        coach: 'Paula Radcliffe', caloree_type: 'tempo', minutes: 29 },
+  { id: 'tempo-emily',         nike: 'Tempo With Emily Infeld',     coach: 'Emily Infeld',  caloree_type: 'tempo', minutes: 35 },
+  { id: 'out-strong-back',     nike: 'Out Strong. Back Fast',       coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 30 },
+  { id: 'the-shifter',         nike: 'The Shifter',                 coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 25 },
+  { id: 'in-the-zone',         nike: 'In The Zone',                 coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 36 },
+  { id: 'slow-down-speed-up',  nike: 'Slow Down 2 Speed Up',        coach: 'Coach Bennett', caloree_type: 'tempo', minutes: 33 },
+  // Speed / intervals
+  { id: 'first-speed',         nike: 'First Speed Run',             coach: 'Coach Bennett', caloree_type: 'speed', minutes: 27 },
+  { id: 'next-speed',          nike: 'Next Speed Run',              coach: 'Coach Bennett', caloree_type: 'speed', minutes: 25 },
+  { id: 'faster-fun',          nike: 'Faster Fun',                  coach: 'Coach Bennett', caloree_type: 'speed', minutes: 18 },
+  { id: 'no-time-go-time',     nike: 'No Time? Go Time!',           coach: 'Coach Bennett', caloree_type: 'speed', minutes: 20 },
+  { id: 'go-fast-elaine',      nike: 'Go Fast With Elaine',         coach: 'Elaine Thompson', caloree_type: 'speed', minutes: 22 },
+  { id: 'sneaky-speed',        nike: 'Sneaky Speed',                coach: 'Coach Bennett', caloree_type: 'speed', minutes: 30 },
+  { id: 'run-strong-repeat',   nike: 'Run Strong. Repeat',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 30 },
+  { id: 'run-fast-repeat',     nike: 'Run Fast. Repeat',            coach: 'Coach Bennett', caloree_type: 'speed', minutes: 37 },
+  { id: 'ladder-up-down',      nike: 'Ladder Up Ladder Down',       coach: 'Coach Bennett', caloree_type: 'speed', minutes: 33 },
+  { id: 'triple-sevens',       nike: "Triple 7's",                  coach: 'Coach Bennett', caloree_type: 'speed', minutes: 33 },
+  { id: 'how-fartlek',         nike: 'How Fartlek Can You Go?',     coach: 'Coach Bennett', caloree_type: 'speed', minutes: 26 },
+  { id: 'one-hard-one-easy',   nike: 'One Hard. One Easy',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 22 },
+  { id: 'one-hard-two-easy',   nike: 'One Hard. Two Easy',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 28 },
+  { id: 'two-hard-one-easy',   nike: 'Two Hard. One Easy',          coach: 'Coach Bennett', caloree_type: 'speed', minutes: 28 },
+  { id: 'power-pyramid',       nike: 'Power Pyramid',               coach: 'Coach Bennett', caloree_type: 'speed', minutes: 37 },
+  // Hills
+  { id: 'hill-hillier',        nike: 'Hill Hillier Hilliest',       coach: 'Coach Bennett', caloree_type: 'hills', minutes: 27 },
+  { id: 'runner-up',           nike: 'Runner Up',                   coach: 'Coach Bennett', caloree_type: 'hills', minutes: 21 },
+  // Long runs
+  { id: 'first-long',          nike: 'First Long Run',              coach: 'Coach Bennett', caloree_type: 'long',  minutes: 35 },
+  { id: 'next-long',           nike: 'Next Long Run',               coach: 'Coach Bennett', caloree_type: 'long',  minutes: 42 },
+  { id: 'long-shalane',        nike: 'Run With Shalane',            coach: 'Shalane Flanagan', caloree_type: 'long', minutes: 45 },
+  { id: 'long-joanie',         nike: 'Run With Joanie',             coach: 'Joan Benoit Samuelson', caloree_type: 'long', minutes: 65 },
+  { id: 'long-eliud',          nike: 'Run With Eliud',              coach: 'Eliud Kipchoge', caloree_type: 'long', minutes: 60 },
+  { id: 'long-90',             nike: '90 Minute Run',               coach: 'Coach Bennett', caloree_type: 'long',  minutes: 90 },
+  { id: 'long-joanie-80',      nike: 'Run Long With Joanie',        coach: 'Joan Benoit Samuelson', caloree_type: 'long', minutes: 80 },
+  { id: 'go-long-even',        nike: 'Go Long With Even',           coach: 'Evan Jager',    caloree_type: 'long',  minutes: 75 },
+  { id: 'two-hour-run',        nike: 'Two Hour Run',                coach: 'Coach Bennett', caloree_type: 'long',  minutes: 120 },
+  // Distance-specific
+  { id: '5k-run',              nike: '5K Run',                      coach: 'Coach Bennett', caloree_type: 'long',  minutes: 28 },
+  { id: '10k-run',             nike: '10K Run',                     coach: 'Coach Bennett', caloree_type: 'long',  minutes: 55 },
+  { id: 'half-marathon',       nike: 'Half Marathon Run',           coach: 'Coach Bennett', caloree_type: 'long',  minutes: 115 },
 ];
 function findNRCMatch(session) {
   if (!session || !session.kind || session.kind !== 'run') return null;
@@ -1576,30 +1621,47 @@ const PLAN_TEMPLATES = {
   },
 };
 
-function generatePlan(templateKey, startDateIso) {
+function generatePlan(templateKey, startDateIso, fitness = {}) {
   const tmpl = PLAN_TEMPLATES[templateKey];
   if (!tmpl) return null;
-  // Anchor week 1 to the Monday of the week containing startDateIso.
-  // Sessions that fall before startDateIso are skipped — so starting
-  // mid-week just shortens week 1 rather than delaying everything.
+  // Scale run volumes to the user's current fitness so the plan doesn't
+  // blow them up on week 1. Template baselines assume ~25km/wk; we scale
+  // week 1 runs so total ≈ currentKmPerWeek at ~8 min/km easy pace, then
+  // progress weekly by the chosen rate. Cap at 10%/wk (safety rail).
+  const baselineKm = 25;
+  const current = Math.max(5, +fitness.currentKmPerWeek || 15);
+  const week1Scale = current / baselineKm;
+  const PROG_RATES = { gradual: 0.05, moderate: 0.08, aggressive: 0.10 };
+  const rate = PROG_RATES[fitness.progression] || 0.05;
+  // Deload every 4 weeks → 70% of previous week.
+  const weekScale = (w) => {
+    if (w > 0 && (w + 1) % 4 === 0) return week1Scale * Math.pow(1 + rate, w - 1) * 0.7;
+    return week1Scale * Math.pow(1 + rate, w);
+  };
+
   const start = new Date(startDateIso + 'T00:00:00');
-  const startDow = start.getDay() || 7;           // Sun = 7, Mon = 1
+  const startDow = start.getDay() || 7;
   const monday = new Date(start);
   monday.setDate(start.getDate() - (startDow - 1));
   const sessions = [];
   for (let w = 0; w < tmpl.weeks; w++) {
     tmpl.shape.forEach(block => {
-      const blockDow = block.dow === 0 ? 7 : block.dow; // Sun = 7
+      const blockDow = block.dow === 0 ? 7 : block.dow;
       const d = new Date(monday);
       d.setDate(monday.getDate() + w * 7 + (blockDow - 1));
       const iso = todayLocalIso(d);
-      if (iso < startDateIso) return;               // pre-plan-start: skip
-      sessions.push({ date: iso, week: w + 1, ...block });
+      if (iso < startDateIso) return;
+      const scaled = { ...block };
+      if (block.kind === 'run' && block.minutes) {
+        scaled.minutes = Math.max(10, Math.round(block.minutes * weekScale(w)));
+      }
+      sessions.push({ date: iso, week: w + 1, ...scaled });
     });
   }
   return {
     template: templateKey,
     start_date: startDateIso,
+    fitness: { currentKmPerWeek: current, progression: fitness.progression || 'gradual' },
     weeks: tmpl.weeks,
     sessions,
     prefs: {
@@ -1633,8 +1695,16 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
   const [templateChoice, setTemplateChoice] = React.useState('hybrid-runner');
   // Start-date option: 'today' | 'tomorrow' | 'next-mon'
   const [startChoice, setStartChoice] = React.useState('today');
+  // Running fitness onboarding — seed from a previous plan if available.
+  const prevFitness = plan?.fitness || {};
+  const [currentKm, setCurrentKm] = React.useState(prevFitness.currentKmPerWeek || 15);
+  const [progress, setProgress] = React.useState(prevFitness.progression || 'gradual');
   // Week offset from selectedDate's calendar week (0 = this week, +1 next, -1 last)
   const [weekOffset, setWeekOffset] = React.useState(0);
+  // Which day's session to preview. Starts at selectedDate; user can tap
+  // any cell in the ribbon below to peek at that day.
+  const [previewDate, setPreviewDate] = React.useState(selectedDate);
+  React.useEffect(() => { setPreviewDate(selectedDate); }, [selectedDate]);
 
   // ISO of the Monday of a given date's calendar week.
   const weekMonday = (iso) => {
@@ -1658,7 +1728,8 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
       const shift = dow === 1 ? 7 : (8 - dow);
       startIso = addDaysIso(startIso, shift);
     }
-    const newPlan = generatePlan(key, startIso);
+    const fitness = { currentKmPerWeek: currentKm, progression: progress };
+    const newPlan = generatePlan(key, startIso, fitness);
     setSettings({ ...(settings || {}), trainingPlan: newPlan });
     setPickingTemplate(false);
     setWeekOffset(0);
@@ -1753,6 +1824,66 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
             {startChoice === 'next-mon' && 'Plan begins next Monday — full weeks from day one. Best for structured starts.'}
           </div>
 
+          {/* Running fitness onboarding */}
+          <div style={{
+            margin: '16px 0 4px', fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+            color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+          }}>Your running right now</div>
+          <div style={{
+            padding: 12, background: theme.surfaceAlt, borderRadius: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Current weekly mileage</div>
+                <div style={{ fontSize: 11, color: theme.inkSoft }}>Roughly how many km you run a week today</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button onClick={() => setCurrentKm(Math.max(0, currentKm - 5))} style={{
+                  width: 26, height: 26, borderRadius: 13, border: `1px solid ${theme.line}`,
+                  background: theme.surface, cursor: 'pointer', fontSize: 14,
+                }}>−</button>
+                <div style={{ width: 52, textAlign: 'center',
+                  fontFamily: theme.numFont, fontSize: 16, fontWeight: 700 }}>
+                  {currentKm}<span style={{ fontSize: 10, color: theme.inkSoft, marginLeft: 2, fontWeight: 400 }}>km</span>
+                </div>
+                <button onClick={() => setCurrentKm(currentKm + 5)} style={{
+                  width: 26, height: 26, borderRadius: 13, border: 'none',
+                  background: theme.ink, color: theme.bg, cursor: 'pointer', fontSize: 14,
+                }}>+</button>
+              </div>
+            </div>
+            <div style={{ borderTop: `1px solid ${theme.line}`, paddingTop: 10, marginTop: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Progression pace</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[
+                  ['gradual',   'Gradual',   '+5%/wk'],
+                  ['moderate',  'Moderate',  '+8%/wk'],
+                  ['aggressive','Aggressive','+10%/wk'],
+                ].map(([k, label, sub]) => {
+                  const on = progress === k;
+                  return (
+                    <button key={k} onClick={() => setProgress(k)} style={{
+                      flex: 1, padding: '8px 4px',
+                      border: `1.5px solid ${on ? theme.ink : theme.line}`,
+                      background: on ? theme.ink : theme.surface,
+                      color: on ? theme.bg : theme.ink,
+                      borderRadius: 8, cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                    }}>
+                      <span style={{ fontFamily: theme.font, fontSize: 12, fontWeight: on ? 700 : 500 }}>{label}</span>
+                      <span style={{ fontFamily: theme.font, fontSize: 9, opacity: 0.7 }}>{sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: theme.inkSoft, lineHeight: 1.4 }}>
+                {progress === 'gradual'    && 'Kindest to your body — 3-4 weeks before you feel the step-up.'}
+                {progress === 'moderate'   && 'Balanced. Typical half-marathon plan pace of adaptation.'}
+                {progress === 'aggressive' && 'Near the 10% weekly cap. Best when base is established + no recent injuries.'}
+              </div>
+            </div>
+          </div>
+
           <button onClick={() => startPlan(templateChoice, startChoice)} style={{
             width: '100%', marginTop: 12, padding: 14, border: 'none',
             background: theme.ink, color: theme.bg, borderRadius: 12,
@@ -1772,10 +1903,6 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
 
   // ── Plan exists ──
   const tmpl = PLAN_TEMPLATES[plan.template];
-  // Which day's session to preview. Starts at selectedDate; user can tap
-  // any cell in the ribbon below to peek at that day.
-  const [previewDate, setPreviewDate] = React.useState(selectedDate);
-  React.useEffect(() => { setPreviewDate(selectedDate); }, [selectedDate]);
   const todaySess = plan.sessions.find(s => s.date === previewDate);
   const previewIsToday = previewDate === selectedDate;
   // The Monday we're showing (this week ± offset).
@@ -1902,12 +2029,19 @@ function PlannerView({ theme, settings, setSettings, exerciseLog = [], selectedD
                   {todaySess.kind === 'run'
                     ? `${todaySess.runType?.replace(/\b\w/g, c => c.toUpperCase())} run · ${todaySess.minutes} min`
                     : todaySess.kind === 'strength'
-                      ? `${(todaySess.focus || 'Strength').replace(/\b\w/g, c => c.toUpperCase())} · ${todaySess.minutes} min`
+                      ? `Calisthenics · ${todaySess.minutes} min`
                       : `${kindStyle.label} · ${todaySess.minutes} min`}
                 </div>
                 <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft, marginTop: 3 }}>
                   {todaySess.addon === 'plyo' && '+ plyometrics after · '}
-                  RPE target {todaySess.kind === 'run' && todaySess.runType === 'tempo' ? '7/10' : todaySess.kind === 'run' && todaySess.runType === 'speed' ? '8/10' : todaySess.kind === 'run' && todaySess.runType === 'long' ? '5/10' : '6/10'}
+                  {todaySess.kind === 'run'
+                    ? `RPE target ${todaySess.runType === 'tempo' ? '6-7/10 · comfortably hard'
+                        : todaySess.runType === 'speed' ? '8-9/10 · hard'
+                        : todaySess.runType === 'hills' ? '7-8/10 · strong effort'
+                        : todaySess.runType === 'long' ? '4-5/10 · conversational'
+                        : todaySess.runType === 'recovery' ? '2/10 · very easy'
+                        : '2-3/10 · easy'}`
+                    : 'Just do it — no RPE target'}
                 </div>
               </div>
               {matched && (
