@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Rich detail views — calisthenics, swim, cycling</title>
+<style>
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surfaceAlt: #EDE9E0; --line: #D8D4C8;
+    --ink: #1A1A1A; --inkSoft: #5C5A54; --inkMute: #8A867C;
+    --accent: #2B7A5C; --blue: #5FA8C9; --amber: #E0A24A; --red: #D96B5C;
+    --cal: #A86B4F; --swim: #4A90C9; --cycle: #7A8BD1; --plyo: #9C6BD9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; max-width: 860px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 24px; max-width: 1400px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card h2 { margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt); }
+  .phone { width: 380px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-height: 760px; }
+  .phone-header { padding: 14px 18px 10px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 10px; display: block; }
+  .title-row { display: flex; align-items: center; gap: 12px; }
+  .title-row .ico {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; color: #fff; flex-shrink: 0;
+  }
+  .title-row .info { flex: 1; min-width: 0; }
+  .title-row .info .name { font-size: 17px; font-weight: 600; }
+  .title-row .info .meta { font-size: 11px; color: var(--inkSoft); margin-top: 2px; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .annotations { padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10; }
+  .annotations b { color: #5A3B08; }
+  /* Hero stats */
+  .hero { display: flex; gap: 14px; padding: 14px 18px; }
+  .hero .stat { flex: 1; }
+  .hero .v { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1; }
+  .hero .u { font-size: 11px; color: var(--inkSoft); margin-top: 3px; }
+  .hero .d { font-size: 10px; font-weight: 700; margin-top: 3px; }
+  .up { color: var(--accent); } .down { color: var(--red); } .flat { color: var(--inkMute); }
+  /* Calisthenics set table */
+  .set-tbl { font-size: 12px; }
+  .set-row {
+    display: grid; grid-template-columns: 1fr auto auto auto;
+    gap: 8px; padding: 9px 0; border-top: 1px solid var(--line);
+    align-items: center;
+  }
+  .set-row:first-of-type { border-top: none; }
+  .set-row .name { font-weight: 600; }
+  .set-row .sets { color: var(--inkSoft); font-size: 11px; }
+  .set-row .reps { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .set-row .delta {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+    min-width: 34px; text-align: center;
+  }
+  .delta.up { color: #2A6E4C; background: rgba(43,122,92,0.12); }
+  .delta.flat { color: var(--inkMute); background: var(--surfaceAlt); }
+  .delta.down { color: #9A3A1F; background: rgba(217,107,92,0.12); }
+  /* Chip */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .chip { padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700;
+    background: var(--surfaceAlt); border: 1px solid var(--line); color: var(--ink); }
+  .chip.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* Swim lane chart */
+  .lanes { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+  .lane {
+    height: 18px; border-radius: 3px; position: relative;
+    background: linear-gradient(90deg, var(--swim) 0%, var(--swim) var(--w), var(--surfaceAlt) var(--w), var(--surfaceAlt) 100%);
+    color: #fff; font-size: 10px; font-weight: 600; padding: 2px 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .lane .num { color: rgba(255,255,255,0.9); }
+  .lane .pace { color: var(--ink); }
+  .lane.fastest { background: linear-gradient(90deg, #1E6B9F 0%, #1E6B9F var(--w), var(--surfaceAlt) var(--w), var(--surfaceAlt) 100%); }
+  /* Elevation sparkline */
+  .spark-wrap { padding: 12px 14px; background: var(--surfaceAlt); border-radius: 10px; }
+  .spark-stats { display: flex; gap: 14px; margin-top: 6px; font-size: 11px; color: var(--inkSoft); }
+  .spark-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  /* Muscle mini-map */
+  .muscle-wrap { display: flex; gap: 10px; align-items: flex-start; }
+  .muscle-body { flex-shrink: 0; }
+  .m-muscle { stroke: var(--ink); stroke-width: 0.6; fill: var(--surfaceAlt); }
+  .m-muscle.h2 { fill: #FFCA7A; }
+  .m-muscle.h3 { fill: #F79347; }
+  .m-muscle.h4 { fill: #E25A3C; }
+  .m-list { flex: 1; display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 11px; }
+  .m-list .k { color: var(--inkSoft); }
+  .m-list .v { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+  /* PR flame */
+  .pr-banner {
+    margin: 0 18px 14px; padding: 12px 14px;
+    background: linear-gradient(135deg, #FFE8CC 0%, #FFD4A3 100%);
+    border: 1px solid #E0A24A; border-radius: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pr-banner .flame { font-size: 24px; }
+  .pr-banner .body .t { font-size: 13px; font-weight: 700; color: #8A5A1F; }
+  .pr-banner .body .s { font-size: 11px; color: #8A5A1F; margin-top: 2px; }
+  /* Vs last bars */
+  .vs-row {
+    display: grid; grid-template-columns: 90px 1fr 60px;
+    gap: 8px; align-items: center; padding: 6px 0; font-size: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .vs-row:first-of-type { border-top: none; }
+  .vs-row .k { color: var(--inkSoft); font-size: 11px; }
+  .vs-row .bar-wrap { height: 6px; background: var(--surfaceAlt); border-radius: 3px; position: relative; overflow: hidden; }
+  .vs-row .bar { height: 100%; border-radius: 3px; }
+  .vs-row .v { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+</style>
+</head>
+<body>
+<h1>Rich detail views — beyond running</h1>
+<p class="sub">Runs have had the map + splits + zones treatment since v52. Here's what the same
+sheet could do for <b>calisthenics</b> (sets, reps, volume, muscle coverage), <b>swimming</b>
+(laps, per-length pace, SWOLF), and <b>cycling</b> (map + power + cadence + elevation). Same
+existing <code>ExerciseDetailSheet</code> component, different conditional blocks per type.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — CALISTHENICS              -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>Calisthenics · full body 60 min</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div class="title-row">
+          <div class="ico" style="background: var(--cal);">🤸</div>
+          <div class="info">
+            <div class="name">Calisthenics · full body</div>
+            <div class="meta">Calisthenics · Thu 6:45 PM · 60 min</div>
+          </div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+      </div>
+
+      <!-- PR banner -->
+      <div class="pr-banner">
+        <span class="flame">🔥</span>
+        <div class="body">
+          <div class="t">New rep PR · Pull-ups</div>
+          <div class="s">12 × 4 sets · prev best 10 × 4 (2 weeks ago)</div>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="stat">
+          <div class="v">60</div>
+          <div class="u">minutes</div>
+          <div class="d flat">±0 vs last</div>
+        </div>
+        <div class="stat">
+          <div class="v">248</div>
+          <div class="u">total reps</div>
+          <div class="d up">+14 vs last</div>
+        </div>
+        <div class="stat">
+          <div class="v">7</div>
+          <div class="u">movements</div>
+          <div class="d flat">same</div>
+        </div>
+        <div class="stat">
+          <div class="v">~410</div>
+          <div class="u">kcal</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Session breakdown</div>
+        <div class="set-tbl">
+          <div class="set-row">
+            <div>
+              <div class="name">Pull-ups</div>
+              <div class="sets">4 sets · 90s rest</div>
+            </div>
+            <div class="reps">48<span style="color: var(--inkSoft); font-weight: 400; font-size: 10px;"> reps</span></div>
+            <div class="reps">—</div>
+            <div class="delta up">+8</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">Dips</div>
+              <div class="sets">4 sets · 75s rest</div>
+            </div>
+            <div class="reps">52</div>
+            <div class="reps">—</div>
+            <div class="delta up">+4</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">Push-ups · archer</div>
+              <div class="sets">3 sets</div>
+            </div>
+            <div class="reps">30</div>
+            <div class="reps">—</div>
+            <div class="delta flat">±0</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">Pistol squats</div>
+              <div class="sets">3 × 8 each leg</div>
+            </div>
+            <div class="reps">48</div>
+            <div class="reps">—</div>
+            <div class="delta up">+6</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">Hanging leg raises</div>
+              <div class="sets">3 sets</div>
+            </div>
+            <div class="reps">36</div>
+            <div class="reps">—</div>
+            <div class="delta flat">±0</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">Bulgarian split squats</div>
+              <div class="sets">3 × 10 each, 10kg DB</div>
+            </div>
+            <div class="reps">60</div>
+            <div class="reps">10kg</div>
+            <div class="delta up">+5kg</div>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="name">L-sit hold</div>
+              <div class="sets">4 × max</div>
+            </div>
+            <div class="reps">34s</div>
+            <div class="reps">—</div>
+            <div class="delta up">+4s</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Muscle coverage</div>
+        <div class="muscle-wrap">
+          <svg class="muscle-body" width="90" height="170" viewBox="0 0 60 120">
+            <ellipse class="m-muscle" cx="30" cy="10" rx="7" ry="8"/>
+            <rect class="m-muscle" x="27" y="19" width="6" height="5" rx="1"/>
+            <path class="m-muscle h4" d="M18,26 Q30,22 42,26 L43,38 Q30,35 17,38 Z"/>
+            <rect class="m-muscle h3" x="20" y="36" width="20" height="15" rx="2"/>
+            <rect class="m-muscle h4" x="10" y="30" width="6" height="22" rx="2"/>
+            <rect class="m-muscle h4" x="44" y="30" width="6" height="22" rx="2"/>
+            <rect class="m-muscle h2" x="10" y="54" width="5" height="22" rx="2"/>
+            <rect class="m-muscle h2" x="45" y="54" width="5" height="22" rx="2"/>
+            <rect class="m-muscle h3" x="22" y="52" width="16" height="16" rx="2"/>
+            <rect class="m-muscle h4" x="20" y="70" width="8" height="25" rx="2"/>
+            <rect class="m-muscle h4" x="32" y="70" width="8" height="25" rx="2"/>
+            <rect class="m-muscle h2" x="21" y="97" width="7" height="20" rx="2"/>
+            <rect class="m-muscle h2" x="32" y="97" width="7" height="20" rx="2"/>
+          </svg>
+          <div style="flex: 1;">
+            <div class="m-list">
+              <div class="k">Lats / back</div><div class="v" style="color: #B23A2A;">HIGH</div>
+              <div class="k">Chest</div><div class="v" style="color: #E25A3C;">MOD</div>
+              <div class="k">Shoulders</div><div class="v" style="color: #B23A2A;">HIGH</div>
+              <div class="k">Triceps</div><div class="v" style="color: #F79347;">SOLID</div>
+              <div class="k">Core</div><div class="v" style="color: #F79347;">SOLID</div>
+              <div class="k">Quads</div><div class="v" style="color: #B23A2A;">HIGH</div>
+              <div class="k">Hamstrings</div><div class="v" style="color: var(--inkMute);">—</div>
+            </div>
+            <div style="font-size: 10px; color: var(--inkSoft); margin-top: 6px; line-height: 1.4;">
+              Push / pull / legs split — balanced upper body. Hamstrings light this session.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Vs last 4 of same type</div>
+        <div class="vs-row">
+          <div class="k">Total reps</div>
+          <div class="bar-wrap"><div class="bar" style="width: 92%; background: var(--accent);"></div></div>
+          <div class="v up">+6%</div>
+        </div>
+        <div class="vs-row">
+          <div class="k">Hardest lift</div>
+          <div class="bar-wrap"><div class="bar" style="width: 100%; background: var(--cal);"></div></div>
+          <div class="v up">New PR</div>
+        </div>
+        <div class="vs-row">
+          <div class="k">Hold time</div>
+          <div class="bar-wrap"><div class="bar" style="width: 85%; background: var(--accent);"></div></div>
+          <div class="v up">+12%</div>
+        </div>
+        <div class="vs-row">
+          <div class="k">RPE</div>
+          <div class="bar-wrap"><div class="bar" style="width: 78%; background: var(--amber);"></div></div>
+          <div class="v flat">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Sets table</b> logs movements + sets + reps/holds + weight (if any). Each row
+      carries a delta vs same-name movement in your last session of this type. <b>PR banner</b>
+      fires on rep, weight, or hold-time records. <b>Muscle coverage mini-map</b> uses the
+      existing EXERCISE_MUSCLE_MAP to colour-code what was hit.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — SWIM                      -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>Swim · pool 2km</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div class="title-row">
+          <div class="ico" style="background: var(--swim);">🏊</div>
+          <div class="info">
+            <div class="name">Pool swim · 2 km</div>
+            <div class="meta">Swim · Strava · Sat 7:30 AM · 25m pool</div>
+          </div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="stat">
+          <div class="v">2.0</div>
+          <div class="u">km · 80 lengths</div>
+          <div class="d up">+400m</div>
+        </div>
+        <div class="stat">
+          <div class="v">42</div>
+          <div class="u">min moving</div>
+          <div class="d up">+6 min</div>
+        </div>
+        <div class="stat">
+          <div class="v">1:45</div>
+          <div class="u">/100m avg</div>
+          <div class="d up">−3s</div>
+        </div>
+        <div class="stat">
+          <div class="v">~340</div>
+          <div class="u">kcal</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Stroke breakdown</div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <span style="width: 10px; height: 10px; border-radius: 5px; background: var(--swim);"></span>
+              Freestyle
+            </span>
+            <span style="color: var(--inkSoft);">60 lengths · 1500m · 1:40/100m</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <span style="width: 10px; height: 10px; border-radius: 5px; background: #8AB8DB;"></span>
+              Backstroke
+            </span>
+            <span style="color: var(--inkSoft);">12 lengths · 300m · 2:10/100m</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <span style="width: 10px; height: 10px; border-radius: 5px; background: #B8D0E3;"></span>
+              Breaststroke
+            </span>
+            <span style="color: var(--inkSoft);">8 lengths · 200m · 2:25/100m</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Per-length pace (selected set)</div>
+        <div style="font-size: 11px; color: var(--inkSoft); margin-bottom: 6px;">Lengths 1–12 · warmup</div>
+        <div class="lanes">
+          <div class="lane fastest" style="--w: 92%;"><span class="num">#1</span><span class="pace">23.4s</span></div>
+          <div class="lane" style="--w: 88%;"><span class="num">#2</span><span class="pace">24.1s</span></div>
+          <div class="lane fastest" style="--w: 95%;"><span class="num">#3</span><span class="pace">22.8s</span></div>
+          <div class="lane" style="--w: 85%;"><span class="num">#4</span><span class="pace">24.6s</span></div>
+          <div class="lane" style="--w: 78%;"><span class="num">#5</span><span class="pace">26.1s</span></div>
+          <div class="lane" style="--w: 82%;"><span class="num">#6</span><span class="pace">25.2s</span></div>
+          <div class="lane" style="--w: 88%;"><span class="num">#7</span><span class="pace">24.0s</span></div>
+          <div class="lane fastest" style="--w: 96%;"><span class="num">#8</span><span class="pace">22.6s</span></div>
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+          <span class="chip accent">1-12 warmup</span>
+          <span class="chip">13-44 main</span>
+          <span class="chip">45-60 threshold</span>
+          <span class="chip">61-80 cooldown</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">SWOLF + efficiency</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px;">
+            <div style="font-size: 10px; font-weight: 700; color: var(--inkSoft); text-transform: uppercase; letter-spacing: 0.06em;">Avg SWOLF</div>
+            <div style="font-size: 18px; font-weight: 600; margin-top: 3px;">36</div>
+            <div style="font-size: 11px; color: var(--accent); font-weight: 600;">−2 vs last</div>
+          </div>
+          <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px;">
+            <div style="font-size: 10px; font-weight: 700; color: var(--inkSoft); text-transform: uppercase; letter-spacing: 0.06em;">Strokes/length</div>
+            <div style="font-size: 18px; font-weight: 600; margin-top: 3px;">18</div>
+            <div style="font-size: 11px; color: var(--accent); font-weight: 600;">−1 vs last</div>
+          </div>
+        </div>
+        <div style="margin-top: 8px; padding: 9px 11px; background: rgba(43,122,92,0.08); border-radius: 8px; font-size: 11px; color: #1C5A3F; line-height: 1.4;">
+          <b>Efficiency up:</b> same pace with fewer strokes. Stroke length improving.
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Hero row</b> keys on distance, pace per 100m, SWOLF. <b>Stroke breakdown</b> splits
+      distance per stroke (Apple Watch + Garmin provide this). <b>Per-length pace</b> lets you
+      scan warmup/main/threshold/cooldown blocks with colour-coded fastest lengths.
+      <b>SWOLF card</b> is swimming's equivalent of HR zones — efficiency score.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — CYCLING                   -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>Cycling · 45km commute</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div class="title-row">
+          <div class="ico" style="background: var(--cycle);">🚴</div>
+          <div class="info">
+            <div class="name">Cycling · home loop</div>
+            <div class="meta">Cycling · Strava · Sun 11:12 AM</div>
+          </div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+      </div>
+
+      <!-- Map -->
+      <div style="margin: 0 18px 14px; height: 140px; border-radius: 12px; overflow: hidden;
+        background: linear-gradient(135deg, #DCE8F0 0%, #B8D0E3 100%);
+        position: relative; cursor: pointer; border: 1px solid var(--line);">
+        <svg width="100%" height="100%" viewBox="0 0 320 140" preserveAspectRatio="none" style="position: absolute; inset: 0;">
+          <path d="M30,70 Q80,30 130,60 T220,45 Q270,80 290,120"
+            fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="30" cy="70" r="4" fill="#2B7A5C" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="290" cy="120" r="4" fill="#D96B5C" stroke="#fff" stroke-width="1.5"/>
+        </svg>
+        <div style="position: absolute; top: 8px; right: 10px; padding: 4px 10px; border-radius: 999px;
+          background: rgba(252,76,2,0.95); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;">
+          View in Strava ↗
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="stat">
+          <div class="v">45.2</div>
+          <div class="u">km</div>
+        </div>
+        <div class="stat">
+          <div class="v">1:42</div>
+          <div class="u">moving time</div>
+        </div>
+        <div class="stat">
+          <div class="v">26.6</div>
+          <div class="u">km/h avg</div>
+          <div class="d up">+1.2</div>
+        </div>
+        <div class="stat">
+          <div class="v">712</div>
+          <div class="u">kcal</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Power · 182 W avg</div>
+        <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none" style="display: block;">
+          <defs>
+            <linearGradient id="pwr" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#9C6BD9" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="#9C6BD9" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <path d="M0,40 L20,35 L40,28 L60,32 L80,22 L100,15 L120,18 L140,12 L160,20 L180,25 L200,30 L220,28 L240,38 L260,42 L280,45 L300,48 L300,60 L0,60 Z"
+            fill="url(#pwr)"/>
+          <path d="M0,40 L20,35 L40,28 L60,32 L80,22 L100,15 L120,18 L140,12 L160,20 L180,25 L200,30 L220,28 L240,38 L260,42 L280,45 L300,48"
+            fill="none" stroke="#9C6BD9" stroke-width="1.5"/>
+          <line x1="0" y1="35" x2="300" y2="35" stroke="var(--inkMute)" stroke-width="0.8" stroke-dasharray="2 3"/>
+          <text x="4" y="33" font-size="9" fill="var(--inkMute)">avg 182W</text>
+        </svg>
+        <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--inkSoft);">
+          <span>Max <b style="color: var(--ink);">340 W</b></span>
+          <span>NP <b style="color: var(--ink);">198 W</b></span>
+          <span>Cadence <b style="color: var(--ink);">84 rpm</b></span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Elevation · 612 m gain</div>
+        <div class="spark-wrap">
+          <svg width="100%" height="50" viewBox="0 0 300 50" preserveAspectRatio="none" style="display: block;">
+            <defs>
+              <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--amber)" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="var(--amber)" stop-opacity="0.05"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,45 L30,38 L55,30 L90,42 L130,22 L170,10 L210,18 L250,32 L285,40 L300,45 L300,50 L0,50 Z"
+              fill="url(#ele)"/>
+            <path d="M0,45 L30,38 L55,30 L90,42 L130,22 L170,10 L210,18 L250,32 L285,40 L300,45"
+              fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          <div class="spark-stats">
+            <span>Gain <b>612 m</b></span>
+            <span>Max grade <b>8.4%</b></span>
+            <span>Avg grade <b>2.1%</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Vs last 4 rides</div>
+        <div class="vs-row">
+          <div class="k">Avg HR</div>
+          <div class="bar-wrap"><div class="bar" style="width: 62%; background: var(--blue);"></div></div>
+          <div class="v down">−3 bpm</div>
+        </div>
+        <div class="vs-row">
+          <div class="k">Avg speed</div>
+          <div class="bar-wrap"><div class="bar" style="width: 88%; background: var(--accent);"></div></div>
+          <div class="v up">+1.2 km/h</div>
+        </div>
+        <div class="vs-row">
+          <div class="k">NP</div>
+          <div class="bar-wrap"><div class="bar" style="width: 75%; background: var(--plyo);"></div></div>
+          <div class="v up">+8 W</div>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      Cycling inherits the run sheet's map + vs-last-4 comparison, adds <b>power trace</b>
+      (line chart with avg baseline), <b>NP / cadence / max W</b> secondary stats, and
+      <b>elevation profile</b> with max/avg grade. Same conditional-render pattern as runs.
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Implementation plan:</b> the existing <code>ExerciseDetailSheet</code> already branches
+  on <code>entry.type</code>. Add three new type-specific sections gated on data presence:
+  <br>•&nbsp;<b>Calisthenics</b>: show sets table when <code>details.sets</code> exists
+  (already collected at logging time). Muscle coverage reuses the EXERCISE_MUSCLE_MAP.
+  PR detection is client-side — scan same-movement history for max reps / weight / hold.
+  <br>•&nbsp;<b>Swim</b>: Strava sync exposes <code>lengths</code>, <code>strokes</code>,
+  <code>SWOLF</code> when the device provides them. Add a lane chart with per-length pace,
+  stroke breakdown, and SWOLF delta card.
+  <br>•&nbsp;<b>Cycling</b>: power / cadence / NP / elevation sparkline, all already in
+  <code>details.*</code>. Just needs rendering. Map + vs-last-4 are shared with runs.
+</p>
+</body>
+</html>

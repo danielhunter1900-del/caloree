@@ -1,5 +1,5 @@
 // Minimal offline service worker for Caloree PWA
-const CACHE = 'caloree-v60';
+const CACHE = 'caloree-v61';
 const PRECACHE = [
   './',
   './index.html',

@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -4008,12 +4008,30 @@ function ExerciseDetailSheet({ theme, entry, exerciseLog = [], onClose, onEdit, 
             const firstY = offsetY + (maxLat - lats[0]) * scale;
             const lastX = offsetX + (lngs[lngs.length-1] - minLng) * scale;
             const lastY = offsetY + (maxLat - lats[lats.length-1]) * scale;
+            const stravaId = d.strava_id;
+            const openStrava = () => {
+              if (!stravaId) return;
+              // Try native Strava app scheme first; fall back to web in ~500ms
+              // if the app isn't installed (no navigation happens on iOS).
+              const webUrl = `https://www.strava.com/activities/${stravaId}`;
+              let settled = false;
+              const to = setTimeout(() => {
+                if (!settled) { settled = true; window.open(webUrl, '_blank'); }
+              }, 600);
+              try {
+                window.location.href = `strava://activities/${stravaId}`;
+              } catch {}
+              // If the page unloads (app opened), clear the timer.
+              window.addEventListener('pagehide', () => { settled = true; clearTimeout(to); }, { once: true });
+            };
             return (
-              <div style={{
+              <div onClick={openStrava} style={{
                 marginBottom: 14, padding: 0, overflow: 'hidden',
                 borderRadius: theme.radius.card,
                 border: `1px solid ${theme.line}`,
                 background: 'linear-gradient(135deg, #E8F0E8 0%, #C9DDD0 100%)',
+                cursor: stravaId ? 'pointer' : 'default',
+                position: 'relative',
               }}>
                 <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
                   <path d={path} fill="none" stroke="#FC4C02"
@@ -4021,6 +4039,18 @@ function ExerciseDetailSheet({ theme, entry, exerciseLog = [], onClose, onEdit, 
                   <circle cx={firstX} cy={firstY} r="4" fill="#2B7A5C" stroke="#fff" strokeWidth="1.5"/>
                   <circle cx={lastX} cy={lastY} r="4" fill="#D96B5C" stroke="#fff" strokeWidth="1.5"/>
                 </svg>
+                {stravaId && (
+                  <div style={{
+                    position: 'absolute', top: 8, right: 10,
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'rgba(252, 76, 2, 0.95)', color: '#fff',
+                    fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 4,
+                    pointerEvents: 'none',
+                  }}>
+                    View in Strava ↗
+                  </div>
+                )}
               </div>
             );
           })()}
