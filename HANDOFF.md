@@ -1,259 +1,139 @@
 # Caloree — Handoff Notes
 
-A single-file React calorie/macro/wellness/exercise tracker with Claude AI integration, Supabase sync, and PWA support. Built for personal use, deployed to GitHub Pages.
+Open a new Claude chat and say:
+
+> Read https://raw.githubusercontent.com/danielhunter1900-del/caloree/main/HANDOFF.md for full project context. Then describe what I want to do next.
+
+That's it — everything below is what the new Claude needs.
 
 ---
 
-## Files & Locations
+## Paths & infra
+- **Local source:** `/Users/danielhunter/Library/Application Support/Anki2/addons21/236979321/calorie-app/`
+- **Repo:** `https://github.com/danielhunter1900-del/caloree` (public)
+- **Live:** `https://danielhunter1900-del.github.io/caloree/` — GitHub Pages, redeploys ~60s after push
+- **Supabase project:** `twvmaazfcpglrzknhsvr` · URL `https://twvmaazfcpglrzknhsvr.supabase.co` · anon key hardcoded in index.html (`sb_publishable_4XMUfqp1Bl7SkrbMDYds4w_AVqq4e7d`)
+- **Current version:** **v43** (Profile footer shows `CALOREE · v43`). Always bump `APP_VERSION` in index.html AND `CACHE` in sw.js together when making client changes. Git auto-deploys; PWA auto-updates via SW on next focus.
 
-**Working directory (local source):**
-`/Users/danielhunter/Library/Application Support/Anki2/addons21/236979321/calorie-app/`
+## Accounts
+- **User email:** `danielhunter1998@gmail.com` (the real account with data) — user logs in themselves; Claude can't enter passwords.
+- **Demo:** `demo@caloree.app` / `DEMO_PW_REDACTED` (for Chrome sessions).
+- **Strava API app:** Client ID `227929`, Client Secret `STRAVA_CLIENT_SECRET_REDACTED_ROTATED`, callback domain `danielhunter1900-del.github.io`. Both stored as Supabase function secrets.
+- **Supabase PAT used for DDL / function deploys:** `sbp_REDACTED_REVOKED_REVOKED` — may have been revoked; if it 401s, ask user for a new one at https://supabase.com/dashboard/account/tokens.
+- **Anthropic API:** stored in browser localStorage (`anthropic_api_key`), user pastes via Profile. All AI calls are client-side with `anthropic-dangerous-direct-browser-access: true`.
 
-**Files in the project:**
-- `index.html` — the entire app (React + Babel via CDN, ~12k lines, single file)
-- `manifest.json` — PWA manifest
-- `sw.js` — service worker (cache version is `caloree-v3`; bump on big changes)
-- `icon.svg` / `icon-192.png` / `icon-512.png` / `apple-touch-icon.png` — PWA icons (peach-mint design)
-- `README.md` — quick deploy notes
-- `.gitignore` — excludes `.claude/`, `icon-previews/`
+## Supabase schema
+- `profiles` (targets, settings, theme, target_history jsonb)
+- `foods` (user_id, macros, ingredients jsonb, photo_path, is_favourite)
+- `meal_logs` (id, user_id, date, meal, food_id, qty, time)
+- `exercise_logs` (id, user_id, date, type, duration_min, distance_km, kcal, notes, details jsonb — incl. runType + Strava payload)
+- `weight_logs` (user_id, iso, kg)
+- `wellness_logs` (user_id, date, coffees, water, sleep_hrs, stress, energy, reading_min, **extras jsonb** — rehab bool, mobility {morning,lunch,afternoon})
+- `strava_connections` (user_id PK, athlete_id, access_token, refresh_token, expires_at, last_sync_at)
+- `strava_activities` (user_id, activity_id PK, status pending|approved|declined, type, data jsonb, exercise_log_id)
+- All tables RLS-protected on `auth.uid() = user_id`.
 
-**Live deploy:** https://danielhunter1900-del.github.io/caloree/
-**GitHub repo:** https://github.com/danielhunter1900-del/caloree (public)
+## Edge functions (ACTIVE, `verify_jwt: false`)
+- `strava-exchange` — OAuth code → tokens → upsert connection.
+- `strava-sync` — refresh token, pull activities, detail-fetch up to 80/run, upsert into `strava_activities` as **pending** (never auto-writes `exercise_logs`).
+- Both use raw `fetch` against REST (not supabase-js — that ESM bundle fails to boot in Supabase's Deno runtime). Both do manual JWT verification via `/auth/v1/user` because the gateway only knows HS256 and the project uses ES256.
 
----
+## Architecture (index.html, ~11k lines, single file)
+- React via unpkg CDN, Babel in-browser, no build step.
+- Source of truth = Supabase. Hydration on login **always replaces local state with cloud, even if cloud is empty** (fixes cross-account bleed). localStorage is offline cache only.
+- `window.sb` is the supabase-js client; writes are fire-and-forget. **Offline queue not yet built.**
+- `window.HISTORY` = flat array of per-day macro+wellness rows, rebuilt from cloud on hydration. Trends reads from this.
+- `window.EX_COLORS`, `EX_ICONS`, `EX_METS` — default exercise type maps. User-added custom types merged via `applyCustomExerciseTypes(settings.customExerciseTypes)`.
+- `todayLocalIso()` helper — **always use instead of `new Date().toISOString().slice(0, 10)`**. The latter returns UTC; returns yesterday in timezones ahead of UTC (user is AEST). 20 call sites already migrated.
+- Streak helpers: `STREAK_TIERS`, `streakTier(days)`, `streakShortLabel(days)`, `<StreakChip>` in Header.
 
-## Credentials & Accounts
+## Key features shipped
+- Onboarding wizard (name, sex, age, height, weight, activity, goal → Mifflin-St Jeor targets + first weight log). Returning users auto-marked onboarded if any prior data exists.
+- Profile: "Your details" card, Strava card (above API key, More-options drawer), Anthropic key (collapsed by default), Export JSON/CSV, theme, sign out. Ask-Claude goals: goal picker + preview diff + Approve/Decline + Undo toast + "What Claude is looking at" expander.
+- Home: calorie ring, macro drill (React.createPortal to body, tap-to-toggle multi-select, iOS swipe-friendly), Wellness card (reorderable rows, rehab toggle, mobility AM/Lunch/PM, reading min, coffee/water/sleep/stress/energy), Exercise card (with custom types + "+New"), meal sections (swipe-to-delete + drag-to-merge only in Edit mode), quick stats footer, Weight tile → jumps to Trends → scrolls into view.
+- **Day lock** (`markedComplete` per date in localStorage): "Finish for today" or "Lock day" button works for any date. Locked day: Edit toggle hidden, all `+` buttons gone, Wellness fades + pointer-events off, DetailScreen disables Save/Move/Copy.
+- Trends: Calories / Exercise tabs (secondary Min/Cal toggle under Exercise), stacked bar chart (filterable by type chip), Average-macros card reflects selected bar(s) (multi-select by tap, selSet is source of truth), Wellness strip (reorderable rows via "Reorder" chip), Exercise calendar (Month grid with dot overlay, Week row, Year month-tiles), Ask-Claude coach (full 14-day data + exercise + weight trend + wellness). Weight chart = SVG line with hover tooltip + >7-day stale indicator; "Clear weight history" button in card.
+- AI Chat: meal selector defaults to the section you came from (Lunch → pending card starts on Lunch); "Suggest change" revise flow with inline feedback textarea; paste-JSON mode; AI-log undo toast removes entries + synthetic foods from DB.
+- Strava: Connect → OAuth → auto-sync → pending activities → Review sheet with rich per-activity stats (HR, splits, laps, pace, cadence, power); custom exercise types; run subtypes (Easy/Long/Speed/Steady) stored in `details.runType`; ExerciseDetailSheet full-screen with intervals promoted for Speed runs; cadence doubled for runs.
+- **Streak chip** in Home header: 9 tiers (3d→2yrs), flame gets hotter/bigger with inner core glow past day 60, tap toggles short label ↔ day count (`settings.streakLabelMode`), at-risk red flame after 9pm local. Local-date off-by-one fixed.
+- Service worker auto-update: `updateViaCache: none` + `controllerchange → reload()` + revalidate on visibility.
+- Favourites live-search in LogScreen; Recent = user's actual log (no hardcoded list).
+- Label photos skipped from meal gallery (only full meal photos persist).
+- Ingredient grams edit uses `defaultValue` + `onBlur` (so clearing to retype doesn't zero macros).
 
-**User's GitHub username:** `danielhunter1900-del`
-**User's email:** `danielhunter1900@gmail.com` (their real account)
+## Mockups on disk (`docs/mockups/`)
+Numbered SVGs + rendered PNGs. Recent: `recipe-import`, `streak-tiers`, `streak-confetti`, `streak-header`, `recipes`, `macro-split`, `photo-gallery`, `strava-card-v2`, `icon-flat{,-ink,-terracotta}`, `10-heatmap-calendar-filter`, `7-9-heatmap-*`.
 
-**Demo account** (for showing partner / friends — NOT for daily use):
-- Email: `demo@caloree.app`
-- Password: `DEMO_PW_REDACTED`
+## Pending features (user-requested, not yet built)
+1. **Offline queue** for Supabase writes + "unsynced" badge. Explicitly deferred by user.
+2. **Streak freeze** (1/month auto-skip) + **Fresh-start day-1** override + **milestone confetti** (fires once at 7/30/100/365).
+3. **Recipe library** (per `recipe-import.svg`) — import TikTok/URL/OCR → Claude parses → servings scale + metric/imperial toggle → save/log.
+4. **Macro split visualization** under Home ring (per `macro-split.svg`).
+5. **Photo journal tab** (per `photo-gallery.svg`).
+6. **Apple Shortcut weight-ingest endpoint** — edge function accepting per-user opaque key + {kg, iso} → insert weight_logs. Lets user auto-sync HealthKit weight into Caloree.
+7. **Google Fit** integration (pattern copies Strava exactly).
 
-**Supabase project:**
-- Dashboard: https://supabase.com/dashboard/project/twvmaazfcpglrzknhsvr
-- Project URL: `https://twvmaazfcpglrzknhsvr.supabase.co`
-- Publishable (anon) key: `sb_publishable_4XMUfqp1Bl7SkrbMDYds4w_AVqq4e7d` (safe to expose; hardcoded in `index.html`)
-- Free tier; pauses after 7 days of inactivity (data preserved, just dashboard click to restore)
+## Open design decisions
+- User is keeping this as **personal PWA**, not commercial. Don't spend time on native wrap, App Store, or Stripe.
+- User has Apple Watch → workouts flow via HealthFit ($4.99 iOS one-time app) → Strava → Caloree. No direct HealthKit API in the PWA.
+- Flat-icon variants exist in mockups but `icon.svg` / `icon-192.png` / `icon-512.png` not yet swapped.
 
-**Anthropic API key:** stored only in user's browser localStorage (`anthropic_api_key`). Never in source. User pastes via Profile → "Anthropic API key" card. Code strips whitespace and rejects keys not starting with `sk-ant-`.
+## Common operations
 
-**GitHub deploy token:** Personal Access Token saved in local `.git/config` under remote URL. Expires May 19, 2026. After expiry, run `gh auth login` or generate a new PAT at https://github.com/settings/tokens.
-
----
-
-## Pushing Updates
-
-```sh
+**Version bump + push:**
+```bash
 cd "/Users/danielhunter/Library/Application Support/Anki2/addons21/236979321/calorie-app"
-git add -A
-git commit -m "<message>"
-git push
+# edit index.html -> const APP_VERSION = 'vN'
+# edit sw.js     -> const CACHE = 'caloree-vN'
+git add index.html sw.js && git commit -m "..." && git push
 ```
 
-GitHub Pages auto-redeploys ~1 min after push. To force PWA refresh on the user's iPhone after a big change, bump `CACHE` in `sw.js`.
-
----
-
-## Supabase Schema
-
-All tables have RLS — every policy is `auth.uid() = user_id`. Storage bucket `meal-photos` is private with same per-user RLS.
-
-```sql
--- profiles (one row per user)
-profiles (
-  user_id uuid PRIMARY KEY references auth.users,
-  targets jsonb,           -- { kcal, c, p, f, satFat, sugar, fibre, exKcal, exMin }
-  settings jsonb,          -- { adjustForExercise, ... }
-  theme text,              -- 'clinical' | 'warm' | 'editorial'
-  target_history jsonb,    -- [{ from_date: 'YYYY-MM-DD', targets: {...} }, ...]
-  updated_at timestamptz
-)
-
--- foods (synthetic + AI-generated; seeded library kept in JS for now)
-foods (
-  id text PRIMARY KEY,     -- 'ai_*' or 'demo_*' or merged 'ai_merge_*'
-  user_id uuid,
-  name text, brand text,
-  serving_g numeric,
-  kcal/c/p/f/sat_fat/sugar/fibre numeric,
-  is_favourite boolean,
-  photo_path text,         -- storage key
-  ingredients jsonb,       -- [{ name, g, kcal, c, p, f, satFat, sugar, fibre }, ...]
-  created_at timestamptz
-)
-
-meal_logs (
-  id text PRIMARY KEY,     -- 'l_*'
-  user_id uuid,
-  date date,               -- ISO YYYY-MM-DD
-  meal text,               -- 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack'
-  food_id text references foods,
-  qty numeric,
-  time text,
-  created_at timestamptz
-)
-
-exercise_logs (
-  id text PRIMARY KEY,
-  user_id uuid,
-  date date,
-  type text,               -- Run | Cycling | Walk | Strength | Calisthenics | HIIT | Mobility | Other
-  duration_min numeric,
-  distance_km numeric,
-  kcal numeric,
-  notes text,
-  details jsonb,           -- { sets: [...], movements: [...] } for Strength/Calisthenics
-  created_at timestamptz
-)
-
-weight_logs (
-  id bigserial PRIMARY KEY,
-  user_id uuid, iso date, kg numeric,
-  UNIQUE (user_id, iso)
-)
-
-wellness_logs (
-  user_id uuid, date date,
-  coffees int, water int, sleep_hrs numeric, stress int, energy int,
-  PRIMARY KEY (user_id, date)
-)
+**Run SQL via Management API:**
+```bash
+curl -s -X POST 'https://api.supabase.com/v1/projects/twvmaazfcpglrzknhsvr/database/query' \
+  -H 'Authorization: Bearer sbp_REDACTED_REVOKED_REVOKED' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"..."}'
 ```
 
-**Auto-create profile trigger** on `auth.users` insert (fires `public.handle_new_user()` security-definer function with `set search_path = public`).
+**Deploy / update an edge function:**
+```bash
+BODY=$(cat supabase/functions/NAME/index.ts | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))')
+curl -s -X PATCH "https://api.supabase.com/v1/projects/twvmaazfcpglrzknhsvr/functions/NAME" \
+  -H 'Authorization: Bearer sbp_REDACTED_REVOKED_REVOKED' \
+  -H 'Content-Type: application/json' \
+  -d "{\"body\":$BODY,\"verify_jwt\":false}"
+```
 
----
+**Render SVG mockups:**
+```bash
+qlmanage -t -s 900 -o . mockup.svg    # creates mockup.svg.png
+```
 
-## App Architecture
+## Gotchas
+- **Supabase dashboard is blocked by the Claude-in-Chrome extension** ("Stop Claude" overlay on supabase.com). Use Management API + PAT for any schema/function work.
+- **ES256 JWTs**: gateway `verify_jwt: true` fails. Set `false` and verify inside the function via `/auth/v1/user`.
+- **Deno edge runtime** hates `@supabase/supabase-js` ESM import. Use raw `fetch` against `/auth/v1/user` and `/rest/v1/*` with the service role key.
+- **iOS scroll trap**: any bottom-sheet modal must be portalled to `document.body` via `ReactDOM.createPortal` — being inside the app's inner `overflow: auto` container makes iOS treat `position: fixed` as absolute. Add a doc-level `touchmove` handler that preventDefaults everything not inside the panel *and* when the panel itself can't scroll.
+- **iOS PWA update cycle** is slow. `updateViaCache: none` + `controllerchange → reload()` is already wired. If user reports "still on old version", tell them to kill the PWA from app switcher.
+- **Timezone**: never `toISOString().slice(0,10)` for a date. Use `todayLocalIso()`.
+- **Haptics** (`navigator.vibrate`) don't work on iOS Safari. Android only. Real haptics require a Capacitor wrap.
 
-Single-file React app via Babel runtime (no build step). Key concepts:
-
-- **AppRoot** — auth gate (LoginScreen if no session, App if signed in)
-- **App** — top-level state (log, foods, targets, settings, exerciseLog, weightLog, wellnessMap, themeKey, tab, logDate)
-- **Cloud sync** — `useEffect([session])` pulls everything once on login; per-state push effects upsert on change
-- **HISTORY** — module-level array that's mutated in place after cloud pull; Trends reads from it
-- **FOODS** — module-level array; merged with cloud foods on pull; mutated by toggle-favourite, merge, modify-with-Claude
-- **localStorage backup** for: `cal_log`, `cal_ai_foods`, `cal_targets`, `cal_target_history`, `cal_weight`, `cal_settings`, `cal_wellness_map`, `cal_exercise`, `cal_marked_complete`, `cal_favourite_ids`, `cal_display_name`, `cal_theme`, `cal_bulk_draft`, `cal_wellness_open`
-
-### Tab structure
-- **Home** (`tab === 'home'`) — date scrubber, calorie ring (toggleable Calories/Exercise), macro bars, status banner, wellness card, exercise card, meal sections
-- **Trends** (`tab === 'progress'`) — bar chart with metric toggle (Calories eaten / Burned / Min active), exercise breakdown by type, average macros card, wellness signals strip chart, Ask Claude button
-- **AI** (`tab === 'ai'`) — Chat with Claude OR Paste JSON; reachable via + → AI
-- **Profile** (`tab === 'profile'`) — name, weight + trend + Ask Claude, daily goals editor (kcal/c/p/f/satFat/sugar/fibre/exMin + adjustForExercise toggle), photos gallery, theme picker, Anthropic API key, export (JSON/CSV), sign out
-
-### Bottom tab bar
-- Today (left)
-- Centered + button (opens AddPickerSheet: Manual / AI / Notes / Paste from Claude / Log exercise)
-- Trends (right)
-
-### Key UX patterns
-- **Drag handle** (thin grey vertical bar) on left of each meal row → tap+drag to **move** (drop on a meal section) or **merge** (drop on another row)
-- **Long-press** on meal row also works as drag fallback
-- **Edit chip** at top of meal area → checkbox select mode → Move/Copy bar → date picker
-- **Swipe-left** on meal row → reveals red Delete button
-- **Drill into macros** by tapping any macro bar or the calorie ring → contributor list
-- **Wellness strip rows** clickable on left (fade) and right (drilldown)
-- **Undo toasts** for delete (meal/exercise) and merge
-
----
-
-## Claude API Integration
-
-All Claude API calls use `claude-sonnet-4-6` with `anthropic-dangerous-direct-browser-access: true`. Key reads strip whitespace via `.replace(/\s+/g, '')`.
-
-**Endpoints used (all client-side fetch):**
-- AIChat (one-message log) — supports text + photo (Food / Label toggle)
-- BulkNotesSheet — text + multiple photos with `photo_index` mapping each to its meal
-- PasteFromClaudeSheet — paste JSON externally generated, no API call
-- AskCoachSheet (Trends) — preloads date-range data; supports `<<PROPOSALS>>` blocks for one-tap target updates
-- AskWeightSheet (Profile) — weight history context, freeform Q&A
-- ModifyWithClaudeSheet (Detail) — recompute macros for a modified meal
-- ExerciseLogSheet AI mode — parse freeform workout into structured entries
-
-**Cost estimate** (sonnet-4-6): text-only ~$0.006/log, photo ~$0.012/log, trends Q&A ~$0.014, bulk parse ~$0.028. ~$1.50/month at moderate use.
-
----
-
-## Recent State (last session)
-
-**Just shipped:**
-- Touch long-press drag with vertical-bar handle
-- Combine meals via drag (with Undo toast)
-- Wellness state per-date (was a single global object — bug)
-- Versioned daily targets (per-date snapshots in `target_history`)
-- Per-day Edit/select mode on Home with Move/Copy bar
-- AI logs land on the user's selected date (not always today)
-- Photos in bulk notes get associated to specific meals via `photo_index`
-- Star removed from meal rows (favourites still toggleable from food detail)
-- Photo delete moved to gallery (Profile), not meal rows
-- Modify with Claude positioning fix for iOS device frame quirk
-- App fills full screen (removed mock iPhone frame)
-- Safe-area top padding so iOS status bar doesn't overlap headers
-- Always lands on Today after login
-- Trends stacked exercise bars by type with color
-- "Ask Claude about my data" sheets on Trends and Weight
-- Daily goals include sat fat / sugar / fibre / exercise minutes (kcal removed per user)
-- Comprehensive JSON export + CSV export
-- Settings: "Add exercise to calorie goal" toggle (eat-back-burned-calories mode)
-
-**Open / known issues:**
-- HISTORY is rebuilt from cloud after login — Trends will be empty until first meal logged
-- Photos: localStorage limit can drop them; Storage upload is the canonical source
-- iOS: HTML5 drag fundamentally doesn't work; touch handle is the only reliable path on iPhone
-- Refresh token can expire if user away >1 week — they need to sign in again
-- Service worker can serve stale builds; bump `CACHE` in `sw.js` for forced refresh
-
-**Not built (but discussed):**
-- Per-ingredient quantity scaling that recomputes parent totals (delete works; full edit works for grams; could be slicker)
-- "Split contributors by ingredient" in the protein/etc drilldown so merged meals show as their underlying ingredients
-- Native iOS app (PWA is the realistic option without paying $99/yr Apple dev)
-- Apple HealthKit pull (PWA can't access HealthKit; would need Health Auto Export app or similar)
-- Photo gallery with full-screen carousel / search
-- Push notifications for meal/water reminders (would need backend service worker push subscription server)
-- Weekly summary email (needs backend)
-- Multiple drafts in Bulk Notes
-- AI trend analysis: only target-set proposals are wired today; Claude could also propose adding favourites, adjusting exercise entries, etc
-
-**Mockups for future Trends exercise chart redesigns** — committed to `docs/mockups/`:
-1. `1-filter-chips.{svg,png}` — Filter chips above current stacked bars
-2. `2-grouped-bars.{svg,png}` — Side-by-side thin bars per type per day
-3. `3-heatmap.{svg,png}` — Types × days grid, intensity by colour
-4. `4-net-balance.{svg,png}` — Single bar: intake − burn (red surplus / green deficit)
-5. `5-total-plus-sparklines.{svg,png}` — Stacked total + per-type sparklines below
-6. `6-donuts.{svg,png}` — Per-day donut, type slices, total in centre
-
-User is choosing between these. None have been built. To preview them: `open calorie-app/docs/mockups/*.png` or browse on GitHub.
-
----
-
-## Useful Chrome MCP commands (for next-session debugging)
-
-User's Chrome has the Claude MCP extension active. Common verifications:
+## Useful Chrome MCP snippets (to run in the app console)
 
 ```js
-// Check if signed in + what tab
-(await window.sb.auth.getUser()).data?.user?.email
+// Check sign-in + version
+(async () => ({ email: (await window.sb.auth.getUser()).data?.user?.email, version: window.APP_VERSION }))()
 
-// Force fresh sign-in as demo
-await window.sb.auth.signOut();
-await window.sb.auth.signInWithPassword({ email: 'demo@caloree.app', password: 'DEMO_PW_REDACTED' });
-
-// Inspect rows on screen
-Array.from(document.querySelectorAll('[data-meal-row-id]')).map(r => r.getAttribute('data-meal-row-id'))
-
-// Clear stale service worker
+// Force-update PWA from old SW
 const regs = await navigator.serviceWorker.getRegistrations();
 for (const r of regs) await r.unregister();
-const keys = await caches.keys();
-for (const k of keys) await caches.delete(k);
+for (const k of await caches.keys()) await caches.delete(k);
+location.reload();
+
+// Wipe a user's weight history (cloud + local)
+const uid = (await window.sb.auth.getUser()).data.user.id;
+await window.sb.from('weight_logs').delete().eq('user_id', uid);
+localStorage.removeItem('cal_weight');
 location.reload();
 ```
-
----
-
-## What to ask Claude in the next session
-
-Open with: *"Read calorie-app/HANDOFF.md to get context."* Then describe what's broken or what you want to build.
-
-If something's broken on the live site, ask Claude to navigate via the Chrome MCP and check console errors — that's how we've caught most regressions.
