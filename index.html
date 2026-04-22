@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v59';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -2318,18 +2318,6 @@ function PlanPrefsSheet({ theme, settings, setSettings, onClose }) {
               ))}
             </div>
           </div>
-          <div style={{ padding: '10px 12px', background: theme.surface, borderRadius: 10,
-            border: `1px solid ${theme.line}`, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontFamily: theme.font, fontSize: 13 }}>Max weekly volume ↑</div>
-              <div style={{ fontFamily: theme.font, fontSize: 11, color: theme.inkSoft }}>Hard safety ceiling</div>
-            </div>
-            <span style={{ padding: '3px 10px', background: 'rgba(217,107,92,0.15)', color: '#B23A2A',
-              borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
-              {prefs.max_weekly_increase_pct || 10}%
-            </span>
-          </div>
-
           <div style={{ fontFamily: theme.font, fontSize: 10, fontWeight: 700,
             color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '16px 0 8px' }}>
             Equipment
