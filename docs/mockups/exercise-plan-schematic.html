@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Exercise plan — schematic</title>
+<style>
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surfaceAlt: #EDE9E0; --line: #D8D4C8;
+    --ink: #1A1A1A; --inkSoft: #5C5A54; --inkMute: #8A867C;
+    --accent: #2B7A5C; --blue: #5FA8C9; --amber: #E0A24A; --strava: #FC4C02;
+    --run: #D96B5C; --cal: #A86B4F; --mob: #6BAF92; --plyo: #9C6BD9; --rest: #7A8BD1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; max-width: 860px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 24px; max-width: 1300px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card h2 { margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt); }
+  .phone { width: 360px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-height: 680px; }
+  .phone-header { padding: 14px 16px 10px; background: var(--surface);
+    border-bottom: 1px solid var(--line); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: 0 auto 10px; display: block; }
+  .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .annotations { padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10; }
+  .annotations b { color: #5A3B08; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+  .pill-run { background: var(--run); } .pill-cal { background: var(--cal); }
+  .pill-mob { background: var(--mob); } .pill-plyo { background: var(--plyo); }
+  .pill-rest { background: var(--rest); }
+  /* Calendar grid for plan */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-day { background: var(--surfaceAlt); border-radius: 10px; padding: 8px 6px; min-height: 100px;
+    position: relative; cursor: pointer; font-size: 10px; }
+  .cal-day .dow { font-weight: 700; color: var(--inkSoft); letter-spacing: 0.1em; text-transform: uppercase; font-size: 9px; }
+  .cal-day .n { font-family: var(--numFont); font-weight: 600; margin-top: 2px; color: var(--ink); font-size: 12px; }
+  .cal-day .blocks { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+  .cal-day .blk { padding: 2px 4px; border-radius: 4px; font-size: 9px; font-weight: 600;
+    color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  .cal-day .blk.run { background: var(--run); }
+  .cal-day .blk.cal { background: var(--cal); }
+  .cal-day .blk.mob { background: var(--mob); }
+  .cal-day .blk.plyo { background: var(--plyo); }
+  .cal-day .blk.rest { background: var(--rest); }
+  .cal-day.today { outline: 2px solid var(--ink); outline-offset: -1px; }
+  .cal-day.done { opacity: 0.65; }
+  .cal-day.done::before {
+    content: ''; position: absolute; top: 6px; right: 6px;
+    width: 10px; height: 10px; border-radius: 5px; background: var(--accent);
+    border: 2px solid var(--surface);
+  }
+  /* Day detail card */
+  .session { padding: 10px 12px; border-radius: 10px; background: var(--surfaceAlt);
+    margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start; }
+  .session .icon { width: 32px; height: 32px; border-radius: 8px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .session .body { flex: 1; min-width: 0; }
+  .session .body .t { font-weight: 600; font-size: 13px; }
+  .session .body .sub { font-size: 11px; color: var(--inkSoft); margin-top: 2px; }
+  .session .check { width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid var(--line); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; background: var(--surface); cursor: pointer; }
+  .session.done .check { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Plan picker */
+  .plan-card { padding: 14px; background: var(--surfaceAlt); border-radius: 10px;
+    margin-bottom: 10px; border: 1.5px solid transparent; cursor: pointer; }
+  .plan-card.selected { border-color: var(--ink); background: var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .plan-card .name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .plan-card .desc { font-size: 12px; color: var(--inkSoft); margin-top: 3px; line-height: 1.4; }
+  .plan-card .tags { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .plan-card .tag { padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--line); color: var(--inkSoft); }
+  .legend-row { display: flex; gap: 10px; padding: 10px 18px;
+    font-size: 10px; color: var(--inkSoft); flex-wrap: wrap; }
+  .legend-row .item { display: flex; align-items: center; gap: 4px; }
+  .legend-row .swatch { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Exercise plan — weekly schedule + daily breakdown</h1>
+<p class="sub">Pick a plan template (or build your own). It drops structured sessions onto a week-ahead
+calendar. Tapping a day shows the day's block in detail; ticking a session marks it complete,
+and if Strava-matched, auto-completes when the session is imported.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — PLAN PICKER              -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · Pick or build a plan</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Training plan</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Starts next Mon · auto-adapts around rest days
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Goal</div>
+        <div style="display: flex; gap: 6px;">
+          <button style="flex: 1; padding: 10px 0; border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;">5k faster</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: transparent; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer;">Build strength</button>
+          <button style="flex: 1; padding: 10px 0; border: 1px solid var(--line); background: transparent; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer;">General fitness</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Templates · 5k faster</div>
+
+        <div class="plan-card selected">
+          <div class="name">Hybrid Runner · 4 weeks</div>
+          <div class="desc">3 runs (easy, tempo, long) + 2 strength/calisthenics + 1 mobility + 1 rest. Plyometrics on tempo day.</div>
+          <div class="tags">
+            <span class="tag">🏃 3</span>
+            <span class="tag">🤸 2</span>
+            <span class="tag">🧘 1</span>
+            <span class="tag">💥 1</span>
+            <span class="tag">🌙 1</span>
+            <span class="tag">4 wk</span>
+          </div>
+        </div>
+
+        <div class="plan-card">
+          <div class="name">Runner's Shell · 6 weeks</div>
+          <div class="desc">4 runs (easy, hill, tempo, long) + core/mobility only. Minimal strength; max run volume progression.</div>
+          <div class="tags">
+            <span class="tag">🏃 4</span>
+            <span class="tag">🧘 2</span>
+            <span class="tag">🌙 1</span>
+            <span class="tag">6 wk</span>
+          </div>
+        </div>
+
+        <div class="plan-card">
+          <div class="name">Balanced Base · 8 weeks</div>
+          <div class="desc">Easy runs + calisthenics pyramids + plyometrics on recovery days. Longer, lower intensity.</div>
+          <div class="tags">
+            <span class="tag">🏃 2</span>
+            <span class="tag">🤸 3</span>
+            <span class="tag">💥 1</span>
+            <span class="tag">🧘 1</span>
+            <span class="tag">8 wk</span>
+          </div>
+        </div>
+
+        <div class="plan-card" style="background: transparent; border: 1.5px dashed var(--line); text-align: center;">
+          <div class="name" style="color: var(--inkSoft);">＋ Build custom</div>
+          <div class="desc">Drag sessions onto each day. Save as a reusable template.</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <button style="width: 100%; padding: 14px; background: var(--ink); color: var(--bg); border: none; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer;">Start Hybrid Runner →</button>
+      </div>
+    </div>
+    <div class="annotations">
+      Built-in templates cover the main shapes (run-focused, strength-focused, balanced). Each one
+      specifies per-day blocks, intensity, and expected durations. Custom builder lets you drag
+      exercise types onto a week grid.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — WEEKLY CALENDAR           -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · This week</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Hybrid Runner · wk 2</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Apr 20 – Apr 26 · 3/7 done
+        </div>
+      </div>
+
+      <div class="legend-row">
+        <div class="item"><span class="swatch" style="background: var(--run)"></span>Run</div>
+        <div class="item"><span class="swatch" style="background: var(--cal)"></span>Calisthenics</div>
+        <div class="item"><span class="swatch" style="background: var(--plyo)"></span>Plyo</div>
+        <div class="item"><span class="swatch" style="background: var(--mob)"></span>Mobility</div>
+        <div class="item"><span class="swatch" style="background: var(--rest)"></span>Rest</div>
+      </div>
+
+      <div class="section">
+        <div class="cal-grid">
+          <div class="cal-day done">
+            <div class="dow">Mon</div><div class="n">20</div>
+            <div class="blocks"><div class="blk run">Easy 5k</div></div>
+          </div>
+          <div class="cal-day done">
+            <div class="dow">Tue</div><div class="n">21</div>
+            <div class="blocks">
+              <div class="blk cal">Push pull</div>
+              <div class="blk mob">10m</div>
+            </div>
+          </div>
+          <div class="cal-day done">
+            <div class="dow">Wed</div><div class="n">22</div>
+            <div class="blocks"><div class="blk rest">Rest</div></div>
+          </div>
+          <div class="cal-day today">
+            <div class="dow">Thu</div><div class="n">23</div>
+            <div class="blocks">
+              <div class="blk run">Tempo 6×3</div>
+              <div class="blk plyo">Plyo</div>
+            </div>
+          </div>
+          <div class="cal-day">
+            <div class="dow">Fri</div><div class="n">24</div>
+            <div class="blocks"><div class="blk cal">Core + pull</div></div>
+          </div>
+          <div class="cal-day">
+            <div class="dow">Sat</div><div class="n">25</div>
+            <div class="blocks"><div class="blk run">Long 14k</div></div>
+          </div>
+          <div class="cal-day">
+            <div class="dow">Sun</div><div class="n">26</div>
+            <div class="blocks"><div class="blk mob">Mobility 20m</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Week load</div>
+        <div style="display: flex; gap: 16px; font-variant-numeric: tabular-nums;">
+          <div><div style="font-size: 11px; color: var(--inkSoft);">Run</div><div style="font-size: 18px; font-weight: 600;">25 km</div></div>
+          <div><div style="font-size: 11px; color: var(--inkSoft);">Sessions</div><div style="font-size: 18px; font-weight: 600;">6</div></div>
+          <div><div style="font-size: 11px; color: var(--inkSoft);">Load</div><div style="font-size: 18px; font-weight: 600; color: var(--accent);">Mod</div></div>
+        </div>
+        <div style="margin-top: 10px; padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; font-size: 12px; color: var(--inkSoft); line-height: 1.4;">
+          Tomorrow's <b style="color: var(--ink);">tempo</b> is the key workout. Keep tonight easy.
+          Sat's long run can shift to Sun if you want.
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      Calendar shows scheduled blocks per day. <b>Green dot</b> = completed (or Strava auto-matched).
+      Today gets a heavy outline. Tapping any day opens panel C. Drag-and-drop reshuffles blocks
+      between days (e.g. swap Sat long for Sun).
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — DAY DETAIL                -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · Today's session</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Thu · Apr 23</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Tempo day · ~55 min · RPE 7/10
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="session done">
+          <div class="icon">🔥</div>
+          <div class="body">
+            <div class="t">Warmup</div>
+            <div class="sub">10 min easy jog + drills</div>
+          </div>
+          <div class="check">✓</div>
+        </div>
+
+        <div class="session">
+          <div class="icon">🏃</div>
+          <div class="body">
+            <div class="t">Tempo · 6 × 3 min</div>
+            <div class="sub">3 min @ threshold pace, 90s jog recovery between</div>
+            <div style="margin-top: 6px; font-size: 11px; color: var(--inkSoft);">
+              Target pace: <b style="color: var(--ink);">4:12/km</b> · total ~18 min work
+            </div>
+          </div>
+          <div class="check"></div>
+        </div>
+
+        <div class="session">
+          <div class="icon">💥</div>
+          <div class="body">
+            <div class="t">Plyometrics · 3 rounds</div>
+            <div class="sub">Box jumps ×8 · split squat jumps ×10 · lateral bounds ×12</div>
+            <div style="margin-top: 6px; font-size: 11px; color: var(--inkSoft);">
+              Rest 90s between rounds · land soft
+            </div>
+          </div>
+          <div class="check"></div>
+        </div>
+
+        <div class="session">
+          <div class="icon">🧘</div>
+          <div class="body">
+            <div class="t">Cooldown</div>
+            <div class="sub">5 min easy + hip/calf stretches</div>
+          </div>
+          <div class="check"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">How it went (optional)</div>
+        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 12px; cursor: pointer;">🙂 Easy</button>
+          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600; cursor: pointer;">😤 On target</button>
+          <button style="flex: 1; padding: 8px 0; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 12px; cursor: pointer;">🥵 Hard</button>
+        </div>
+        <textarea rows="2" placeholder="Legs felt heavy on intervals 4–5. Recovery paces were good."
+          style="width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 12px; background: var(--surface); color: var(--ink);"></textarea>
+      </div>
+
+      <div class="section" style="display: flex; gap: 8px;">
+        <button style="flex: 1; padding: 12px 0; border-radius: 10px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; cursor: pointer;">Swap day</button>
+        <button style="flex: 1; padding: 12px 0; border-radius: 10px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--rest);">🌙 Rest instead</button>
+        <button style="flex: 1; padding: 12px 0; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;">Complete</button>
+      </div>
+    </div>
+    <div class="annotations">
+      Session broken into checkable blocks. Strava imports auto-tick matching blocks (if
+      type/duration/distance fits). RPE + note feed Claude analysis. "Rest instead" cancels the
+      session and flips the day to rest without losing the plan cadence.
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Data model:</b> <code>training_plans</code> (id, user_id, template, start_date, week_count)
+  + <code>plan_sessions</code> (plan_id, date, kind ['run'|'cal'|'plyo'|'mob'|'rest'], blocks[jsonb], completed_at, rpe, note, matched_exercise_id).
+  Plan generation is deterministic from the chosen template — Claude isn't in the loop for generation.
+  Completion inference: when a new exercise is logged (manual or Strava), match to the nearest
+  scheduled plan_session (same date, same kind, ±30% duration); auto-complete if matched. Claude
+  can analyse adherence weekly: "You skipped 2 of 3 plyo sessions this month — want me to adjust?"
+</p>
+</body>
+</html>

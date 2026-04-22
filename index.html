@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -6132,6 +6132,51 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
         })()}
       </div>}
 
+      {/* No-rest-in-7-days warning — dismissable, auto-hides when a rest day is logged */}
+      {(chartMetric === 'exKcal' || chartMetric === 'exMin') && (() => {
+        const todayIso = todayLocalIso();
+        const last7 = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(); d.setDate(d.getDate() - i);
+          last7.push(todayLocalIso(d));
+        }
+        const hasRestInLast7 = last7.some(iso => (wellnessMap[iso] || {}).restDay);
+        const dismissedUntil = settings?.restWarningDismissedUntil || null;
+        const dismissed = dismissedUntil && dismissedUntil >= todayIso;
+        if (hasRestInLast7 || dismissed) return null;
+        return (
+          <div style={{
+            margin: '0 16px 10px', padding: '10px 14px',
+            background: 'rgba(224,162,74,0.12)',
+            border: '1px solid rgba(224,162,74,0.45)',
+            borderRadius: theme.radius.card,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: theme.font, fontSize: 11, fontWeight: 700,
+                color: '#8A5A1F', letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>No rest day in 7 days</div>
+              <div style={{
+                fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 2,
+              }}>Flag a day as rest via Log exercise · 🌙 Rest day. Auto-clears once logged.</div>
+            </div>
+            <button onClick={() => {
+              if (!setSettings) return;
+              // Dismiss until 7 days from now — so the warning returns if still no rest.
+              const until = new Date(); until.setDate(until.getDate() + 7);
+              setSettings({ ...(settings || {}), restWarningDismissedUntil: todayLocalIso(until) });
+            }} style={{
+              padding: '5px 10px', border: `1px solid rgba(224,162,74,0.5)`,
+              background: 'transparent', color: '#8A5A1F',
+              borderRadius: 999, cursor: 'pointer',
+              fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+            }}>Dismiss</button>
+          </div>
+        );
+      })()}
+
       {/* Exercise calendar / ribbon — shown for all ranges */}
       {bucket && (chartMetric === 'exKcal' || chartMetric === 'exMin') && (
         <ExerciseCalendar theme={theme} bucket={bucket} range={range}
@@ -9470,7 +9515,307 @@ function ApiKeyCard({ theme }) {
 
 const { useState: useStateProfile } = React;
 
-function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
+// ── Goal history: compact entry row on Profile + full timeline sheet ──
+function GoalHistoryRow({ theme, targets, targetHistory = [], onOpen }) {
+  const sorted = [...targetHistory].sort((a, b) =>
+    (a.from_date || '').localeCompare(b.from_date || ''));
+  const kcals = sorted.map(h => +(h.targets?.kcal) || 0).filter(Boolean);
+  const W = 70, H = 22;
+  // Step sparkline
+  const sparkPath = (() => {
+    if (kcals.length < 2) return '';
+    const min = Math.min(...kcals), max = Math.max(...kcals);
+    const range = max - min || 1;
+    const step = W / (kcals.length - 1);
+    let d = '';
+    kcals.forEach((v, i) => {
+      const x = i * step;
+      const y = H - 2 - ((v - min) / range) * (H - 4);
+      if (i === 0) d += `M${x},${y}`;
+      else d += ` L${x},${y - (((kcals[i] === kcals[i-1]) ? 0 : 0))}`;
+    });
+    return d;
+  })();
+  const count = sorted.length;
+  const subline = count === 0
+    ? 'No changes yet'
+    : count === 1
+      ? '1 entry · set today'
+      : `${count} changes · last ${sorted[sorted.length-1].from_date}`;
+  return (
+    <div onClick={onOpen} style={{
+      margin: '0 16px 12px', padding: '14px 18px',
+      background: theme.surface, borderRadius: theme.radius.card,
+      border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      cursor: 'pointer',
+    }}>
+      <div>
+        <div style={{
+          fontFamily: theme.font, fontSize: 11, fontWeight: 600,
+          color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>Goal history</div>
+        <div style={{
+          fontFamily: theme.font, fontSize: 12, color: theme.inkMute, marginTop: 3,
+        }}>{subline}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {kcals.length >= 2 && (
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+            <path d={sparkPath} fill="none" stroke={theme.accent}
+              strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx={W} cy={H - 2 - ((kcals[kcals.length-1] - Math.min(...kcals))
+              / (Math.max(...kcals) - Math.min(...kcals) || 1)) * (H - 4)}
+              r="2.5" fill={theme.accent}/>
+          </svg>
+        )}
+        <span style={{ color: theme.inkMute, fontSize: 14 }}>›</span>
+      </div>
+    </div>
+  );
+}
+
+function GoalHistorySheet({ theme, targets, setTargets, targetHistory = [], setTargetHistory, onClose }) {
+  const [expanded, setExpanded] = React.useState(null); // from_date
+  const sorted = [...targetHistory]
+    .filter(h => h.from_date && h.targets)
+    .sort((a, b) => b.from_date.localeCompare(a.from_date)); // newest first
+  const chronological = [...sorted].reverse();
+
+  const FIELDS = [
+    ['kcal', 'Kcal'],
+    ['p', 'Protein', 'g'],
+    ['c', 'Carbs', 'g'],
+    ['f', 'Fat', 'g'],
+    ['fibre', 'Fibre', 'g'],
+    ['satFat', 'Sat fat', 'g'],
+    ['sugar', 'Sugar', 'g'],
+    ['exMin', 'Ex min', 'min'],
+    ['exKcal', 'Ex kcal', ''],
+  ];
+
+  const computeDelta = (entry, idx) => {
+    // entry at idx (newest-first). prev = idx+1 in sorted.
+    const prev = sorted[idx + 1];
+    if (!prev) return [];
+    const changes = [];
+    FIELDS.forEach(([k, label]) => {
+      const a = +prev.targets[k] || 0;
+      const b = +entry.targets[k] || 0;
+      if (Math.abs(a - b) > 0.01) changes.push({ k, label, from: a, to: b });
+    });
+    return changes;
+  };
+
+  const revert = (entry) => {
+    if (!setTargets) return;
+    if (!confirm(`Revert current targets to those from ${entry.from_date}?`)) return;
+    setTargets({ ...entry.targets, _why: `Reverted to ${entry.from_date} state.` });
+    onClose && onClose();
+  };
+
+  // Step sparkline across all entries (kcal over time)
+  const W = 300, H = 70, PAD_L = 40, PAD_R = 8, PAD_T = 10, PAD_B = 18;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+  const kcals = chronological.map(h => +h.targets.kcal || 0);
+  const sparkPath = (() => {
+    if (kcals.length < 2) return '';
+    const min = Math.min(...kcals), max = Math.max(...kcals);
+    const range = max - min || 1;
+    const step = plotW / (kcals.length - 1);
+    let d = '';
+    kcals.forEach((v, i) => {
+      const x = PAD_L + i * step;
+      const y = PAD_T + plotH - ((v - min) / range) * plotH;
+      if (i === 0) d += `M${x},${y}`;
+      else {
+        // step: horizontal at prev y, then vertical to new y, then to new x
+        const prevY = PAD_T + plotH - ((kcals[i-1] - min) / range) * plotH;
+        d += ` L${x},${prevY} L${x},${y}`;
+      }
+    });
+    return d;
+  })();
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300,
+      display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '90vh', background: theme.bg,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{
+          padding: '14px 18px 10px', borderBottom: `1px solid ${theme.line}`,
+        }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.line, margin: '0 auto 12px' }}/>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{
+              fontFamily: theme.titleFont, fontSize: 20, fontWeight: theme.titleWeight,
+              color: theme.ink,
+            }}>Goal history</div>
+            <button onClick={onClose} style={{
+              border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 22, color: theme.inkMute, padding: 4, lineHeight: 1,
+            }}>×</button>
+          </div>
+          <div style={{ fontFamily: theme.font, fontSize: 12, color: theme.inkSoft, marginTop: 4 }}>
+            {sorted.length} change{sorted.length === 1 ? '' : 's'} · tap an entry to expand or revert
+          </div>
+        </div>
+
+        {/* Step sparkline */}
+        {kcals.length >= 2 && (
+          <div style={{ padding: '14px 18px 8px' }}>
+            <div style={{
+              fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+              color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+              marginBottom: 6,
+            }}>Kcal target over time</div>
+            <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+              style={{ display: 'block' }}>
+              <path d={sparkPath} fill="none" stroke={theme.accent} strokeWidth="1.8" strokeLinejoin="round"/>
+              {chronological.map((h, i) => {
+                const step = plotW / (kcals.length - 1);
+                const x = PAD_L + i * step;
+                const v = kcals[i];
+                const min = Math.min(...kcals), max = Math.max(...kcals);
+                const y = PAD_T + plotH - ((v - min) / (max - min || 1)) * plotH;
+                return <circle key={i} cx={x} cy={y} r="3" fill={theme.accent}/>;
+              })}
+              <text x={PAD_L - 4} y={PAD_T + 4} textAnchor="end"
+                fontFamily={theme.font} fontSize="9" fill={theme.inkMute}>
+                {Math.max(...kcals)}</text>
+              <text x={PAD_L - 4} y={PAD_T + plotH + 2} textAnchor="end"
+                fontFamily={theme.font} fontSize="9" fill={theme.inkMute}>
+                {Math.min(...kcals)}</text>
+              <text x={PAD_L} y={H - 4}
+                fontFamily={theme.font} fontSize="9" fill={theme.inkMute}>
+                {chronological[0].from_date}</text>
+              <text x={W - PAD_R} y={H - 4} textAnchor="end"
+                fontFamily={theme.font} fontSize="9" fill={theme.inkMute}>
+                Now</text>
+            </svg>
+          </div>
+        )}
+
+        {/* Timeline list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 18px 24px' }}>
+          {sorted.length === 0 && (
+            <div style={{
+              padding: 40, textAlign: 'center', color: theme.inkSoft,
+              fontFamily: theme.font, fontSize: 13,
+            }}>No changes logged yet. Edit your goals to start the timeline.</div>
+          )}
+          {sorted.map((entry, i) => {
+            const isNow = i === 0;
+            const isStart = i === sorted.length - 1;
+            const changes = computeDelta(entry, i);
+            const open = expanded === entry.from_date;
+            const why = entry.why || entry.targets?._why || (entry.source === 'claude' ? 'Suggested by Claude.' : null);
+            return (
+              <div key={entry.from_date} onClick={() => setExpanded(open ? null : entry.from_date)}
+                style={{
+                  padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${theme.line}`,
+                  cursor: 'pointer',
+                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div style={{
+                    fontFamily: theme.numFont, fontSize: 12, color: theme.inkSoft,
+                  }}>{entry.from_date}</div>
+                  {isNow && (
+                    <span style={{
+                      padding: '1px 7px', borderRadius: 999,
+                      background: theme.accent, color: theme.accentInk,
+                      fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    }}>Now</span>
+                  )}
+                  {isStart && !isNow && (
+                    <span style={{
+                      padding: '1px 7px', borderRadius: 999,
+                      background: theme.surfaceAlt, color: theme.inkSoft,
+                      fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    }}>Start</span>
+                  )}
+                </div>
+                {changes.length > 0 ? (
+                  <div style={{
+                    marginTop: 4, fontFamily: theme.font, fontSize: 13,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {changes.slice(0, 3).map((c, j) => (
+                      <span key={c.k}>
+                        <span style={{
+                          display: 'inline-block', padding: '1px 6px', borderRadius: 4,
+                          background: theme.ink, color: theme.bg, fontSize: 10,
+                          fontWeight: 700, marginRight: 4,
+                        }}>{c.label.toLowerCase()}</span>
+                        {c.from} <span style={{ color: theme.inkMute }}>→</span>{' '}
+                        <span style={{ color: c.to > c.from ? theme.accent : '#D96B5C', fontWeight: 600 }}>{c.to}</span>
+                        {j < Math.min(2, changes.length - 1) && <span style={{ color: theme.inkMute }}> · </span>}
+                      </span>
+                    ))}
+                    {changes.length > 3 && <span style={{ color: theme.inkMute }}> · +{changes.length - 3}</span>}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 4, fontSize: 13, color: theme.inkMute, fontStyle: 'italic' }}>
+                    Initial snapshot
+                  </div>
+                )}
+                {why && (
+                  <div style={{
+                    marginTop: 4, fontFamily: theme.font, fontSize: 12,
+                    fontStyle: 'italic', color: theme.inkSoft, lineHeight: 1.4,
+                  }}>{why}</div>
+                )}
+                {open && (
+                  <div style={{
+                    marginTop: 10, padding: '10px 12px',
+                    background: theme.surfaceAlt, borderRadius: 10,
+                  }}>
+                    <div style={{
+                      fontFamily: theme.font, fontSize: 10, fontWeight: 700,
+                      color: theme.inkSoft, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      marginBottom: 6,
+                    }}>Full targets</div>
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px',
+                      fontFamily: theme.font, fontSize: 12,
+                    }}>
+                      {FIELDS.map(([k, label, unit]) => (
+                        <React.Fragment key={k}>
+                          <div style={{ color: theme.inkSoft }}>{label}</div>
+                          <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, textAlign: 'right' }}>
+                            {entry.targets[k] ?? '—'}{unit ? ` ${unit}` : ''}
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    {!isNow && (
+                      <button onClick={(e) => { e.stopPropagation(); revert(entry); }}
+                        style={{
+                          marginTop: 10, padding: '6px 12px',
+                          border: `1px solid ${theme.line}`, background: theme.surface,
+                          color: '#D96B5C', cursor: 'pointer',
+                          borderRadius: 999, fontFamily: theme.font,
+                          fontSize: 12, fontWeight: 600,
+                        }}>↶ Revert to these targets</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets, targetHistory = [], setTargetHistory,
   weightLog, setWeightLog, settings, setSettings, log, session,
   exerciseLog = [], wellnessMap = {} }) {
 
@@ -9561,6 +9906,7 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
 
   const [editingGoals, setEditingGoals] = useStateProfile(false);
   const [draft, setDraft] = useStateProfile(targets);
+  const [showGoalHistory, setShowGoalHistory] = useStateProfile(false);
 
   React.useEffect(() => { if (!editingGoals) setDraft(targets); }, [targets, editingGoals]);
 
@@ -9641,6 +9987,18 @@ function ProfileScreen({ theme, themeKey, setThemeKey, targets, setTargets,
       {/* Your details — populated by onboarding, editable here */}
       <ProfileDetailsCard theme={theme} settings={settings} setSettings={setSettings}
         weightLog={weightLog} />
+
+      {/* Goal history entry — opens timeline + sparkline sheet */}
+      <GoalHistoryRow theme={theme}
+        targets={targets} targetHistory={targetHistory}
+        onOpen={() => setShowGoalHistory(true)} />
+
+      {showGoalHistory && (
+        <GoalHistorySheet theme={theme}
+          targets={targets} setTargets={setTargets}
+          targetHistory={targetHistory} setTargetHistory={setTargetHistory}
+          onClose={() => setShowGoalHistory(false)}/>
+      )}
 
       {/* Goals card */}
       <div style={{
@@ -11798,14 +12156,20 @@ function App({ session }) {
     try { return JSON.parse(localStorage.getItem('cal_target_history')) || []; }
     catch { return []; }
   });
-  // Wrap setTargets so any change snapshots the new targets into history with today's from_date
+  // Wrap setTargets so any change snapshots the new targets into history with today's from_date.
+  // Callers may attach `_why` on the incoming object to annotate the history entry; it's stripped
+  // before storing as the current targets.
   const setTargets = (next) => {
-    setTargetsRaw(next);
+    const why = next && next._why ? String(next._why) : null;
+    const clean = { ...next };
+    delete clean._why;
+    setTargetsRaw(clean);
     const today = todayLocalIso();
     setTargetHistory(prev => {
-      // If today already has an entry, replace it; else append
       const filtered = (prev || []).filter(h => h.from_date !== today);
-      return [...filtered, { from_date: today, targets: next }];
+      const entry = { from_date: today, targets: clean };
+      if (why) entry.why = why;
+      return [...filtered, entry];
     });
   };
   // Helper: targets that were active on `date`
@@ -12347,6 +12711,7 @@ function App({ session }) {
               <ProfileScreen theme={theme}
                 themeKey={themeKey} setThemeKey={setThemeKey}
                 targets={targets} setTargets={setTargets}
+                targetHistory={targetHistory} setTargetHistory={setTargetHistory}
                 weightLog={weightLog} setWeightLog={setWeightLog}
                 settings={settings} setSettings={setSettings}
                 log={log} session={session}

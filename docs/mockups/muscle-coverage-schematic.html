@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Muscle coverage — schematic</title>
+<style>
+  :root {
+    --bg: #F5F3EE; --surface: #FFFFFF; --surfaceAlt: #EDE9E0; --line: #D8D4C8;
+    --ink: #1A1A1A; --inkSoft: #5C5A54; --inkMute: #8A867C;
+    --accent: #2B7A5C;
+    /* Heat scale 0-4 */
+    --h0: #E8E4D8;   /* not trained */
+    --h1: #F5E1A8;   /* touched once */
+    --h2: #F5C178;   /* moderate */
+    --h3: #E88A4B;   /* solid */
+    --h4: #B23A14;   /* overloaded */
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.45; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); margin-bottom: 28px; font-size: 13px; max-width: 860px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 24px; max-width: 1300px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .card h2 { margin: 0; padding: 14px 18px; font-size: 14px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--inkSoft); font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--surfaceAlt); }
+  .phone { width: 360px; margin: 16px auto 20px; background: var(--bg);
+    border: 10px solid #1A1A1A; border-radius: 38px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-height: 700px; }
+  .phone-header { padding: 14px 16px 10px; background: var(--surface);
+    border-bottom: 1px solid var(--line); }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line);
+    margin: 0 auto 10px; display: block; }
+  .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .section { padding: 14px 18px; }
+  .section + .section { border-top: 1px solid var(--line); }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--inkSoft); margin-bottom: 8px; }
+  .annotations { padding: 16px 18px; background: #FFF7E6; border-top: 1px solid var(--line);
+    font-size: 12px; color: #6A4A10; }
+  .annotations b { color: #5A3B08; }
+  .body-wrap { display: flex; gap: 6px; justify-content: center; padding: 10px 14px; background: var(--surface); }
+  .muscle { stroke: var(--ink); stroke-width: 0.8; fill: var(--h0); }
+  .muscle.h1 { fill: var(--h1); } .muscle.h2 { fill: var(--h2); }
+  .muscle.h3 { fill: var(--h3); } .muscle.h4 { fill: var(--h4); }
+  .heat-legend { display: flex; gap: 6px; padding: 4px 18px 12px; background: var(--surface);
+    justify-content: center; align-items: center; }
+  .heat-legend .sw { width: 28px; height: 8px; border-radius: 3px; }
+  .heat-legend .lab { font-size: 10px; color: var(--inkSoft); margin: 0 2px; }
+  .kv-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+  .kv-row .k { color: var(--inkSoft); }
+  .kv-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; }
+  .bar-row .n { width: 80px; color: var(--inkSoft); font-size: 11px; }
+  .bar-row .bar-wrap { flex: 1; height: 8px; background: var(--surfaceAlt); border-radius: 4px; overflow: hidden; }
+  .bar-row .bar { height: 100%; border-radius: 4px; }
+  .bar-row .v { width: 40px; text-align: right; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ai-note { padding: 12px 14px; background: #F5EAD2; border-radius: 10px;
+    border-left: 3px solid var(--h3); font-size: 13px; line-height: 1.5; color: #5A3B08; }
+  .ai-note b { color: #3A260A; }
+  .chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;
+    background: var(--surface); border: 1px solid var(--line); }
+  .chip.gap { color: #B23A14; border-color: rgba(178,58,20,0.35); background: rgba(178,58,20,0.07); }
+  .chip.hot { color: #8A5A1F; border-color: rgba(224,162,74,0.5); background: rgba(224,162,74,0.12); }
+  .range-tabs { display: flex; gap: 2px; padding: 2px; background: var(--surfaceAlt); border-radius: 999px; }
+  .range-tabs button { padding: 4px 10px; border: none; background: transparent; cursor: pointer;
+    font-size: 11px; color: var(--inkSoft); border-radius: 999px; }
+  .range-tabs button.on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+</style>
+</head>
+<body>
+<h1>Muscle coverage heatmap</h1>
+<p class="sub">AI-driven body map showing which muscle groups you've trained this week (or month/year).
+Each logged exercise maps to a set of muscles with weights; the heatmap aggregates across sessions.
+Claude flags over/under-trained areas and suggests rebalancing.</p>
+
+<div class="row">
+
+  <!-- =========================== -->
+  <!-- A — WEEK HEATMAP             -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>A · This week</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Muscles trained</div>
+          <div class="range-tabs">
+            <button class="on">Wk</button><button>Mo</button><button>Yr</button>
+          </div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Apr 20 – Apr 26 · 5 sessions logged
+        </div>
+      </div>
+
+      <div class="body-wrap">
+        <!-- FRONT -->
+        <svg width="150" height="320" viewBox="0 0 100 220">
+          <!-- head -->
+          <ellipse class="muscle" cx="50" cy="18" rx="12" ry="14"/>
+          <!-- neck -->
+          <rect class="muscle" x="45" y="32" width="10" height="8" rx="2"/>
+          <!-- shoulders (delts) h3 -->
+          <ellipse class="muscle h3" cx="26" cy="46" rx="9" ry="7"/>
+          <ellipse class="muscle h3" cx="74" cy="46" rx="9" ry="7"/>
+          <!-- chest (pecs) h2 -->
+          <path class="muscle h2" d="M34,54 Q50,52 66,54 L66,72 Q50,70 34,72 Z"/>
+          <!-- biceps h2 -->
+          <rect class="muscle h2" x="17" y="52" width="10" height="34" rx="4"/>
+          <rect class="muscle h2" x="73" y="52" width="10" height="34" rx="4"/>
+          <!-- forearms h1 -->
+          <rect class="muscle h1" x="17" y="88" width="9" height="34" rx="3"/>
+          <rect class="muscle h1" x="74" y="88" width="9" height="34" rx="3"/>
+          <!-- abs h1 -->
+          <rect class="muscle h1" x="36" y="78" width="28" height="28" rx="3"/>
+          <!-- obliques h0 -->
+          <path class="muscle" d="M28,80 L36,80 L36,108 L30,108 Z"/>
+          <path class="muscle" d="M72,80 L64,80 L64,108 L70,108 Z"/>
+          <!-- hip flexors h0 -->
+          <path class="muscle" d="M32,108 L68,108 L64,128 L36,128 Z"/>
+          <!-- quads h4 (red — overloaded) -->
+          <path class="muscle h4" d="M32,130 L48,130 L46,174 L34,174 Z"/>
+          <path class="muscle h4" d="M68,130 L52,130 L54,174 L66,174 Z"/>
+          <!-- shins h3 (from plyo) -->
+          <rect class="muscle h3" x="33" y="176" width="14" height="36" rx="3"/>
+          <rect class="muscle h3" x="53" y="176" width="14" height="36" rx="3"/>
+          <text x="50" y="218" text-anchor="middle" font-size="8" fill="var(--inkSoft)">Front</text>
+        </svg>
+        <!-- BACK -->
+        <svg width="150" height="320" viewBox="0 0 100 220">
+          <!-- head -->
+          <ellipse class="muscle" cx="50" cy="18" rx="12" ry="14"/>
+          <!-- neck -->
+          <rect class="muscle" x="45" y="32" width="10" height="8" rx="2"/>
+          <!-- traps h3 -->
+          <path class="muscle h3" d="M30,42 Q50,38 70,42 L68,58 Q50,54 32,58 Z"/>
+          <!-- upper back / rhomboids h2 -->
+          <rect class="muscle h2" x="34" y="58" width="32" height="20" rx="3"/>
+          <!-- lats h3 -->
+          <path class="muscle h3" d="M28,62 L38,62 L40,98 L30,100 Z"/>
+          <path class="muscle h3" d="M72,62 L62,62 L60,98 L70,100 Z"/>
+          <!-- triceps h2 -->
+          <rect class="muscle h2" x="17" y="52" width="10" height="34" rx="4"/>
+          <rect class="muscle h2" x="73" y="52" width="10" height="34" rx="4"/>
+          <!-- lower back / erectors h1 -->
+          <rect class="muscle h1" x="40" y="84" width="20" height="24" rx="3"/>
+          <!-- glutes h2 -->
+          <path class="muscle h2" d="M30,108 L50,104 L50,130 L32,132 Z"/>
+          <path class="muscle h2" d="M70,108 L50,104 L50,130 L68,132 Z"/>
+          <!-- hamstrings h3 -->
+          <rect class="muscle h3" x="33" y="134" width="14" height="40" rx="4"/>
+          <rect class="muscle h3" x="53" y="134" width="14" height="40" rx="4"/>
+          <!-- calves h4 (overloaded — runs + plyo) -->
+          <ellipse class="muscle h4" cx="40" cy="192" rx="7" ry="15"/>
+          <ellipse class="muscle h4" cx="60" cy="192" rx="7" ry="15"/>
+          <text x="50" y="218" text-anchor="middle" font-size="8" fill="var(--inkSoft)">Back</text>
+        </svg>
+      </div>
+
+      <div class="heat-legend">
+        <span class="lab">Not trained</span>
+        <div class="sw" style="background: var(--h0)"></div>
+        <div class="sw" style="background: var(--h1)"></div>
+        <div class="sw" style="background: var(--h2)"></div>
+        <div class="sw" style="background: var(--h3)"></div>
+        <div class="sw" style="background: var(--h4)"></div>
+        <span class="lab">Overloaded</span>
+      </div>
+
+      <div class="section">
+        <div class="ai-note">
+          <b>Leg-heavy week.</b> Quads and calves at overload (3 runs + plyo). Obliques, hip-flexors,
+          and lower back untrained. Consider an anti-rotation core day (Pallof press, side plank)
+          and skip plyo if calves tight tomorrow.
+        </div>
+        <div class="chip-row">
+          <span class="chip gap">Gap · obliques</span>
+          <span class="chip gap">Gap · hip flexors</span>
+          <span class="chip gap">Gap · lower back</span>
+          <span class="chip hot">Hot · quads</span>
+          <span class="chip hot">Hot · calves</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      <b>Colour scale 0–4</b> is a weighted sum of (session volume × primary/secondary muscle weight)
+      per group, normalised over the week. AI note runs once per week in the existing Ask-Coach flow —
+      uses the same data.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- B — GROUP DETAIL             -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>B · Tap a group → sources</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Quadriceps</div>
+          <div style="color: var(--inkMute); font-size: 22px;">×</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Overloaded · score 4.1/5 this week
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Sources · 3 sessions</div>
+
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 18px;">🏃</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 13px;">Sat · Long run · 18 km</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Primary · +2.0 load</div>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: var(--h4);">▍▍▍▍▍</div>
+        </div>
+
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 18px;">💥</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 13px;">Thu · Plyometrics · 3 rounds</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Primary · +1.5 load</div>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: var(--h3);">▍▍▍▍</div>
+        </div>
+
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; display: flex; gap: 10px; align-items: center;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 18px;">🏃</div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 13px;">Mon · Easy run · 5 km</div>
+            <div style="font-size: 11px; color: var(--inkSoft);">Secondary · +0.6 load</div>
+          </div>
+          <div style="font-size: 12px; font-weight: 700; color: var(--h1);">▍▍</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Trend · quads across weeks</div>
+        <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none" style="display: block;">
+          <path d="M0,40 L60,30 L120,20 L180,10 L240,12 L300,5"
+            fill="none" stroke="var(--h3)" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M0,40 L60,30 L120,20 L180,10 L240,12 L300,5 L300,60 L0,60 Z"
+            fill="var(--h3)" fill-opacity="0.2"/>
+          <circle cx="300" cy="5" r="3" fill="var(--h4)"/>
+          <text x="0" y="58" font-size="9" fill="var(--inkMute)">6w ago</text>
+          <text x="300" y="58" text-anchor="end" font-size="9" fill="var(--inkMute)">This wk</text>
+        </svg>
+        <div style="margin-top: 6px; font-size: 11px; color: var(--inkSoft);">
+          4 weeks of upward load. Plan a deload before next week.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Balance · push vs pull</div>
+        <div class="bar-row">
+          <div class="n">Push</div>
+          <div class="bar-wrap"><div class="bar" style="width: 75%; background: var(--h3)"></div></div>
+          <div class="v">3.2</div>
+        </div>
+        <div class="bar-row">
+          <div class="n">Pull</div>
+          <div class="bar-wrap"><div class="bar" style="width: 28%; background: var(--h1)"></div></div>
+          <div class="v">1.2</div>
+        </div>
+        <div class="bar-row">
+          <div class="n">Anterior</div>
+          <div class="bar-wrap"><div class="bar" style="width: 88%; background: var(--h4)"></div></div>
+          <div class="v">4.1</div>
+        </div>
+        <div class="bar-row">
+          <div class="n">Posterior</div>
+          <div class="bar-wrap"><div class="bar" style="width: 62%; background: var(--h3)"></div></div>
+          <div class="v">2.8</div>
+        </div>
+      </div>
+    </div>
+    <div class="annotations">
+      Tap any muscle group to see exactly which sessions built the score, a 6-week trend, and
+      push/pull · front/back balance bars. Makes it easy to spot structural imbalances.
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- C — WEEKLY COVERAGE REPORT   -->
+  <!-- =========================== -->
+  <div class="card">
+    <h2>C · Weekly coverage report</h2>
+    <div class="phone">
+      <div class="phone-header">
+        <span class="handle"></span>
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <div class="page-title">Week 17 recap</div>
+        </div>
+        <div style="font-size: 12px; color: var(--inkSoft); margin-top: 4px;">
+          Apr 20 – Apr 26 · generated by Claude
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="ai-note" style="border-left-color: var(--accent); background: rgba(43,122,92,0.08); color: #1C4E3A;">
+          <b>Running-dominant week.</b> Strong lower-body engagement (quads/hams/calves), good
+          shoulder coverage from calisthenics push day. Main gap is <b>pulling volume</b> — only
+          one pull session and no rowing. Consider adding a 20-min back day next week.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Targeted · 11 of 18 groups</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between;"><span>Quads</span><span style="color: var(--h4); font-weight: 700;">Hot</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Calves</span><span style="color: var(--h4); font-weight: 700;">Hot</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Lats</span><span style="color: var(--h3); font-weight: 600;">Solid</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Hams</span><span style="color: var(--h3); font-weight: 600;">Solid</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Traps</span><span style="color: var(--h3); font-weight: 600;">Solid</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Delts</span><span style="color: var(--h3); font-weight: 600;">Solid</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Pecs</span><span style="color: var(--h2); font-weight: 600;">Mod</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Biceps</span><span style="color: var(--h2); font-weight: 600;">Mod</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Glutes</span><span style="color: var(--h2); font-weight: 600;">Mod</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Triceps</span><span style="color: var(--h2); font-weight: 600;">Mod</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Abs</span><span style="color: var(--h1); font-weight: 600;">Light</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Untargeted · 7 groups</div>
+        <div class="chip-row">
+          <span class="chip gap">Obliques</span>
+          <span class="chip gap">Lower back</span>
+          <span class="chip gap">Hip flexors</span>
+          <span class="chip gap">Forearms</span>
+          <span class="chip gap">Rotator cuff</span>
+          <span class="chip gap">Adductors</span>
+          <span class="chip gap">Abductors</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="label">Suggested next week</div>
+        <div style="padding: 10px 12px; background: var(--surfaceAlt); border-radius: 10px; font-size: 12px; line-height: 1.5;">
+          <b>1 pull-focused day</b> (rows, face pulls, lat pulldown)<br>
+          <b>1 core rotation day</b> (Pallof, side plank, bird-dog)<br>
+          Keep the current running volume; skip plyo if calves still sore.
+        </div>
+        <button style="margin-top: 10px; padding: 10px 14px; background: var(--ink); color: var(--bg); border: none; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer;">
+          Add as plan sessions →
+        </button>
+      </div>
+    </div>
+    <div class="annotations">
+      Weekly recap runs automatically on Sunday (or on-demand). One Haiku call, ~400 tokens total.
+      "Add as plan sessions" pipes the suggestion into the exercise-plan calendar (B panel of
+      exercise-plan-schematic).
+    </div>
+  </div>
+
+</div>
+
+<p style="max-width: 920px; margin: 32px auto 0; font-size: 13px; color: var(--inkSoft); line-height: 1.6;">
+  <b>Implementation:</b> a static <code>EXERCISE_MUSCLE_MAP</code> JSON file maps each known exercise
+  (Run, Push-up, Squat, Deadlift, Plyometrics, Rowing, Yoga-flow...) to its <i>primary</i> (weight 1.0)
+  and <i>secondary</i> (weight 0.4) muscle groups. Runs hit quads/hams/calves/glutes primarily; plyo
+  hits quads/calves/core. When an exercise is imported we attach <code>details.muscles</code>.
+  Aggregation is a straight sum over the current range. Claude annotation runs on a schedule (weekly)
+  or on-demand from the heatmap card — same Ask-Coach flow with muscles data attached.
+</p>
+</body>
+</html>
