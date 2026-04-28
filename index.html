@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v75';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7708,17 +7708,15 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const [trendDrill, setTrendDrill] = React.useState(null); // { key, label, unit, color }
   const [chartMetric, setChartMetric] = React.useState('kcal'); // 'kcal' | 'exKcal' | 'exMin'
   const [selectedExType, setSelectedExType] = React.useState(null);
-  // Fluid bars-strip swipe state
+  // Continuous-scroll bars-strip state (no snap-to-page).
   const barsRef = React.useRef(null);
-  const swipeRef = React.useRef({ startX: 0, startY: 0, dragging: false, locked: null, startTs: 0, w: 0 });
+  // baseOffset: offset at touchstart. accumDays: how many days the offset has
+  // already advanced during this gesture. dx is finger delta from start.
+  const swipeRef = React.useRef({
+    startX: 0, startY: 0, dragging: false, locked: null,
+    w: 0, barW: 0, baseOffset: 0, accumDays: 0,
+  });
   const [barsDragX, setBarsDragX] = React.useState(0);
-  // When non-zero, a swipe is committed and the strip is sliding to a neighbour.
-  // Carries the direction (+1 = back, -1 = forward) so transitionend can apply
-  // the offset change atomically.
-  const pendingSnap = React.useRef(0);
-  // When true, the next render skips the slide transition (used to silently
-  // re-centre the strip after a snap completes).
-  const [noBarsTransition, setNoBarsTransition] = React.useState(false);
 
   // Exercise totals per ISO date (overall + per-type breakdown)
   const exByDate = React.useMemo(() => {
@@ -8040,60 +8038,55 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
               onTouchStart={(e) => {
                 const t = e.touches[0];
                 const w = barsRef.current?.offsetWidth || 320;
-                swipeRef.current = { startX: t.clientX, startY: t.clientY, dragging: true, locked: null, startTs: Date.now(), w };
+                // Effective bar pitch for the centre bucket. Months/Year still
+                // use 7 buckets visually but only Week is in 1-day-step mode.
+                const slotCount = range === 'Week' ? 7 : (range === 'Year' ? 12 : 7);
+                const barW = w / slotCount;
+                swipeRef.current = {
+                  startX: t.clientX, startY: t.clientY, dragging: true, locked: null,
+                  w, barW, baseOffset: offset, accumDays: 0,
+                };
+                setBarsDragX(0);
               }}
               onTouchMove={(e) => {
                 const s = swipeRef.current;
                 if (!s.dragging) return;
                 const t = e.touches[0];
-                const dx = t.clientX - s.startX;
+                const dxRaw = t.clientX - s.startX;
                 const dy = t.clientY - s.startY;
                 if (s.locked == null) {
-                  if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-                  s.locked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+                  if (Math.abs(dxRaw) < 6 && Math.abs(dy) < 6) return;
+                  s.locked = Math.abs(dxRaw) > Math.abs(dy) ? 'h' : 'v';
                 }
                 if (s.locked !== 'h') return;
                 e.preventDefault();
-                const cantGo = (dx > 0 && !canGoBack) || (dx < 0 && !canGoForward);
-                const eff = cantGo ? dx * 0.25 : dx;
-                setBarsDragX(Math.max(-s.w, Math.min(s.w, eff)));
+                // How many full bar-widths has the finger covered?
+                // Positive dx = swipe right = older days = offset increases.
+                const desiredDays = Math.trunc(dxRaw / s.barW);
+                if (desiredDays !== s.accumDays) {
+                  // Clamp by what bucketFor allows.
+                  let target = s.baseOffset + desiredDays;
+                  if (target < 0) target = 0;
+                  // Walk back if we've crossed beyond available history.
+                  while (target > s.baseOffset && bucketFor(range, target) == null) target--;
+                  s.accumDays = target - s.baseOffset;
+                  setOffset(target);
+                }
+                // Residual finger movement inside the current bar slot.
+                const residual = dxRaw - s.accumDays * s.barW;
+                // Elastic resistance if at an edge with no further bucket.
+                const cantGo =
+                  (residual > 0 && bucketFor(range, s.baseOffset + s.accumDays + 1) == null) ||
+                  (residual < 0 && bucketFor(range, s.baseOffset + s.accumDays - 1) == null);
+                const eff = cantGo ? residual * 0.25 : residual;
+                setBarsDragX(Math.max(-s.barW, Math.min(s.barW, eff)));
               }}
-              onTouchEnd={(e) => {
+              onTouchEnd={() => {
                 const s = swipeRef.current;
                 swipeRef.current = { ...s, dragging: false };
-                if (s.locked !== 'h') { setBarsDragX(0); return; }
-                if (pendingSnap.current !== 0) return; // ignore until current snap finishes
-                const t = e.changedTouches[0];
-                const dx = t.clientX - s.startX;
-                const dt = Math.max(1, Date.now() - s.startTs);
-                const v = dx / dt;
-                const trigger = Math.abs(dx) > s.w * 0.25 || Math.abs(v) > 0.5;
-                const goBack = trigger && dx > 0 && canGoBack;
-                const goForward = trigger && dx < 0 && canGoForward;
-                if (!goBack && !goForward) {
-                  // Spring back to centre.
-                  setBarsDragX(0);
-                  return;
-                }
-                // Mark the snap so onTransitionEnd knows to swap buckets when
-                // the slide finishes, and animate the strip the rest of the way.
-                pendingSnap.current = goBack ? 1 : -1;
-                setBarsDragX(goBack ? s.w : -s.w);
-              }}
-              onTransitionEnd={(e) => {
-                if (e.propertyName !== 'transform') return;
-                const dir = pendingSnap.current;
-                if (!dir) return;
-                pendingSnap.current = 0;
-                // Disable transition for the silent re-centre, swap buckets,
-                // reset dragX. React batches all three so they hit the DOM
-                // in the same paint — no flash, no apparent refresh.
-                setNoBarsTransition(true);
-                setOffset(prev => prev + dir);
+                // Settle any sub-bar residual back to the grid — snaps to the
+                // nearest day, which is now centred.
                 setBarsDragX(0);
-                // Re-enable transitions after two frames (one for the no-anim
-                // re-centre to commit, one for safety).
-                requestAnimationFrame(() => requestAnimationFrame(() => setNoBarsTransition(false)));
               }}
               style={{
                 marginTop: 16, height: 180, position: 'relative',
@@ -8115,9 +8108,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
               <div style={{
                 display: 'flex', width: '300%', height: '100%',
                 transform: `translateX(calc(-33.3333% + ${barsDragX}px))`,
-                transition: (swipeRef.current.dragging || noBarsTransition)
+                transition: swipeRef.current.dragging
                   ? 'none'
-                  : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                  : 'transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)',
                 willChange: 'transform',
               }}>
                 {renderBucketBars(prevBucket, false)}
