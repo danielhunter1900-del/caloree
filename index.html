@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7912,7 +7912,30 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           const prevBucket = bucketFor(range, offset + 1);
           const nextBucket = bucketFor(range, offset - 1);
           const renderBucketBars = (b, isCentre) => {
-            const bars = (b && b.bars) || [];
+            const realBars = (b && b.bars) || [];
+            // Keep the slot count fixed for Week so bars never stretch wide
+            // when history is short. Year is always 12. Month varies legitimately.
+            const slotCount = range === 'Week' ? 7 : (range === 'Year' ? 12 : realBars.length);
+            const padCount = Math.max(0, slotCount - realBars.length);
+            const dowShort = ['S','M','T','W','T','F','S'];
+            const placeholders = [];
+            // Pad on the older (left) side, inferring labels backwards from the first real bar's iso when possible.
+            const firstReal = realBars[0];
+            const baseDate = firstReal ? new Date(firstReal.iso + 'T12:00:00') : null;
+            for (let k = padCount; k > 0; k--) {
+              let label = '';
+              if (range === 'Week' && baseDate) {
+                const d = new Date(baseDate);
+                d.setDate(d.getDate() - k);
+                label = dowShort[d.getDay()];
+              }
+              placeholders.push({
+                __placeholder: true,
+                kcal: 0, c: 0, p: 0, f: 0, satFat: 0, sugar: 0, fibre: 0,
+                iso: '', barLabel: label, dateLabel: '', isToday: false,
+              });
+            }
+            const bars = placeholders.concat(realBars);
             return (
               <div style={{
                 flex: '0 0 33.3333%', height: '100%', minWidth: 0,
@@ -7922,13 +7945,17 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                 opacity: isCentre ? 1 : 0.55,
               }}>
                 {bars.map((d, i) => {
-                  const total = (chartMetric === 'exKcal') ? (exByDate[d.iso]?.kcal || 0)
+                  const isPlaceholder = !!d.__placeholder;
+                  // Map padded index → original (unpadded) index for selection state.
+                  const realIdx = i - padCount;
+                  const total = isPlaceholder ? 0
+                    : (chartMetric === 'exKcal') ? (exByDate[d.iso]?.kcal || 0)
                     : (chartMetric === 'exMin')  ? (exByDate[d.iso]?.min  || 0)
                     : (d.kcal || 0);
                   const h = Math.max(0, Math.min(100, (total / maxK) * 100));
-                  const isSel = isCentre && selSet.has(i);
+                  const isSel = isCentre && !isPlaceholder && selSet.has(realIdx);
                   const isExercise = chartMetric === 'exKcal' || chartMetric === 'exMin';
-                  const exDay = exByDate[d.iso];
+                  const exDay = isPlaceholder ? null : exByDate[d.iso];
                   const segments = isExercise && exDay
                     ? Object.entries(exDay.byType || {}).map(([type, vals]) => ({
                         type,
@@ -7938,23 +7965,25 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                           : (EX_COLOR_MAP[type] || '#8A8A8A'),
                       })).filter(s => s.v > 0)
                     : null;
+                  const clickable = isCentre && !isPlaceholder;
                   return (
-                    <div key={i} onClick={isCentre ? () => {
+                    <div key={i} onClick={clickable ? () => {
                       setSelSet(prev => {
                         const next = new Set(prev);
-                        if (next.has(i)) {
-                          next.delete(i);
-                          if (selIdx === i) setSelIdx(null);
+                        if (next.has(realIdx)) {
+                          next.delete(realIdx);
+                          if (selIdx === realIdx) setSelIdx(null);
                         } else {
-                          next.add(i);
-                          setSelIdx(i);
+                          next.add(realIdx);
+                          setSelIdx(realIdx);
                         }
                         return next;
                       });
                     } : undefined} style={{
                       flex: 1, display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', gap: 6, cursor: isCentre ? 'pointer' : 'default',
+                      alignItems: 'center', gap: 6, cursor: clickable ? 'pointer' : 'default',
                       height: '100%', justifyContent: 'flex-end', minWidth: 0,
+                      opacity: isPlaceholder ? 0.35 : 1,
                     }}>
                       {segments && segments.length > 0 ? (
                         <div style={{
