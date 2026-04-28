@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7712,6 +7712,10 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const barsRef = React.useRef(null);
   const swipeRef = React.useRef({ startX: 0, startY: 0, dragging: false, locked: null, startTs: 0, w: 0 });
   const [barsDragX, setBarsDragX] = React.useState(0);
+  // When non-zero, a swipe is committed and the strip is sliding to a neighbour.
+  // Carries the direction (+1 = back, -1 = forward) so transitionend can apply
+  // the offset change atomically.
+  const pendingSnap = React.useRef(0);
   // When true, the next render skips the slide transition (used to silently
   // re-centre the strip after a snap completes).
   const [noBarsTransition, setNoBarsTransition] = React.useState(false);
@@ -8058,6 +8062,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                 const s = swipeRef.current;
                 swipeRef.current = { ...s, dragging: false };
                 if (s.locked !== 'h') { setBarsDragX(0); return; }
+                if (pendingSnap.current !== 0) return; // ignore until current snap finishes
                 const t = e.changedTouches[0];
                 const dx = t.clientX - s.startX;
                 const dt = Math.max(1, Date.now() - s.startTs);
@@ -8070,19 +8075,25 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                   setBarsDragX(0);
                   return;
                 }
-                // 1) Animate the strip the rest of the way so the targeted
-                //    bucket finishes sliding into the centre slot.
+                // Mark the snap so onTransitionEnd knows to swap buckets when
+                // the slide finishes, and animate the strip the rest of the way.
+                pendingSnap.current = goBack ? 1 : -1;
                 setBarsDragX(goBack ? s.w : -s.w);
-                // 2) Once the slide animation finishes, swap buckets and
-                //    silently re-centre the strip (no transition) so the
-                //    user just sees the new centre stay put.
-                setTimeout(() => {
-                  setNoBarsTransition(true);
-                  setOffset(prev => prev + (goBack ? 1 : -1));
-                  setBarsDragX(0);
-                  // Re-enable transitions on the next frame.
-                  requestAnimationFrame(() => requestAnimationFrame(() => setNoBarsTransition(false)));
-                }, 260);
+              }}
+              onTransitionEnd={(e) => {
+                if (e.propertyName !== 'transform') return;
+                const dir = pendingSnap.current;
+                if (!dir) return;
+                pendingSnap.current = 0;
+                // Disable transition for the silent re-centre, swap buckets,
+                // reset dragX. React batches all three so they hit the DOM
+                // in the same paint — no flash, no apparent refresh.
+                setNoBarsTransition(true);
+                setOffset(prev => prev + dir);
+                setBarsDragX(0);
+                // Re-enable transitions after two frames (one for the no-anim
+                // re-centre to commit, one for safety).
+                requestAnimationFrame(() => requestAnimationFrame(() => setNoBarsTransition(false)));
               }}
               style={{
                 marginTop: 16, height: 180, position: 'relative',
