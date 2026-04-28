@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -2863,15 +2863,6 @@ function PlanPrefsSheet({ theme, settings, setSettings, onClose }) {
 }
 
 function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, setSettings, targetsForDate, wellness, setWellness, wellnessMap = {}, exerciseLog = [], setExerciseLog, weightLog = [], onAddMeal, onOpenFood, onOpenProfile, onAddExercise, onOpenWeight, session, logDate, setLogDate }) {
-  // Tracker ↔ Planner. Persisted across reloads so the view feels stable.
-  const [plannerMode, setPlannerMode] = React.useState(() => {
-    try { return localStorage.getItem('cal_home_mode') === 'planner'; } catch { return false; }
-  });
-  React.useEffect(() => {
-    try { localStorage.setItem('cal_home_mode', plannerMode ? 'planner' : 'tracker'); } catch {}
-  }, [plannerMode]);
-  const [showPlanPrefs, setShowPlanPrefs] = React.useState(false);
-  const [showAdaptive, setShowAdaptive] = React.useState(false);
   const [favBump, setFavBump] = React.useState(0);
   React.useEffect(() => {
     const h = () => setFavBump(b => b + 1);
@@ -3119,73 +3110,6 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
 
   const meals = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
-  // Top-left toggle between tracker and planner. Segmented pill: Track | Plan.
-  const modeToggle = (
-    <div style={{
-      margin: '4px 16px 4px', alignSelf: 'flex-start',
-      display: 'inline-flex', gap: 2, padding: 2, width: 'fit-content',
-      background: theme.surfaceAlt, border: `1px solid ${theme.line}`,
-      borderRadius: 999,
-    }}>
-      <button onClick={() => setPlannerMode(false)} style={{
-        padding: '5px 11px', border: 'none',
-        background: !plannerMode ? theme.surface : 'transparent',
-        color: !plannerMode ? theme.ink : theme.inkSoft,
-        borderRadius: 999, cursor: 'pointer',
-        fontFamily: theme.font, fontSize: 11, fontWeight: !plannerMode ? 700 : 500,
-        boxShadow: !plannerMode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-      }}>
-        <span style={{ fontSize: 11 }}>🍽️</span>Track
-      </button>
-      <button onClick={() => setPlannerMode(true)} style={{
-        padding: '5px 11px', border: 'none',
-        background: plannerMode ? theme.surface : 'transparent',
-        color: plannerMode ? '#5A3D9E' : theme.inkSoft,
-        borderRadius: 999, cursor: 'pointer',
-        fontFamily: theme.font, fontSize: 11, fontWeight: plannerMode ? 700 : 500,
-        boxShadow: plannerMode ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-      }}>
-        <span style={{ fontSize: 11 }}>📋</span>Plan
-      </button>
-    </div>
-  );
-
-  if (plannerMode) {
-    return (
-      <div style={{ paddingBottom: 0, background: theme.bg, minHeight: '100%',
-        display: 'flex', flexDirection: 'column' }}>
-        <Header theme={theme} onOpenProfile={onOpenProfile}
-          selectedDate={selectedDate} setSelectedDate={setSelectedDate}
-          log={log} settings={settings} setSettings={setSettings} />
-        {modeToggle}
-        <PlannerView theme={theme}
-          settings={settings} setSettings={setSettings}
-          exerciseLog={exerciseLog} wellnessMap={wellnessMap}
-          log={log} weightLog={weightLog}
-          selectedDate={selectedDate}
-          onExit={() => setPlannerMode(false)}
-          onOpenPrefs={() => setShowPlanPrefs(true)}
-          onAdaptive={() => setShowAdaptive(true)} />
-        {showPlanPrefs && (
-          <PlanPrefsSheet theme={theme}
-            settings={settings} setSettings={setSettings}
-            onClose={() => setShowPlanPrefs(false)} />
-        )}
-        {showAdaptive && (
-          <AdaptiveRecomputeSheet theme={theme}
-            settings={settings} setSettings={setSettings}
-            exerciseLog={exerciseLog} wellnessMap={wellnessMap}
-            log={log} weightLog={weightLog}
-            selectedDate={selectedDate}
-            onClose={() => setShowAdaptive(false)} />
-        )}
-        {modeToggle}
-      </div>
-    );
-  }
-
   return (
     <div style={{
       paddingBottom: 110, background: theme.bg, minHeight: '100%',
@@ -3194,8 +3118,6 @@ function HomeScreen({ theme, log, setLog, targets: baseTargets, settings = {}, s
       <Header theme={theme} onOpenProfile={onOpenProfile}
         selectedDate={selectedDate} setSelectedDate={setSelectedDate}
         log={log} settings={settings} setSettings={setSettings} />
-
-      {modeToggle}
 
       {/* HERO — Calorie ring */}
       <div style={{
@@ -7885,7 +7807,16 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
       </div>
 
       {/* Chart card */}
-      {sel && <div style={{
+      {sel && <div
+        onTouchStart={(e) => { window.__trendsTouchX = e.touches[0].clientX; }}
+        onTouchEnd={(e) => {
+          const dx = (e.changedTouches[0].clientX) - (window.__trendsTouchX || 0);
+          window.__trendsTouchX = null;
+          if (Math.abs(dx) < 40) return;
+          if (dx > 0 && canGoBack) setOffset(offset + 1);
+          else if (dx < 0 && canGoForward) setOffset(offset - 1);
+        }}
+        style={{
         margin: '0 16px 12px', padding: '20px 20px 16px',
         background: theme.surface, borderRadius: theme.radius.card,
         border: theme.name === 'Editorial' ? `1px solid ${theme.line}` : 'none',
@@ -8154,7 +8085,8 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           }}/>
       )}
 
-      {/* Macro averages */}
+      {/* Macro averages — only meaningful for the kcal/food chart */}
+      {chartMetric === 'kcal' && (
       <div style={{
         margin: '0 16px 12px', padding: '18px 20px',
         background: theme.surface, borderRadius: theme.radius.card,
@@ -8199,6 +8131,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
           ));
         })()}
       </div>
+      )}
 
       {/* Wellness vs Energy correlation */}
       {data.length > 0 && (
@@ -11162,12 +11095,12 @@ Object.assign(window, { RehabScreen });
 // ===== screen-profile.jsx =====
 function PhotosGallery({ theme, log }) {
   const [bump, setBump] = React.useState(0);
+  const [galleryOpen, setGalleryOpen] = React.useState(false);
   React.useEffect(() => {
     const h = () => setBump(b => b + 1);
     window.addEventListener('caloree:foodschanged', h);
     return () => window.removeEventListener('caloree:foodschanged', h);
   }, []);
-  // Build items from foods that have photos, using log entries to include meal + date
   const logByFoodId = {};
   (log || []).forEach(e => {
     if (!logByFoodId[e.foodId]) logByFoodId[e.foodId] = e;
@@ -11178,8 +11111,55 @@ function PhotosGallery({ theme, log }) {
       const e = logByFoodId[f.id];
       return { id: f.id, url: f.photo, name: f.name, meal: e?.meal || '', date: e?.date || '' };
     });
+  const reversed = items.slice().reverse();
+  const previewItems = reversed.slice(0, 2);
+
+  const deletePhoto = async (it) => {
+    if (!confirm(`Delete photo for ${it.name}?`)) return;
+    const target = FOODS.find(f => f.id === it.id);
+    const path = target?.photoPath;
+    if (target) { target.photo = null; target.photoPath = null; }
+    try {
+      if (window.sb) {
+        await window.sb.from('foods').update({ photo_path: null }).eq('id', it.id);
+        if (path) await window.sb.storage.from('meal-photos').remove([path]);
+      }
+    } catch (e) { console.warn(e); }
+    window.dispatchEvent(new Event('caloree:foodschanged'));
+  };
+
+  const tile = (it, size) => (
+    <div key={it.id} style={{
+      position: 'relative', borderRadius: 8, overflow: 'hidden',
+      aspectRatio: '1', background: theme.surfaceAlt,
+    }}>
+      <img src={it.url} alt="" onClick={() =>
+        window.dispatchEvent(new CustomEvent('caloree:showphoto', { detail: {
+          url: it.url, caption: `${it.name} · ${it.meal}${it.date ? ' · ' + it.date : ''}`
+        }}))} style={{
+        width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer',
+      }}/>
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        padding: size === 'lg' ? '18px 10px 8px' : '14px 6px 4px',
+        background: 'linear-gradient(to top, rgba(0,0,0,0.65), transparent)',
+        color: '#fff', fontFamily: theme.font,
+        fontSize: size === 'lg' ? 11 : 9, fontWeight: 600,
+        textAlign: 'left', lineHeight: 1.2,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        pointerEvents: 'none',
+      }}>{it.meal}{it.date ? ' · ' + it.date : ''}</div>
+      <button onClick={() => deletePhoto(it)} title="Delete photo" style={{
+        position: 'absolute', top: 4, right: 4,
+        width: 22, height: 22, borderRadius: 11, border: 'none',
+        background: 'rgba(20,20,20,0.75)', color: '#fff', cursor: 'pointer',
+        fontSize: 12, lineHeight: '22px', padding: 0,
+      }}>×</button>
+    </div>
+  );
 
   return (
+    <React.Fragment>
     <div style={{
       margin: '0 16px 12px', padding: '14px 14px',
       background: theme.surface, borderRadius: theme.radius.card,
@@ -11203,54 +11183,56 @@ function PhotosGallery({ theme, log }) {
           padding: '14px 0 4px', textAlign: 'center', lineHeight: 1.5,
         }}>
           No meal photos yet.<br/>
-          Attach a photo in <b>AI → Chat</b> when logging a meal.
+          Tap a meal in Detail → <b>Add photo</b>, or attach one in AI Chat.
         </div>
       )}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
-      }}>
-        {items.slice().reverse().map((it) => (
-          <div key={it.id} style={{
-            position: 'relative', borderRadius: 8, overflow: 'hidden',
-            aspectRatio: '1', background: theme.surfaceAlt,
-          }}>
-            <img src={it.url} alt="" onClick={() =>
-              window.dispatchEvent(new CustomEvent('caloree:showphoto', { detail: {
-                url: it.url, caption: `${it.name} · ${it.meal}${it.date ? ' · ' + it.date : ''}`
-              }}))} style={{
-              width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'pointer',
-            }}/>
-            <div style={{
-              position: 'absolute', left: 0, right: 0, bottom: 0,
-              padding: '14px 6px 4px',
-              background: 'linear-gradient(to top, rgba(0,0,0,0.65), transparent)',
-              color: '#fff', fontFamily: theme.font, fontSize: 9, fontWeight: 600,
-              textAlign: 'left', lineHeight: 1.2,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              pointerEvents: 'none',
-            }}>{it.meal}</div>
-            <button onClick={async () => {
-              if (!confirm(`Delete photo for ${it.name}?`)) return;
-              const target = FOODS.find(f => f.id === it.id);
-              const path = target?.photoPath;
-              if (target) { target.photo = null; target.photoPath = null; }
-              try {
-                if (window.sb) {
-                  await window.sb.from('foods').update({ photo_path: null }).eq('id', it.id);
-                  if (path) await window.sb.storage.from('meal-photos').remove([path]);
-                }
-              } catch (e) { console.warn(e); }
-              window.dispatchEvent(new Event('caloree:foodschanged'));
-            }} title="Delete photo" style={{
-              position: 'absolute', top: 4, right: 4,
-              width: 20, height: 20, borderRadius: 10, border: 'none',
-              background: 'rgba(20,20,20,0.75)', color: '#fff', cursor: 'pointer',
-              fontSize: 11, lineHeight: '20px', padding: 0,
-            }}>×</button>
-          </div>
-        ))}
-      </div>
+      {previewItems.length > 0 && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
+        }}>
+          {previewItems.map(it => tile(it, 'lg'))}
+        </div>
+      )}
+      {items.length > 2 && (
+        <button onClick={() => setGalleryOpen(true)} style={{
+          marginTop: 10, width: '100%', padding: '10px 0',
+          border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
+          color: theme.ink, borderRadius: theme.radius.btn, cursor: 'pointer',
+          fontFamily: theme.font, fontSize: 13, fontWeight: 600,
+        }}>View all {items.length} photos</button>
+      )}
     </div>
+
+    {galleryOpen && ReactDOM.createPortal(
+      <div onClick={() => setGalleryOpen(false)} style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000,
+        overflowY: 'auto',
+      }}>
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: 'sticky', top: 0,
+          padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
+          background: 'rgba(0,0,0,0.92)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          backdropFilter: 'blur(6px)', zIndex: 1,
+        }}>
+          <div style={{
+            color: '#fff', fontFamily: theme.titleFont, fontSize: 18, fontWeight: 700,
+          }}>Meal photos · {items.length}</div>
+          <button onClick={() => setGalleryOpen(false)} style={{
+            width: 32, height: 32, borderRadius: 16, border: 'none',
+            background: 'rgba(255,255,255,0.15)', color: '#fff', cursor: 'pointer',
+            fontSize: 18, lineHeight: '32px', padding: 0,
+          }}>×</button>
+        </div>
+        <div onClick={(e) => e.stopPropagation()} style={{
+          padding: '8px 12px 80px',
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4,
+        }}>
+          {reversed.map(it => tile(it, 'sm'))}
+        </div>
+      </div>,
+      document.body)}
+    </React.Fragment>
   );
 }
 
