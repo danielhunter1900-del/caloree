@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7027,11 +7027,20 @@ function WeightCard({ theme, weightLog, setWeightLog, targets }) {
   const first = weightLog[0];
   const delta = latest && first ? (latest.kg - first.kg) : 0;
   const todayMs = Date.now();
-  const lastDate = latest ? new Date(latest.iso) : null;
-  const daysSince = lastDate ? Math.floor((todayMs - lastDate.getTime()) / 86400000) : null;
+  // Treat the iso as a calendar date in local time, not a UTC instant.
+  // This way "weighed yesterday, logged today" = 1 day since, not 0.
+  const isoToLocalDate = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const lastDate = latest ? isoToLocalDate(latest.iso) : null;
+  const todayLocalDate = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+  const daysSince = lastDate
+    ? Math.round((todayLocalDate.getTime() - lastDate.getTime()) / 86400000)
+    : null;
   const stale = daysSince != null && daysSince > 7;
   const needsUpdate = daysSince != null && daysSince >= 10;
-  // Next weigh-in = last weigh-in + 7 days. Red when overdue, highlight on due-day.
+  // Next weigh-in = last weigh-in date + 7 days. Red when overdue, highlight on due-day.
   const nextWeighIsoStr = lastDate
     ? todayLocalIso(new Date(lastDate.getTime() + 7 * 86400000)) : null;
   const daysUntilNext = daysSince != null ? (7 - daysSince) : null;
@@ -11112,7 +11121,8 @@ function PhotosGallery({ theme, log }) {
       return { id: f.id, url: f.photo, name: f.name, meal: e?.meal || '', date: e?.date || '' };
     });
   const reversed = items.slice().reverse();
-  const previewItems = reversed.slice(0, 2);
+  // Up to 2 rows of 3 (= 6 photos) before the gallery button shows.
+  const previewItems = reversed.slice(0, 6);
 
   const deletePhoto = async (it) => {
     if (!confirm(`Delete photo for ${it.name}?`)) return;
@@ -11188,18 +11198,18 @@ function PhotosGallery({ theme, log }) {
       )}
       {previewItems.length > 0 && (
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
         }}>
-          {previewItems.map(it => tile(it, 'lg'))}
+          {previewItems.map(it => tile(it, 'sm'))}
         </div>
       )}
-      {items.length > 2 && (
+      {items.length > previewItems.length && (
         <button onClick={() => setGalleryOpen(true)} style={{
           marginTop: 10, width: '100%', padding: '10px 0',
           border: `1px solid ${theme.line}`, background: theme.surfaceAlt,
           color: theme.ink, borderRadius: theme.radius.btn, cursor: 'pointer',
           fontFamily: theme.font, fontSize: 13, fontWeight: 600,
-        }}>View all {items.length} photos</button>
+        }}>Show photos gallery · {items.length}</button>
       )}
     </div>
 
