@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7912,7 +7912,7 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
             const bars = (b && b.bars) || [];
             return (
               <div style={{
-                flex: '0 0 100%', height: '100%', minWidth: 0,
+                flex: '0 0 33.3333%', height: '100%', minWidth: 0,
                 display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
                 gap: range === 'Month' ? 2 : (range === 'Year' ? 4 : 6),
                 padding: '0 2px', boxSizing: 'border-box',
