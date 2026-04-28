@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -6956,7 +6956,9 @@ function bucketFor(range, offset) {
   // offset: 0 = current period, 1 = previous, ...
   const all = HISTORY;
   if (range === 'Week') {
-    const end = all.length - 1 - offset * 7;
+    // Rolling 7-day window: each step in `offset` shifts by ONE day, not a
+    // whole week, so swiping the chart slides days in/out one at a time.
+    const end = all.length - 1 - offset;
     const start = Math.max(0, end - 6);
     const days = all.slice(start, end + 1);
     if (days.length === 0) return null;
