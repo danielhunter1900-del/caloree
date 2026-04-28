@@ -481,7 +481,7 @@ window.HISTORY = HISTORY;
 
 // App version — bumped in lockstep with sw.js CACHE. Shown on Profile so you
 // can verify the PWA picked up the latest deploy.
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 window.APP_VERSION = APP_VERSION;
 window.DEFAULT_WEIGHT = DEFAULT_WEIGHT;
 window.foodById = foodById;
@@ -7710,6 +7710,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
   const barsRef = React.useRef(null);
   const swipeRef = React.useRef({ startX: 0, startY: 0, dragging: false, locked: null, startTs: 0, w: 0 });
   const [barsDragX, setBarsDragX] = React.useState(0);
+  // When true, the next render skips the slide transition (used to silently
+  // re-centre the strip after a snap completes).
+  const [noBarsTransition, setNoBarsTransition] = React.useState(false);
 
   // Exercise totals per ISO date (overall + per-type breakdown)
   const exByDate = React.useMemo(() => {
@@ -8029,9 +8032,26 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
                 const dt = Math.max(1, Date.now() - s.startTs);
                 const v = dx / dt;
                 const trigger = Math.abs(dx) > s.w * 0.25 || Math.abs(v) > 0.5;
-                if (trigger && dx > 0 && canGoBack) setOffset(offset + 1);
-                else if (trigger && dx < 0 && canGoForward) setOffset(offset - 1);
-                setBarsDragX(0);
+                const goBack = trigger && dx > 0 && canGoBack;
+                const goForward = trigger && dx < 0 && canGoForward;
+                if (!goBack && !goForward) {
+                  // Spring back to centre.
+                  setBarsDragX(0);
+                  return;
+                }
+                // 1) Animate the strip the rest of the way so the targeted
+                //    bucket finishes sliding into the centre slot.
+                setBarsDragX(goBack ? s.w : -s.w);
+                // 2) Once the slide animation finishes, swap buckets and
+                //    silently re-centre the strip (no transition) so the
+                //    user just sees the new centre stay put.
+                setTimeout(() => {
+                  setNoBarsTransition(true);
+                  setOffset(prev => prev + (goBack ? 1 : -1));
+                  setBarsDragX(0);
+                  // Re-enable transitions on the next frame.
+                  requestAnimationFrame(() => requestAnimationFrame(() => setNoBarsTransition(false)));
+                }, 260);
               }}
               style={{
                 marginTop: 16, height: 180, position: 'relative',
@@ -8053,7 +8073,9 @@ function ProgressScreen({ theme, targets, setTargets, exerciseLog = [], weightLo
               <div style={{
                 display: 'flex', width: '300%', height: '100%',
                 transform: `translateX(calc(-33.3333% + ${barsDragX}px))`,
-                transition: swipeRef.current.dragging ? 'none' : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
+                transition: (swipeRef.current.dragging || noBarsTransition)
+                  ? 'none'
+                  : 'transform 0.25s cubic-bezier(0.22, 1, 0.36, 1)',
                 willChange: 'transform',
               }}>
                 {renderBucketBars(prevBucket, false)}
